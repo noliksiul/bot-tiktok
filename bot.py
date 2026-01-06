@@ -17,7 +17,9 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL")
 PORT = int(os.environ.get("PORT", 5000))
-RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL")  # Render la provee automáticamente en producción
+
+# ⚠️ URL fija de Render (tu servicio)
+RENDER_EXTERNAL_URL = "https://bot-tiktok-8d3y.onrender.com"
 
 if not BOT_TOKEN:
     raise RuntimeError("Falta BOT_TOKEN en variables de entorno")
@@ -118,12 +120,10 @@ def webhook():
     return "ok"
 
 if __name__ == "__main__":
-    if not RENDER_EXTERNAL_URL:
-        print("⚠️ RENDER_EXTERNAL_URL no está definida. En Render se define automáticamente.")
-    # Inicia servidor webhook (abre puerto HTTP) y registra webhook en Telegram
+    # Inicia servidor webhook en Render
     application.run_webhook(
         listen="0.0.0.0",
         port=PORT,
         url_path="webhook",
-        webhook_url=f"https://{RENDER_EXTERNAL_URL}/webhook" if RENDER_EXTERNAL_URL else None
+        webhook_url=f"{RENDER_EXTERNAL_URL}/webhook"
     )
