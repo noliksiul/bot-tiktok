@@ -1,5 +1,6 @@
 import os
 import logging
+import socket
 import asyncpg
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -17,18 +18,21 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL")
 PORT = int(os.environ.get("PORT", 5000))
-RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL")  # Ej: https://bot-tiktok-8d3y.onrender.com
+RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL")
 
 if not BOT_TOKEN:
     raise RuntimeError("Falta BOT_TOKEN en variables de entorno")
 if not DATABASE_URL:
     raise RuntimeError("Falta DATABASE_URL en variables de entorno")
 if not RENDER_EXTERNAL_URL:
-    print("⚠️ RENDER_EXTERNAL_URL no está definida. Debe ser la URL pública de tu servicio en Render (https://tu-app.onrender.com)")
+    raise RuntimeError("Falta RENDER_EXTERNAL_URL en variables de entorno")
 
-# --- Conexión a Supabase con asyncpg ---
+# --- Conexión a Supabase con asyncpg (forzando IPv4) ---
 async def get_connection():
-    return await asyncpg.connect(DATABASE_URL)
+    host = "db.zndejlffvlznbhsfozst.supabase.co"
+    ipv4 = socket.gethostbyname(host)  # fuerza IPv4
+    dsn = DATABASE_URL.replace(host, ipv4)
+    return await asyncpg.connect(dsn)
 
 # --- Teclados ---
 def main_menu_keyboard():
@@ -114,7 +118,7 @@ def webhook():
     return "ok"
 
 if __name__ == "__main__":
-    # Inicia webhook y registra URL en Telegram
+    print("Webhook URL:", f"{RENDER_EXTERNAL_URL}/webhook")  # Depuración
     application.run_webhook(
         listen="0.0.0.0",
         port=PORT,
