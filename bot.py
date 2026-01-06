@@ -1,6 +1,6 @@
 import os
 import logging
-import psycopg2
+import asyncpg
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
@@ -17,20 +17,20 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL")
 PORT = int(os.environ.get("PORT", 5000))
-
-# ⚠️ URL fija de Render (tu servicio)
-RENDER_EXTERNAL_URL = "https://bot-tiktok-8d3y.onrender.com"
+RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL")  # Ej: https://bot-tiktok-8d3y.onrender.com
 
 if not BOT_TOKEN:
     raise RuntimeError("Falta BOT_TOKEN en variables de entorno")
 if not DATABASE_URL:
     raise RuntimeError("Falta DATABASE_URL en variables de entorno")
+if not RENDER_EXTERNAL_URL:
+    print("⚠️ RENDER_EXTERNAL_URL no está definida. Debe ser la URL pública de tu servicio en Render (https://tu-app.onrender.com)")
 
-# --- Conexión a Supabase/Postgres ---
-def get_connection():
-    return psycopg2.connect(DATABASE_URL)
+# --- Conexión a Supabase con asyncpg ---
+async def get_connection():
+    return await asyncpg.connect(DATABASE_URL)
 
-# --- Utils ---
+# --- Teclados ---
 def main_menu_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("💰 Balance", callback_data="menu_balance")],
@@ -46,14 +46,12 @@ def back_to_menu_keyboard():
 # --- Handlers ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("""
-        INSERT INTO users (telegram_id) VALUES (%s)
+    conn = await get_connection()
+    await conn.execute("""
+        INSERT INTO users (telegram_id) VALUES ($1)
         ON CONFLICT (telegram_id) DO NOTHING
-    """, (user_id,))
-    conn.commit()
-    cur.close(); conn.close()
+    """, user_id)
+    await conn.close()
 
     await update.message.reply_text(
         f"👋 Hola {update.effective_user.first_name}, bienvenido.\n"
@@ -63,12 +61,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT balance FROM users WHERE telegram_id=%s", (user_id,))
-    row = cur.fetchone()
-    balance = row[0] if row else 0
-    cur.close(); conn.close()
+    conn = await get_connection()
+    row = await conn.fetchrow("SELECT balance FROM users WHERE telegram_id=$1", user_id)
+    balance = row["balance"] if row else 0
+    await conn.close()
 
     await update.message.reply_text(
         f"💰 Tu balance actual: {balance} puntos",
@@ -88,12 +84,10 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "menu_balance":
         user_id = query.from_user.id
-        conn = get_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT balance FROM users WHERE telegram_id=%s", (user_id,))
-        row = cur.fetchone()
-        balance = row[0] if row else 0
-        cur.close(); conn.close()
+        conn = await get_connection()
+        row = await conn.fetchrow("SELECT balance FROM users WHERE telegram_id=$1", user_id)
+        balance = row["balance"] if row else 0
+        await conn.close()
         await query.edit_message_text(f"💰 Tu balance actual: {balance} puntos", reply_markup=back_to_menu_keyboard())
 
     elif data == "menu_seguimiento":
@@ -112,7 +106,7 @@ application.add_handler(CommandHandler("balance", cmd_balance))
 application.add_handler(CallbackQueryHandler(menu_handler))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
-# Endpoint que recibe las updates de Telegram
+# Endpoint para recibir updates de Telegram
 @app.route("/webhook", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
@@ -120,10 +114,10 @@ def webhook():
     return "ok"
 
 if __name__ == "__main__":
-    # Inicia servidor webhook en Render
+    # Inicia webhook y registra URL en Telegram
     application.run_webhook(
         listen="0.0.0.0",
         port=PORT,
         url_path="webhook",
-        webhook_url=f"{RENDER_EXTERNAL_URL}/webhook"
+        webhook_url=f"{RENDER_EXTERNAL_URL}/webhook",
     )

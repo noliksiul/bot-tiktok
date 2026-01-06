@@ -1,5 +1,5 @@
 python-telegram-bot[webhooks]==20.3
-psycopg2-binary
+asyncpg
 flask
 python-dotenv
 httpx
