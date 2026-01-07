@@ -1,6 +1,5 @@
 import os
 import logging
-import socket
 import asyncpg
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -27,12 +26,9 @@ if not DATABASE_URL:
 if not RENDER_EXTERNAL_URL:
     raise RuntimeError("Falta RENDER_EXTERNAL_URL en variables de entorno")
 
-# --- Conexión a Supabase con asyncpg (forzando IPv4) ---
+# --- Conexión a Supabase con asyncpg ---
 async def get_connection():
-    host = "db.zndejlffvlznbhsfozst.supabase.co"
-    ipv4 = socket.gethostbyname(host)  # fuerza IPv4
-    dsn = DATABASE_URL.replace(host, ipv4)
-    return await asyncpg.connect(dsn)
+    return await asyncpg.connect(DATABASE_URL)
 
 # --- Teclados ---
 def main_menu_keyboard():
