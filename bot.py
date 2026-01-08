@@ -1,123 +1,140 @@
 import os
-import logging
-import asyncpg
-from flask import Flask, request
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
-from dotenv import load_dotenv
+import asyncio
+from telegram import Update
+from telegram.ext import Application, CommandHandler, ContextTypes
+from sqlalchemy import Column, BigInteger, Integer, Text, TIMESTAMP, ForeignKey, func, CheckConstraint, select
+from sqlalchemy.orm import declarative_base
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker
 
-# --- Logs ---
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO,
-)
-
-# --- Variables de entorno ---
-load_dotenv()
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+# --- Configuración de la base de datos ---
 DATABASE_URL = os.getenv("DATABASE_URL")
-PORT = int(os.environ.get("PORT", 5000))
-RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL")
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+asyncpg://")
 
-if not BOT_TOKEN:
-    raise RuntimeError("Falta BOT_TOKEN en variables de entorno")
-if not DATABASE_URL:
-    raise RuntimeError("Falta DATABASE_URL en variables de entorno")
-if not RENDER_EXTERNAL_URL:
-    raise RuntimeError("Falta RENDER_EXTERNAL_URL en variables de entorno")
+engine = create_async_engine(DATABASE_URL, echo=False)
+async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
-# --- Conexión a Supabase con asyncpg ---
-async def get_connection():
-    return await asyncpg.connect(DATABASE_URL)
+Base = declarative_base()
 
-# --- Teclados ---
-def main_menu_keyboard():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("💰 Balance", callback_data="menu_balance")],
-        [InlineKeyboardButton("🔗 Subir seguimiento", callback_data="menu_seguimiento")],
-        [InlineKeyboardButton("🎬 Subir video", callback_data="menu_video")],
-    ])
+# --- Modelos (tablas) ---
+class User(Base):
+    __tablename__ = "users"
+    id = Column(BigInteger, primary_key=True)
+    telegram_id = Column(BigInteger, unique=True, nullable=False)
+    username = Column(Text)
+    first_name = Column(Text)
+    last_name = Column(Text)
+    created_at = Column(TIMESTAMP, server_default=func.now())
 
-def back_to_menu_keyboard():
-    return InlineKeyboardMarkup(
-        [[InlineKeyboardButton("🔙 Menú principal", callback_data="menu_principal")]]
+class Balance(Base):
+    __tablename__ = "balances"
+    id = Column(BigInteger, primary_key=True)
+    user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    balance = Column(Integer, default=0)
+    updated_at = Column(TIMESTAMP, server_default=func.now())
+
+class Transaction(Base):
+    __tablename__ = "transactions"
+    id = Column(BigInteger, primary_key=True)
+    user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    amount = Column(Integer, nullable=False)
+    type = Column(Text, nullable=False)
+    description = Column(Text)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+    __table_args__ = (
+        CheckConstraint("type IN ('credit','debit')", name="type_check"),
     )
 
-# --- Handlers ---
+# --- Funciones de servicio ---
+async def upsert_user(session, telegram_id, username=None, first_name=None, last_name=None):
+    result = await session.execute(select(User).where(User.telegram_id == telegram_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        user = User(telegram_id=telegram_id, username=username, first_name=first_name, last_name=last_name)
+        session.add(user)
+        await session.flush()
+        balance = Balance(user_id=user.id, balance=0)
+        session.add(balance)
+        await session.flush()
+    return user
+
+async def get_balance(session, telegram_id):
+    result = await session.execute(select(User).where(User.telegram_id == telegram_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        return 0
+    result = await session.execute(select(Balance).where(Balance.user_id == user.id))
+    balance = result.scalar_one_or_none()
+    return balance.balance if balance else 0
+
+async def apply_transaction(session, telegram_id, amount, tx_type, description=None):
+    user = await upsert_user(session, telegram_id)
+    delta = amount if tx_type == "credit" else -amount
+    tx = Transaction(user_id=user.id, amount=amount, type=tx_type, description=description)
+    session.add(tx)
+    result = await session.execute(select(Balance).where(Balance.user_id == user.id).with_for_update())
+    balance = result.scalar_one()
+    balance.balance += delta
+    await session.flush()
+    return balance.balance
+
+# --- Bot de Telegram ---
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+async def init_db():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    conn = await get_connection()
-    await conn.execute("""
-        INSERT INTO users (telegram_id) VALUES ($1)
-        ON CONFLICT (telegram_id) DO NOTHING
-    """, user_id)
-    await conn.close()
+    user = update.effective_user
+    async with async_session() as session:
+        async with session.begin():
+            await upsert_user(session, user.id, user.username, user.first_name, user.last_name)
+    await update.message.reply_text("¡Bienvenido! Tu cuenta está lista.")
 
-    await update.message.reply_text(
-        f"👋 Hola {update.effective_user.first_name}, bienvenido.\n"
-        "Usa el menú o comandos como /balance.",
-        reply_markup=main_menu_keyboard()
-    )
+async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    async with async_session() as session:
+        bal = await get_balance(session, user.id)
+    await update.message.reply_text(f"Tu balance actual es: {bal}")
 
-async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    conn = await get_connection()
-    row = await conn.fetchrow("SELECT balance FROM users WHERE telegram_id=$1", user_id)
-    balance = row["balance"] if row else 0
-    await conn.close()
+async def credit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    args = context.args
+    if not args:
+        await update.message.reply_text("Uso: /credit Monto")
+        return
+    amount = int(args[0])
+    async with async_session() as session:
+        async with session.begin():
+            new_bal = await apply_transaction(session, user.id, amount, "credit", "Crédito manual")
+    await update.message.reply_text(f"Crédito aplicado. Nuevo balance: {new_bal}")
 
-    await update.message.reply_text(
-        f"💰 Tu balance actual: {balance} puntos",
-        reply_markup=back_to_menu_keyboard()
-    )
+async def debit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    args = context.args
+    if not args:
+        await update.message.reply_text("Uso: /debit Monto")
+        return
+    amount = int(args[0])
+    async with async_session() as session:
+        async with session.begin():
+            new_bal = await apply_transaction(session, user.id, amount, "debit", "Débito manual")
+    await update.message.reply_text(f"Débito aplicado. Nuevo balance: {new_bal}")
 
-async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("⚠️ Usa el menú o comandos como /start y /balance.", reply_markup=main_menu_keyboard())
+def build_app():
+    app = Application.builder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("balance", balance_cmd))
+    app.add_handler(CommandHandler("credit", credit_cmd))
+    app.add_handler(CommandHandler("debit", debit_cmd))
+    return app
 
-async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = query.data
-
-    if data == "menu_principal":
-        await query.edit_message_text("🏠 Menú principal", reply_markup=main_menu_keyboard())
-
-    elif data == "menu_balance":
-        user_id = query.from_user.id
-        conn = await get_connection()
-        row = await conn.fetchrow("SELECT balance FROM users WHERE telegram_id=$1", user_id)
-        balance = row["balance"] if row else 0
-        await conn.close()
-        await query.edit_message_text(f"💰 Tu balance actual: {balance} puntos", reply_markup=back_to_menu_keyboard())
-
-    elif data == "menu_seguimiento":
-        await query.edit_message_text("🔗 Envíame el link del perfil a seguir:", reply_markup=back_to_menu_keyboard())
-
-    elif data == "menu_video":
-        await query.edit_message_text("🎬 Envíame el link del video y breve descripción:", reply_markup=back_to_menu_keyboard())
-
-# --- Flask + Telegram Webhook ---
-app = Flask(__name__)
-application = Application.builder().token(BOT_TOKEN).build()
-
-# Registrar handlers
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("balance", cmd_balance))
-application.add_handler(CallbackQueryHandler(menu_handler))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
-
-# Endpoint para recibir updates de Telegram
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
-    application.update_queue.put(update)
-    return "ok"
+async def main():
+    await init_db()
+    app = build_app()
+    await app.run_polling()
 
 if __name__ == "__main__":
-    print("Webhook URL:", f"{RENDER_EXTERNAL_URL}/webhook")  # Depuración
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=PORT,
-        url_path="webhook",
-        webhook_url=f"{RENDER_EXTERNAL_URL}/webhook",
-    )
+    asyncio.run(main())
