@@ -1,8 +1,7 @@
-python-telegram-bot[webhooks]==20.3
+python-telegram-bot==21.6
 asyncpg
 flask
 python-dotenv
 httpx
-python-telegram-bot==21.6
 SQLAlchemy==2.0.31
 asyncpg==0.29.0
