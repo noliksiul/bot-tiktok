@@ -1,7 +1,3 @@
 python-telegram-bot==21.6
-asyncpg
-flask
-python-dotenv
-httpx
 SQLAlchemy==2.0.31
 asyncpg==0.29.0
