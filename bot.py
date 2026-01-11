@@ -71,8 +71,10 @@ def build_app():
     app.add_handler(CommandHandler("debit", debit_cmd))
     return app
 
-# --- Bloque final corregido ---
+# --- Bloque final Opción 2 ---
 if __name__ == "__main__":
-    asyncio.run(init_db())          # Inicializa DB
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(init_db())
     app = build_app()
-    app.run_polling(close_loop=False)  # Arranca bot sin cerrar el loop
+    # run_polling es corutina → se espera con run_until_complete
+    loop.run_until_complete(app.run_polling(close_loop=False))
