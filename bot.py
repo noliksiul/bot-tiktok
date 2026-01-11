@@ -54,16 +54,64 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 
 # --- Handlers ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("¡Bienvenido! Tu cuenta está lista.")
+    async with async_session() as session:
+        user = await session.get(User, update.effective_user.id)
+        if not user:
+            user = User(
+                id=update.effective_user.id,
+                telegram_id=update.effective_user.id,
+                username=update.effective_user.username,
+                first_name=update.effective_user.first_name,
+                last_name=update.effective_user.last_name,
+            )
+            session.add(user)
+            session.add(Balance(user_id=user.id, balance=0))
+            await session.commit()
+        await update.message.reply_text("¡Bienvenido! Tu cuenta está lista.")
 
 async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Tu balance actual es: 0")
+    async with async_session() as session:
+        user = await session.get(User, update.effective_user.id)
+        if not user:
+            await update.message.reply_text("Primero usa /start para crear tu cuenta.")
+            return
+        balance = await session.get(Balance, user.id)
+        await update.message.reply_text(f"Tu balance actual es: {balance.balance}")
 
 async def credit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Función de crédito aún no implementada.")
+    if len(context.args) < 1 or not context.args[0].isdigit():
+        await update.message.reply_text("Uso: /credit <monto>")
+        return
+    amount = int(context.args[0])
+    async with async_session() as session:
+        user = await session.get(User, update.effective_user.id)
+        if not user:
+            await update.message.reply_text("Primero usa /start para crear tu cuenta.")
+            return
+        balance = await session.get(Balance, user.id)
+        balance.balance += amount
+        session.add(Transaction(user_id=user.id, amount=amount, type="credit", description="Ingreso"))
+        await session.commit()
+        await update.message.reply_text(f"Se acreditaron {amount}. Nuevo balance: {balance.balance}")
 
 async def debit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Función de débito aún no implementada.")
+    if len(context.args) < 1 or not context.args[0].isdigit():
+        await update.message.reply_text("Uso: /debit <monto>")
+        return
+    amount = int(context.args[0])
+    async with async_session() as session:
+        user = await session.get(User, update.effective_user.id)
+        if not user:
+            await update.message.reply_text("Primero usa /start para crear tu cuenta.")
+            return
+        balance = await session.get(Balance, user.id)
+        if balance.balance < amount:
+            await update.message.reply_text("Fondos insuficientes.")
+            return
+        balance.balance -= amount
+        session.add(Transaction(user_id=user.id, amount=amount, type="debit", description="Retiro"))
+        await session.commit()
+        await update.message.reply_text(f"Se debitó {amount}. Nuevo balance: {balance.balance}")
 
 def build_app():
     app = Application.builder().token(BOT_TOKEN).build()
@@ -86,10 +134,7 @@ def run_flask():
 
 # --- Bloque final ---
 if __name__ == "__main__":
-    # Arranca Flask en un hilo separado
     threading.Thread(target=run_flask).start()
-
-    # Inicializa DB y arranca el bot
     loop = asyncio.get_event_loop()
     loop.run_until_complete(init_db())
     app = build_app()
