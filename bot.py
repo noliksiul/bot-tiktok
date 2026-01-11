@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 # --- Configuración de la base de datos ---
 DATABASE_URL = os.getenv("DATABASE_URL")
 if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+asyncpg://")
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://")
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
