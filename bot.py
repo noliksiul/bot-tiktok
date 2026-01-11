@@ -2,13 +2,16 @@ import os
 import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
-from sqlalchemy import Column, BigInteger, Integer, Text, TIMESTAMP, ForeignKey, func, CheckConstraint, select
+from sqlalchemy import (
+    Column, BigInteger, Integer, Text, TIMESTAMP, ForeignKey,
+    func, CheckConstraint, select
+)
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
 # --- Configuración de la base de datos ---
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv("DATABASE_URL", "")
 
 # Forzar a usar psycopg v3 (no psycopg2)
 if DATABASE_URL.startswith("postgres://"):
@@ -43,7 +46,7 @@ class Transaction(Base):
     id = Column(BigInteger, primary_key=True)
     user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     amount = Column(Integer, nullable=False)
-    type = Column(Text, nullable=False)
+    type = Column(Text, nullable=False)  # 'credit' | 'debit'
     description = Column(Text)
     created_at = Column(TIMESTAMP, server_default=func.now())
     __table_args__ = (CheckConstraint("type IN ('credit','debit')", name="type_check"),)
@@ -53,11 +56,15 @@ async def upsert_user(session, telegram_id, username=None, first_name=None, last
     result = await session.execute(select(User).where(User.telegram_id == telegram_id))
     user = result.scalar_one_or_none()
     if not user:
-        user = User(telegram_id=telegram_id, username=username, first_name=first_name, last_name=last_name)
+        user = User(
+            telegram_id=telegram_id,
+            username=username,
+            first_name=first_name,
+            last_name=last_name
+        )
         session.add(user)
         await session.flush()
-        balance = Balance(user_id=user.id, balance=0)
-        session.add(balance)
+        session.add(Balance(user_id=user.id, balance=0))
         await session.flush()
     return user
 
@@ -75,14 +82,16 @@ async def apply_transaction(session, telegram_id, amount, tx_type, description=N
     delta = amount if tx_type == "credit" else -amount
     tx = Transaction(user_id=user.id, amount=amount, type=tx_type, description=description)
     session.add(tx)
-    result = await session.execute(select(Balance).where(Balance.user_id == user.id).with_for_update())
+    result = await session.execute(
+        select(Balance).where(Balance.user_id == user.id).with_for_update()
+    )
     balance = result.scalar_one()
     balance.balance += delta
     await session.flush()
     return balance.balance
 
 # --- Bot de Telegram ---
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 
 async def init_db():
     async with engine.begin() as conn:
@@ -107,7 +116,11 @@ async def credit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not args:
         await update.message.reply_text("Uso: /credit Monto")
         return
-    amount = int(args[0])
+    try:
+        amount = int(args[0])
+    except ValueError:
+        await update.message.reply_text("El monto debe ser un número entero.")
+        return
     async with async_session() as session:
         async with session.begin():
             new_bal = await apply_transaction(session, user.id, amount, "credit", "Crédito manual")
@@ -119,7 +132,11 @@ async def debit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not args:
         await update.message.reply_text("Uso: /debit Monto")
         return
-    amount = int(args[0])
+    try:
+        amount = int(args[0])
+    except ValueError:
+        await update.message.reply_text("El monto debe ser un número entero.")
+        return
     async with async_session() as session:
         async with session.begin():
             new_bal = await apply_transaction(session, user.id, amount, "debit", "Débito manual")
@@ -133,8 +150,10 @@ def build_app():
     app.add_handler(CommandHandler("debit", debit_cmd))
     return app
 
-if __name__ == "__main__":
-    asyncio.run(init_db())
+async def main():
+    await init_db()
     app = build_app()
-    # run_polling ya maneja su propio loop en v21
-    app.run_polling()
+    await app.run_polling()
+
+if __name__ == "__main__":
+    asyncio.run(main())
