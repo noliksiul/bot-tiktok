@@ -10,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 # --- Configuración de la base de datos ---
 DATABASE_URL = os.getenv("DATABASE_URL")
 if DATABASE_URL.startswith("postgres://"):
+    # Usa el dialecto correcto para psycopg v3
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://")
 
 engine = create_async_engine(DATABASE_URL, echo=False)
