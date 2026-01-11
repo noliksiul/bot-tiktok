@@ -150,10 +150,10 @@ def build_app():
     app.add_handler(CommandHandler("debit", debit_cmd))
     return app
 
-async def main():
-    await init_db()
-    app = build_app()
-    await app.run_polling()
-
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Inicializa la base de datos
+    asyncio.run(init_db())
+    # Construye la app
+    app = build_app()
+    # Arranca el bot en modo síncrono (sin asyncio.run)
+    app.run_polling()
