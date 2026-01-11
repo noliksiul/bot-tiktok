@@ -7,7 +7,6 @@ from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
-# --- Configuración DB ---
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://")
@@ -39,7 +38,7 @@ class Transaction(Base):
     id = Column(BigInteger, primary_key=True)
     user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     amount = Column(Integer, nullable=False)
-    type = Column(Text, nullable=False)  # 'credit' | 'debit'
+    type = Column(Text, nullable=False)
     description = Column(Text)
     created_at = Column(TIMESTAMP, server_default=func.now())
     __table_args__ = (CheckConstraint("type IN ('credit','debit')", name="type_check"),)
@@ -50,7 +49,6 @@ async def init_db():
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 
-# --- Handlers ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("¡Bienvenido! Tu cuenta está lista.")
 
@@ -63,8 +61,12 @@ def build_app():
     app.add_handler(CommandHandler("balance", balance_cmd))
     return app
 
-# --- Bloque final corregido ---
-if __name__ == "__main__":
-    asyncio.run(init_db())          # Inicializa DB
+# --- Bloque final correcto ---
+async def main():
+    await init_db()
     app = build_app()
-    app.run_polling(close_loop=False)  # Arranca bot sin cerrar el loop
+    # run_polling es corutina → se espera con await
+    await app.run_polling()
+
+if __name__ == "__main__":
+    asyncio.run(main())
