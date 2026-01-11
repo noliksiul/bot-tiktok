@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 # --- Configuración de la base de datos ---
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Forzar a usar psycopg v3 (no psycopg2)
+# Forzar a usar psycopg v3
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://")
 elif DATABASE_URL.startswith("postgresql://"):
@@ -134,7 +134,6 @@ def build_app():
     return app
 
 if __name__ == "__main__":
-    # Inicializa la base y arranca el bot sin conflicto de loops
     asyncio.run(init_db())
     app = build_app()
-    app.run_polling()
+    asyncio.run(app.run_polling())
