@@ -2,7 +2,7 @@ import os
 import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
-from sqlalchemy import Column, BigInteger, Integer, Text, TIMESTAMP, ForeignKey, func, CheckConstraint, select
+from sqlalchemy import Column, BigInteger, Integer, Text, TIMESTAMP, ForeignKey, func, CheckConstraint
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -64,10 +64,7 @@ def build_app():
     return app
 
 # --- Bloque final corregido ---
-async def main():
-    await init_db()
-    app = build_app()
-    await app.run_polling()   # Se espera la corutina correctamente
-
 if __name__ == "__main__":
-    asyncio.run(main())       # Se crea y cierra el loop de forma segura
+    asyncio.run(init_db())          # Inicializa DB
+    app = build_app()
+    app.run_polling(close_loop=False)  # Arranca bot sin cerrar el loop
