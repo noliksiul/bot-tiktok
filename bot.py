@@ -71,10 +71,9 @@ def build_app():
     app.add_handler(CommandHandler("debit", debit_cmd))
     return app
 
-# --- Bloque final Opción 2 ---
+# --- Bloque final estable ---
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.run_until_complete(init_db())
     app = build_app()
-    # run_polling es corutina → se espera con run_until_complete
     loop.run_until_complete(app.run_polling(close_loop=False))
