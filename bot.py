@@ -9,16 +9,19 @@ from sqlalchemy.orm import sessionmaker
 
 # --- Configuración de la base de datos ---
 DATABASE_URL = os.getenv("DATABASE_URL")
+
+# Forzar a usar psycopg v3
 if DATABASE_URL.startswith("postgres://"):
-    # Usa el dialecto correcto para psycopg v3
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://")
+elif DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://")
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 Base = declarative_base()
 
-# --- Modelos (tablas) ---
+# --- Modelos ---
 class User(Base):
     __tablename__ = "users"
     id = Column(BigInteger, primary_key=True)
@@ -43,9 +46,7 @@ class Transaction(Base):
     type = Column(Text, nullable=False)
     description = Column(Text)
     created_at = Column(TIMESTAMP, server_default=func.now())
-    __table_args__ = (
-        CheckConstraint("type IN ('credit','debit')", name="type_check"),
-    )
+    __table_args__ = (CheckConstraint("type IN ('credit','debit')", name="type_check"),)
 
 # --- Funciones de servicio ---
 async def upsert_user(session, telegram_id, username=None, first_name=None, last_name=None):
