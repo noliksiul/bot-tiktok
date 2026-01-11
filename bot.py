@@ -7,7 +7,7 @@ from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
-# --- Configuración de la base de datos ---
+# --- Configuración DB ---
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://")
@@ -64,10 +64,10 @@ def build_app():
     return app
 
 # --- Bloque final corregido ---
-async def main():
-    await init_db()
-    app = build_app()
-    await app.run_polling()   # Se espera la corutina correctamente
-
 if __name__ == "__main__":
-    asyncio.run(main())       # Se crea y cierra el loop de forma segura
+    # Inicializa la base de datos
+    asyncio.run(init_db())
+    # Construye la app
+    app = build_app()
+    # Arranca el bot en modo síncrono (sin asyncio.run)
+    app.run_polling()
