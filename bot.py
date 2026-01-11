@@ -1,5 +1,7 @@
 import os
 import asyncio
+import threading
+from flask import Flask
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 from sqlalchemy import Column, BigInteger, Integer, Text, TIMESTAMP, ForeignKey, func, CheckConstraint
@@ -71,10 +73,24 @@ def build_app():
     app.add_handler(CommandHandler("debit", debit_cmd))
     return app
 
-# --- Bloque final estable ---
+# --- Mini servidor Flask para Render ---
+flask_app = Flask(__name__)
+
+@flask_app.route("/")
+def home():
+    return "Bot de Telegram corriendo en Render!"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 10000))
+    flask_app.run(host="0.0.0.0", port=port)
+
+# --- Bloque final ---
 if __name__ == "__main__":
-    # Inicializa la base de datos antes de arrancar el bot
-    asyncio.get_event_loop().run_until_complete(init_db())
+    # Arranca Flask en un hilo separado
+    threading.Thread(target=run_flask).start()
+
+    # Inicializa DB y arranca el bot
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(init_db())
     app = build_app()
-    # Arranca en modo síncrono → evita el error de loop en Render
     app.run_polling(close_loop=False)
