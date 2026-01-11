@@ -64,10 +64,10 @@ def build_app():
     return app
 
 # --- Bloque final corregido ---
-if __name__ == "__main__":
-    # Inicializa la base de datos
-    asyncio.run(init_db())
-    # Construye la app
+async def main():
+    await init_db()
     app = build_app()
-    # Arranca el bot en modo síncrono (sin asyncio.run)
-    app.run_polling()
+    await app.run_polling()   # Se espera la corutina correctamente
+
+if __name__ == "__main__":
+    asyncio.run(main())       # Se crea y cierra el loop de forma segura
