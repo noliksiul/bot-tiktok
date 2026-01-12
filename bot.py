@@ -1,6 +1,5 @@
 import os
 import asyncio
-import threading
 from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -51,13 +50,13 @@ async def init_db():
         await conn.run_sync(Base.metadata.create_all)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+RENDER_EXTERNAL_HOSTNAME = os.getenv("RENDER_EXTERNAL_HOSTNAME", "localhost")
 
 # --- Handlers ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with async_session() as session:
         user = await session.get(User, update.effective_user.id)
         if not user:
-            # Crear usuario
             user = User(
                 id=update.effective_user.id,
                 telegram_id=update.effective_user.id,
@@ -66,12 +65,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 last_name=update.effective_user.last_name,
             )
             session.add(user)
-            await session.commit()  # 🔑 commit primero
-
-            # Crear balance
+            await session.commit()
             balance = Balance(user_id=user.id, balance=0)
             session.add(balance)
-            await session.commit()  # 🔑 commit después
+            await session.commit()
         await update.message.reply_text("¡Bienvenido! Tu cuenta está lista.")
 
 async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -118,29 +115,33 @@ async def debit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await session.commit()
         await update.message.reply_text(f"Se debitó {amount}. Nuevo balance: {balance.balance}")
 
-def build_app():
-    app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("balance", balance_cmd))
-    app.add_handler(CommandHandler("credit", credit_cmd))
-    app.add_handler(CommandHandler("debit", debit_cmd))
-    return app
+# --- Construir aplicación Telegram ---
+application = Application.builder().token(BOT_TOKEN).build()
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("balance", balance_cmd))
+application.add_handler(CommandHandler("credit", credit_cmd))
+application.add_handler(CommandHandler("debit", debit_cmd))
 
-# --- Mini servidor Flask para Render ---
+# --- Flask para Webhook ---
 flask_app = Flask(__name__)
+
+@flask_app.route(f"/{BOT_TOKEN}", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    application.update_queue.put(update)
+    return "ok"
 
 @flask_app.route("/")
 def home():
-    return "Bot de Telegram corriendo en Render!"
-
-def run_flask():
-    port = int(os.environ.get("PORT", 10000))
-    flask_app.run(host="0.0.0.0", port=port)
+    return "Bot de Telegram corriendo con Webhook en Render!"
 
 # --- Bloque final ---
 if __name__ == "__main__":
-    threading.Thread(target=run_flask).start()
     loop = asyncio.get_event_loop()
     loop.run_until_complete(init_db())
-    app = build_app()
-    app.run_polling(close_loop=False)
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.environ.get("PORT", 10000)),
+        url_path=BOT_TOKEN,
+        webhook_url=f"https://{RENDER_EXTERNAL_HOSTNAME}/{BOT_TOKEN}"
+    )
