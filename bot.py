@@ -78,6 +78,10 @@ async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Primero usa /start para crear tu cuenta.")
             return
         balance = await session.get(Balance, user.id)
+        if not balance:
+            balance = Balance(user_id=user.id, balance=0)
+            session.add(balance)
+            await session.commit()
         await update.message.reply_text(f"Tu balance actual es: {balance.balance}")
 
 async def credit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -91,6 +95,9 @@ async def credit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Primero usa /start para crear tu cuenta.")
             return
         balance = await session.get(Balance, user.id)
+        if not balance:
+            balance = Balance(user_id=user.id, balance=0)
+            session.add(balance)
         balance.balance += amount
         session.add(Transaction(user_id=user.id, amount=amount, type="credit", description="Ingreso"))
         await session.commit()
@@ -107,6 +114,9 @@ async def debit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Primero usa /start para crear tu cuenta.")
             return
         balance = await session.get(Balance, user.id)
+        if not balance:
+            balance = Balance(user_id=user.id, balance=0)
+            session.add(balance)
         if balance.balance < amount:
             await update.message.reply_text("Fondos insuficientes.")
             return
