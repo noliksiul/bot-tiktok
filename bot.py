@@ -1,7 +1,7 @@
 import os
 import asyncio
 import threading
-from flask import Flask
+from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 from sqlalchemy import Column, BigInteger, Integer, Text, TIMESTAMP, ForeignKey, func, CheckConstraint
@@ -57,6 +57,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with async_session() as session:
         user = await session.get(User, update.effective_user.id)
         if not user:
+            # Crear usuario
             user = User(
                 id=update.effective_user.id,
                 telegram_id=update.effective_user.id,
@@ -65,8 +66,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 last_name=update.effective_user.last_name,
             )
             session.add(user)
-            session.add(Balance(user_id=user.id, balance=0))
-            await session.commit()
+            await session.commit()  # 🔑 commit primero
+
+            # Crear balance
+            balance = Balance(user_id=user.id, balance=0)
+            session.add(balance)
+            await session.commit()  # 🔑 commit después
         await update.message.reply_text("¡Bienvenido! Tu cuenta está lista.")
 
 async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
