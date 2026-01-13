@@ -67,7 +67,7 @@ async def get_or_create_user_and_balance(session: AsyncSession, tg_user):
         await session.commit()
 
     result = await session.execute(select(Balance).where(Balance.user_id == user.id))
-    balance = result.scalars().first()   # 🔑 trae el primero, evita MultipleResultsFound
+    balance = result.scalars().first()
     if not balance:
         balance = Balance(user_id=user.id, balance=0)
         session.add(balance)
@@ -93,8 +93,9 @@ async def credit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with async_session() as session:
         user, balance = await get_or_create_user_and_balance(session, update.effective_user)
         balance.balance += amount
+        session.add(balance)  # 🔑 MARCAR balance como modificado
         session.add(Transaction(user_id=user.id, amount=amount, type="credit", description="Ingreso"))
-        await session.commit()
+        await session.commit()  # 🔑 GUARDAR balance y transacción
         await update.message.reply_text(f"Se acreditaron {amount}. Nuevo balance: {balance.balance}")
 
 async def debit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -108,6 +109,7 @@ async def debit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Fondos insuficientes.")
             return
         balance.balance -= amount
+        session.add(balance)  # 🔑 MARCAR balance como modificado
         session.add(Transaction(user_id=user.id, amount=amount, type="debit", description="Retiro"))
         await session.commit()
         await update.message.reply_text(f"Se debitó {amount}. Nuevo balance: {balance.balance}")
