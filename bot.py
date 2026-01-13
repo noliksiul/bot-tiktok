@@ -3,7 +3,7 @@ import asyncio
 from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
-from sqlalchemy import Column, BigInteger, Integer, Text, TIMESTAMP, ForeignKey, func, CheckConstraint
+from sqlalchemy import Column, BigInteger, Integer, Text, TIMESTAMP, ForeignKey, func, CheckConstraint, select
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -31,14 +31,14 @@ class User(Base):
 class Balance(Base):
     __tablename__ = "balances"
     id = Column(BigInteger, primary_key=True)
-    user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    balance = Column(Integer, default=0)
+    user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    balance = Column(Integer, default=0, nullable=False)
     updated_at = Column(TIMESTAMP, server_default=func.now())
 
 class Transaction(Base):
     __tablename__ = "transactions"
     id = Column(BigInteger, primary_key=True)
-    user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     amount = Column(Integer, nullable=False)
     type = Column(Text, nullable=False)  # 'credit' | 'debit'
     description = Column(Text)
@@ -52,38 +52,38 @@ async def init_db():
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 RENDER_EXTERNAL_HOSTNAME = os.getenv("RENDER_EXTERNAL_HOSTNAME", "localhost")
 
+# --- Utilidades DB ---
+async def get_or_create_user_and_balance(session: AsyncSession, tg_user: "telegram.User"):
+    user = await session.get(User, tg_user.id)
+    if not user:
+        user = User(
+            id=tg_user.id,
+            telegram_id=tg_user.id,
+            username=tg_user.username,
+            first_name=tg_user.first_name,
+            last_name=tg_user.last_name,
+        )
+        session.add(user)
+        await session.commit()  # asegura existencia del usuario para la FK
+
+    # Buscar balance por user_id (no por PK de balances)
+    result = await session.execute(select(Balance).where(Balance.user_id == user.id))
+    balance = result.scalar_one_or_none()
+    if not balance:
+        balance = Balance(user_id=user.id, balance=0)
+        session.add(balance)
+        await session.commit()
+    return user, balance
+
 # --- Handlers ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with async_session() as session:
-        user = await session.get(User, update.effective_user.id)
-        if not user:
-            user = User(
-                id=update.effective_user.id,
-                telegram_id=update.effective_user.id,
-                username=update.effective_user.username,
-                first_name=update.effective_user.first_name,
-                last_name=update.effective_user.last_name,
-            )
-            session.add(user)
-            await session.commit()
-        balance = await session.get(Balance, user.id)
-        if not balance:
-            balance = Balance(user_id=user.id, balance=0)
-            session.add(balance)
-            await session.commit()
+        _, _ = await get_or_create_user_and_balance(session, update.effective_user)
         await update.message.reply_text("¡Bienvenido! Tu cuenta está lista.")
 
 async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with async_session() as session:
-        user = await session.get(User, update.effective_user.id)
-        if not user:
-            await update.message.reply_text("Primero usa /start para crear tu cuenta.")
-            return
-        balance = await session.get(Balance, user.id)
-        if not balance:
-            balance = Balance(user_id=user.id, balance=0)
-            session.add(balance)
-            await session.commit()
+        user, balance = await get_or_create_user_and_balance(session, update.effective_user)
         await update.message.reply_text(f"Tu balance actual es: {balance.balance}")
 
 async def credit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -91,17 +91,10 @@ async def credit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Uso: /credit <monto>")
         return
     amount = int(context.args[0])
+
     async with async_session() as session:
-        user = await session.get(User, update.effective_user.id)
-        if not user:
-            await update.message.reply_text("Primero usa /start para crear tu cuenta.")
-            return
-        balance = await session.get(Balance, user.id)
-        if not balance:
-            balance = Balance(user_id=user.id, balance=0)
-            session.add(balance)
+        user, balance = await get_or_create_user_and_balance(session, update.effective_user)
         balance.balance += amount
-        session.add(balance)
         session.add(Transaction(user_id=user.id, amount=amount, type="credit", description="Ingreso"))
         await session.commit()
         await update.message.reply_text(f"Se acreditaron {amount}. Nuevo balance: {balance.balance}")
@@ -111,20 +104,13 @@ async def debit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Uso: /debit <monto>")
         return
     amount = int(context.args[0])
+
     async with async_session() as session:
-        user = await session.get(User, update.effective_user.id)
-        if not user:
-            await update.message.reply_text("Primero usa /start para crear tu cuenta.")
-            return
-        balance = await session.get(Balance, user.id)
-        if not balance:
-            balance = Balance(user_id=user.id, balance=0)
-            session.add(balance)
+        user, balance = await get_or_create_user_and_balance(session, update.effective_user)
         if balance.balance < amount:
             await update.message.reply_text("Fondos insuficientes.")
             return
         balance.balance -= amount
-        session.add(balance)
         session.add(Transaction(user_id=user.id, amount=amount, type="debit", description="Retiro"))
         await session.commit()
         await update.message.reply_text(f"Se debitó {amount}. Nuevo balance: {balance.balance}")
