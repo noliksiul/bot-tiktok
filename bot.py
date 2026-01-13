@@ -124,6 +124,9 @@ PUNTOS_APOYO_VIDEO = 3
 # --- Canal de publicación ---
 CHANNEL_ID = -1003468913370
 
+# --- Configuración administrador ---
+ADMIN_ID = 123456789  # tu Telegram ID aquí
+
 def back_to_menu_keyboard():
     return InlineKeyboardMarkup(
         [[InlineKeyboardButton("🔙 Regresar al menú principal", callback_data="menu_principal")]]
@@ -181,7 +184,7 @@ async def save_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["state"] = None
     await show_main_menu(update, context)
 
-# --- Balance e historial (funciona desde botón y comando) ---
+# --- Balance e historial (botón y comando) ---
 async def show_balance(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(update_or_query, Update):
         user_id = update_or_query.effective_user.id
@@ -418,6 +421,7 @@ async def handle_seguimiento_done(query, context: ContextTypes.DEFAULT_TYPE, seg
             return
         owner_id = seg.telegram_id
 
+        # Evitar duplicado del actor
         res = await session.execute(
             select(Interaccion).where(
                 Interaccion.tipo == "seguimiento",
@@ -452,15 +456,15 @@ async def handle_seguimiento_done(query, context: ContextTypes.DEFAULT_TYPE, seg
             res = await session.execute(select(User.tiktok_user).where(User.telegram_id == actor_id))
             actor_tt = res.scalar()
         actor_tt = actor_tt if actor_tt else str(actor_id)
-        keyboard = [
+        keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("✅ Aceptar", callback_data=f"approve_interaction_{inter_id}")],
             [InlineKeyboardButton("❌ Rechazar", callback_data=f"reject_interaction_{inter_id}")],
             [InlineKeyboardButton("🔙 Regresar al menú principal", callback_data="menu_principal")]
-        ]
+        ])
         await context.bot.send_message(
             chat_id=owner_id,
             text=f"📈 Solicitud: @{actor_tt} indica que ya siguió tu perfil.\nID: {inter_id}\n¿Aceptas otorgar {PUNTOS_APOYO_SEGUIMIENTO} puntos?",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            reply_markup=keyboard
         )
     except Exception as e:
         print("Aviso: no se pudo notificar al dueño del seguimiento:", e)
@@ -511,20 +515,20 @@ async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, v
             res = await session.execute(select(User.tiktok_user).where(User.telegram_id == actor_id))
             actor_tt = res.scalar()
         actor_tt = actor_tt if actor_tt else str(actor_id)
-        keyboard = [
+        keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("✅ Aceptar", callback_data=f"approve_interaction_{inter_id}")],
             [InlineKeyboardButton("❌ Rechazar", callback_data=f"reject_interaction_{inter_id}")],
             [InlineKeyboardButton("🔙 Regresar al menú principal", callback_data="menu_principal")]
-        ]
+        ])
         await context.bot.send_message(
             chat_id=owner_id,
             text=f"🎥 Solicitud: @{actor_tt} apoyó tu video.\nID: {inter_id}\n¿Aceptas otorgar {PUNTOS_APOYO_VIDEO} puntos?",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            reply_markup=keyboard
         )
     except Exception as e:
         print("Aviso: no se pudo notificar al dueño del video:", e)
 
-# --- Aprobar interacción (regresa al menú) ---
+# --- Aprobar interacción (regresa al menú y actor con botón menú) ---
 async def approve_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_id: int):
     async with async_session() as session:
         res = await session.execute(select(Interaccion).where(Interaccion.id == inter_id))
@@ -554,14 +558,16 @@ async def approve_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_i
     await query.edit_message_text("✅ Interacción aprobada. Puntos otorgados.", reply_markup=back_to_menu_keyboard())
     await show_main_menu(query, context)
     try:
+        keyboard = back_to_menu_keyboard()
         await context.bot.send_message(
             chat_id=inter.actor_id,
-            text=f"✅ Tu apoyo en {inter.tipo} fue aprobado. Ganaste {inter.puntos} puntos."
+            text=f"✅ Tu apoyo en {inter.tipo} fue aprobado. Ganaste {inter.puntos} puntos.",
+            reply_markup=keyboard
         )
     except Exception as e:
         print("Aviso: no se pudo notificar al actor:", e)
 
-# --- Rechazar interacción (regresa al menú) ---
+# --- Rechazar interacción (regresa al menú y actor con botón menú) ---
 async def reject_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_id: int):
     async with async_session() as session:
         res = await session.execute(select(Interaccion).where(Interaccion.id == inter_id))
@@ -585,12 +591,52 @@ async def reject_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_id
     await query.edit_message_text("❌ Interacción rechazada.", reply_markup=back_to_menu_keyboard())
     await show_main_menu(query, context)
     try:
+        keyboard = back_to_menu_keyboard()
         await context.bot.send_message(
             chat_id=inter.actor_id,
-            text=f"❌ Tu apoyo en {inter.tipo} fue rechazado."
+            text=f"❌ Tu apoyo en {inter.tipo} fue rechazado.",
+            reply_markup=keyboard
         )
     except Exception as e:
         print("Aviso: no se pudo notificar al actor:", e)
+
+# --- Comando exclusivo admin: /dar_puntos <usuario_id> <cantidad> ---
+async def dar_puntos(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("❌ No tienes permiso para usar este comando.")
+        return
+
+    try:
+        args = context.args
+        if len(args) != 2:
+            await update.message.reply_text("Uso: /dar_puntos <usuario_id> <cantidad>")
+            return
+        target_id = int(args[0])
+        cantidad = int(args[1])
+    except:
+        await update.message.reply_text("⚠️ Argumentos inválidos. Uso: /dar_puntos <usuario_id> <cantidad>")
+        return
+
+    async with async_session() as session:
+        res = await session.execute(select(User).where(User.telegram_id == target_id))
+        user = res.scalars().first()
+        if not user:
+            await update.message.reply_text("❌ Usuario no encontrado.")
+            return
+        user.balance = (user.balance or 0) + cantidad
+        mov = Movimiento(telegram_id=target_id, detalle="Puntos otorgados por admin", puntos=cantidad)
+        session.add(mov)
+        await session.commit()
+
+    await update.message.reply_text(f"✅ Se otorgaron {cantidad} puntos al usuario {target_id}.")
+    try:
+        await context.bot.send_message(
+            chat_id=target_id,
+            text=f"🎁 Has recibido {cantidad} puntos de administrador.",
+            reply_markup=back_to_menu_keyboard()
+        )
+    except Exception as e:
+        print("Aviso: no se pudo notificar al usuario:", e)
 
 # --- Callback principal (menú y acciones) ---
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -693,6 +739,7 @@ RENDER_EXTERNAL_HOSTNAME = os.getenv("RENDER_EXTERNAL_HOSTNAME", "localhost")
 application = Application.builder().token(BOT_TOKEN).build()
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("balance", cmd_balance))
+application.add_handler(CommandHandler("dar_puntos", dar_puntos))
 application.add_handler(CallbackQueryHandler(menu_handler))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
@@ -719,3 +766,4 @@ if __name__ == "__main__":
         url_path=BOT_TOKEN,
         webhook_url=f"https://{RENDER_EXTERNAL_HOSTNAME}/{BOT_TOKEN}"
     )
+    
