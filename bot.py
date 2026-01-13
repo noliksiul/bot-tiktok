@@ -1,67 +1,72 @@
 import os
-import psycopg2
+import asyncio
+from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
-from telegram.request import HTTPXRequest
+from sqlalchemy import Column, Integer, BigInteger, Text, TIMESTAMP, func, ForeignKey, UniqueConstraint, select, text
+from sqlalchemy.orm import declarative_base
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker
 
-# --- Conexión a Postgres ---
-DATABASE_URL = os.getenv("DATABASE_URL")
-conn = psycopg2.connect(DATABASE_URL)
-cursor = conn.cursor()
+# --- Configuración DB ---
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://")
+
+engine = create_async_engine(DATABASE_URL, echo=False)
+async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+Base = declarative_base()
 
 # --- Tablas ---
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS users (
-    id SERIAL PRIMARY KEY,
-    telegram_id BIGINT UNIQUE,
-    tiktok_user TEXT,
-    balance INTEGER DEFAULT 10
-)
-""")
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS movimientos (
-    id SERIAL PRIMARY KEY,
-    telegram_id BIGINT,
-    detalle TEXT,
-    puntos INTEGER,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)
-""")
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS seguimientos (
-    id SERIAL PRIMARY KEY,
-    telegram_id BIGINT,
-    link TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)
-""")
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS videos (
-    id SERIAL PRIMARY KEY,
-    telegram_id BIGINT,
-    tipo TEXT,
-    titulo TEXT,
-    descripcion TEXT,
-    link TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)
-""")
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS interacciones (
-    id SERIAL PRIMARY KEY,
-    tipo TEXT,
-    item_id INTEGER,
-    actor_id BIGINT,
-    owner_id BIGINT,
-    status TEXT DEFAULT 'pending',
-    puntos INTEGER DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (tipo, item_id, actor_id)
-)
-""")
-conn.commit()
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True)
+    telegram_id = Column(BigInteger, unique=True)
+    tiktok_user = Column(Text)
+    balance = Column(Integer, default=10)
 
-# --- Config de puntos ---
+class Movimiento(Base):
+    __tablename__ = "movimientos"
+    id = Column(Integer, primary_key=True)
+    telegram_id = Column(BigInteger)
+    detalle = Column(Text)
+    puntos = Column(Integer)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+class Seguimiento(Base):
+    __tablename__ = "seguimientos"
+    id = Column(Integer, primary_key=True)
+    telegram_id = Column(BigInteger)
+    link = Column(Text)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+class Video(Base):
+    __tablename__ = "videos"
+    id = Column(Integer, primary_key=True)
+    telegram_id = Column(BigInteger)
+    tipo = Column(Text)
+    titulo = Column(Text)
+    descripcion = Column(Text)
+    link = Column(Text)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+class Interaccion(Base):
+    __tablename__ = "interacciones"
+    id = Column(Integer, primary_key=True)
+    tipo = Column(Text)   # 'seguimiento' | 'video_support'
+    item_id = Column(Integer)
+    actor_id = Column(BigInteger)
+    owner_id = Column(BigInteger)
+    status = Column(Text, default="pending")
+    puntos = Column(Integer, default=0)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+    __table_args__ = (UniqueConstraint("tipo", "item_id", "actor_id"),)
+
+async def init_db():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+# --- Config puntos ---
 PUNTOS_APOYO_SEGUIMIENTO = 2
 PUNTOS_APOYO_VIDEO = 3
 
@@ -71,28 +76,52 @@ def back_to_menu_keyboard():
         [[InlineKeyboardButton("🔙 Regresar al menú principal", callback_data="menu_principal")]]
     )
 
-# --- Inicio y registro ---
+# --- Handlers básicos ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    cursor.execute("INSERT INTO users (telegram_id) VALUES (%s) ON CONFLICT DO NOTHING", (user_id,))
-    conn.commit()
-    await update.message.reply_text(
-        f"👋 Hola {update.effective_user.first_name}, bienvenido al bot de apoyo TikTok.\n"
-        "Por favor escribe tu usuario de TikTok para registrarte.",
-        reply_markup=back_to_menu_keyboard()
-    )
-    context.user_data["state"] = "tiktok_user"
+    async with async_session() as session:
+        user = await session.get(User, update.effective_user.id)
+        if not user:
+            user = User(telegram_id=update.effective_user.id, balance=10)
+            session.add(user)
+            await session.commit()
+        await update.message.reply_text(
+            f"👋 Hola {update.effective_user.first_name}, bienvenido.\n"
+            f"Tu balance actual es: {user.balance}",
+            reply_markup=back_to_menu_keyboard()
+        )
+        context.user_data["state"] = "tiktok_user"
 
 async def save_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tiktok_user = update.message.text.strip()
-    user_id = update.effective_user.id
-    if not tiktok_user:
-        await update.message.reply_text("⚠️ Envía un usuario válido.", reply_markup=back_to_menu_keyboard())
-        return
-    cursor.execute("UPDATE users SET tiktok_user=%s WHERE telegram_id=%s", (tiktok_user, user_id))
-    conn.commit()
-    await show_main_menu(update, context, f"✅ Usuario TikTok registrado: {tiktok_user}")
+    async with async_session() as session:
+        user = await session.get(User, update.effective_user.id)
+        if user:
+            user.tiktok_user = tiktok_user
+            await session.commit()
+    await update.message.reply_text(f"✅ Usuario TikTok registrado: {tiktok_user}", reply_markup=back_to_menu_keyboard())
     context.user_data["state"] = None
+
+async def show_balance(update_or_query, context: ContextTypes.DEFAULT_TYPE):
+    async with async_session() as session:
+        user = await session.get(User, update_or_query.effective_user.id)
+        balance = user.balance if user else 0
+        result = await session.execute(
+            select(Movimiento).where(Movimiento.telegram_id == update_or_query.effective_user.id).order_by(Movimiento.created_at.desc()).limit(10)
+        )
+        movimientos = result.scalars().all()
+    texto = f"💰 Tu balance actual: {balance} puntos\n\n📜 Últimos movimientos:\n"
+    if movimientos:
+        for m in movimientos:
+            texto += f"- {m.detalle}: {m.puntos} puntos ({m.created_at})\n"
+    else:
+        texto += "⚠️ No tienes historial todavía."
+    if isinstance(update_or_query, Update):
+        await update_or_query.message.reply_text(texto, reply_markup=back_to_menu_keyboard())
+    else:
+        await update_or_query.edit_message_text(texto, reply_markup=back_to_menu_keyboard())
+
+async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await show_balance(update, context)
 
 # --- Menú principal ---
 async def show_main_menu(update_or_query, context, message="🏠 Menú principal:"):
@@ -104,84 +133,47 @@ async def show_main_menu(update_or_query, context, message="🏠 Menú principal
         [InlineKeyboardButton("💰 Balance e historial", callback_data="balance")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-
     if isinstance(update_or_query, Update) and update_or_query.message:
         await update_or_query.message.reply_text(message, reply_markup=reply_markup)
     else:
         await update_or_query.edit_message_text(message, reply_markup=reply_markup)
 
-# --- Balance e historial ---
-async def show_balance(update_or_query, context: ContextTypes.DEFAULT_TYPE):
-    is_update = isinstance(update_or_query, Update)
-    user_id = (update_or_query.effective_user.id if is_update else update_or_query.from_user.id)
-
-    cursor.execute("INSERT INTO users (telegram_id) VALUES (%s) ON CONFLICT DO NOTHING", (user_id,))
-    conn.commit()
-
-    cursor.execute("SELECT balance FROM users WHERE telegram_id=%s", (user_id,))
-    row = cursor.fetchone()
-    balance = row[0] if row else 0
-
-    cursor.execute("""
-        SELECT detalle, puntos, created_at
-        FROM movimientos
-        WHERE telegram_id=%s
-        ORDER BY created_at DESC
-        LIMIT 10
-    """, (user_id,))
-    movimientos = cursor.fetchall()
-
-    texto = f"💰 Tu balance actual: {balance} puntos\n\n📜 Últimos movimientos:\n"
-    if movimientos:
-        for detalle, puntos, fecha in movimientos:
-            texto += f"- {detalle}: {puntos} puntos ({fecha})\n"
-    else:
-        texto += "⚠️ No tienes historial todavía."
-
-    reply_markup = back_to_menu_keyboard()
-
-    if is_update and getattr(update_or_query, "message", None):
-        await update_or_query.message.reply_text(texto, reply_markup=reply_markup)
-    else:
-        await update_or_query.edit_message_text(texto, reply_markup=reply_markup)
-
-async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await show_balance(update, context)
-
 # --- Handler de texto ---
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.text:
-        return
     state = context.user_data.get("state")
-
     if state == "tiktok_user":
         await save_tiktok(update, context)
     else:
-        await update.message.reply_text(
-            "⚠️ Usa el menú para interactuar con el bot.\n\nSi es tu primera vez, escribe /start.",
-            reply_markup=back_to_menu_keyboard()
-        )
+        await update.message.reply_text("⚠️ Usa el menú para interactuar con el bot.", reply_markup=back_to_menu_keyboard())
 
 # --- Main ---
-def main():
-    token = os.getenv("BOT_TOKEN")  # Token como variable de entorno en Render
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+RENDER_EXTERNAL_HOSTNAME = os.getenv("RENDER_EXTERNAL_HOSTNAME", "localhost")
 
-    request = HTTPXRequest(
-        connect_timeout=20.0,
-        read_timeout=30.0,
-        write_timeout=30.0,
-        pool_timeout=10.0,
-    )
+application = Application.builder().token(BOT_TOKEN).build()
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("balance", cmd_balance))
+application.add_handler(CallbackQueryHandler(show_main_menu))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
-    app = Application.builder().token(token).request(request).build()
+flask_app = Flask(__name__)
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("balance", cmd_balance))
-    app.add_handler(CallbackQueryHandler(show_main_menu))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
+@flask_app.route(f"/{BOT_TOKEN}", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    application.update_queue.put(update)
+    return "ok"
 
-    print("🤖 Bot iniciado y escuchando en Render...")
-    app.run_polling(poll_interval=1.0, timeout=30, bootstrap_retries=5, close_loop=False)
+@flask_app.route("/")
+def home():
+    return "Bot de Telegram corriendo en Render!"
 
 if __name__ == "__main__":
-    main()
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(init_db())
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.environ.get("PORT", 10000)),
+        url_path=BOT_TOKEN,
+        webhook_url=f"https://{RENDER_EXTERNAL_HOSTNAME}/{BOT_TOKEN}"
+    )
