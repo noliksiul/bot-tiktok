@@ -48,12 +48,20 @@ class Transaction(Base):
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # 🔒 Crear índices únicos para evitar duplicados
+        await conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS unique_user_telegram_id ON users(telegram_id)"
+        )
+        await conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS unique_balance_per_user ON balances(user_id)"
+        )
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 RENDER_EXTERNAL_HOSTNAME = os.getenv("RENDER_EXTERNAL_HOSTNAME", "localhost")
 
 # --- Utilidad: obtener o crear usuario y balance ---
 async def get_or_create_user_and_balance(session: AsyncSession, tg_user):
+    # Buscar usuario por ID
     user = await session.get(User, tg_user.id)
     if not user:
         user = User(
@@ -66,20 +74,24 @@ async def get_or_create_user_and_balance(session: AsyncSession, tg_user):
         session.add(user)
         await session.commit()
 
-    # 🔑 Buscar balance por user_id
+    # Buscar balance por user_id
     result = await session.execute(select(Balance).where(Balance.user_id == user.id))
     balance = result.scalars().first()
     if not balance:
         balance = Balance(user_id=user.id, balance=0)
         session.add(balance)
         await session.commit()
+
     return user, balance
 
 # --- Handlers ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with async_session() as session:
-        _, _ = await get_or_create_user_and_balance(session, update.effective_user)
-        await update.message.reply_text("¡Bienvenido! Tu cuenta está lista.")
+        user, balance = await get_or_create_user_and_balance(session, update.effective_user)
+        await update.message.reply_text(
+            f"¡Bienvenido {user.first_name or user.username}! Tu cuenta está lista. "
+            f"Tu balance actual es: {balance.balance}"
+        )
 
 async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with async_session() as session:
@@ -130,6 +142,20 @@ async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             history_lines.append(f"{t.type.upper()} {t.amount} - {t.description} ({t.created_at})")
         await update.message.reply_text("Últimas transacciones:\n" + "\n".join(history_lines))
 
+# --- 🔴 Nuevo comando: resetdb ---
+async def resetdb_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)   # Borra todas las tablas
+        await conn.run_sync(Base.metadata.create_all) # Recrea las tablas
+        # Crear índices únicos
+        await conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS unique_user_telegram_id ON users(telegram_id)"
+        )
+        await conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS unique_balance_per_user ON balances(user_id)"
+        )
+    await update.message.reply_text("Base de datos reiniciada: tablas borradas y recreadas.")
+
 # --- Telegram App ---
 application = Application.builder().token(BOT_TOKEN).build()
 application.add_handler(CommandHandler("start", start))
@@ -137,6 +163,7 @@ application.add_handler(CommandHandler("balance", balance_cmd))
 application.add_handler(CommandHandler("credit", credit_cmd))
 application.add_handler(CommandHandler("debit", debit_cmd))
 application.add_handler(CommandHandler("history", history_cmd))
+application.add_handler(CommandHandler("resetdb", resetdb_cmd))  # 🔴 añadido
 
 # --- Flask Webhook ---
 flask_app = Flask(__name__)
