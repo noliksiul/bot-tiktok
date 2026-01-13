@@ -52,8 +52,8 @@ async def init_db():
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 RENDER_EXTERNAL_HOSTNAME = os.getenv("RENDER_EXTERNAL_HOSTNAME", "localhost")
 
-# --- Utilidades DB ---
-async def get_or_create_user_and_balance(session: AsyncSession, tg_user: "telegram.User"):
+# --- Utilidad: obtener o crear usuario y balance ---
+async def get_or_create_user_and_balance(session: AsyncSession, tg_user):
     user = await session.get(User, tg_user.id)
     if not user:
         user = User(
@@ -64,11 +64,10 @@ async def get_or_create_user_and_balance(session: AsyncSession, tg_user: "telegr
             last_name=tg_user.last_name,
         )
         session.add(user)
-        await session.commit()  # asegura existencia del usuario para la FK
+        await session.commit()
 
-    # Buscar balance por user_id (no por PK de balances)
     result = await session.execute(select(Balance).where(Balance.user_id == user.id))
-    balance = result.scalar_one_or_none()
+    balance = result.scalars().first()   # 🔑 trae el primero, evita MultipleResultsFound
     if not balance:
         balance = Balance(user_id=user.id, balance=0)
         session.add(balance)
@@ -83,7 +82,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with async_session() as session:
-        user, balance = await get_or_create_user_and_balance(session, update.effective_user)
+        _, balance = await get_or_create_user_and_balance(session, update.effective_user)
         await update.message.reply_text(f"Tu balance actual es: {balance.balance}")
 
 async def credit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -91,7 +90,6 @@ async def credit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Uso: /credit <monto>")
         return
     amount = int(context.args[0])
-
     async with async_session() as session:
         user, balance = await get_or_create_user_and_balance(session, update.effective_user)
         balance.balance += amount
@@ -104,7 +102,6 @@ async def debit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Uso: /debit <monto>")
         return
     amount = int(context.args[0])
-
     async with async_session() as session:
         user, balance = await get_or_create_user_and_balance(session, update.effective_user)
         if balance.balance < amount:
@@ -115,12 +112,28 @@ async def debit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await session.commit()
         await update.message.reply_text(f"Se debitó {amount}. Nuevo balance: {balance.balance}")
 
+async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async with async_session() as session:
+        user, _ = await get_or_create_user_and_balance(session, update.effective_user)
+        result = await session.execute(
+            select(Transaction).where(Transaction.user_id == user.id).order_by(Transaction.created_at.desc()).limit(5)
+        )
+        transactions = result.scalars().all()
+        if not transactions:
+            await update.message.reply_text("No tienes transacciones registradas.")
+            return
+        history_lines = []
+        for t in transactions:
+            history_lines.append(f"{t.type.upper()} {t.amount} - {t.description} ({t.created_at})")
+        await update.message.reply_text("Últimas transacciones:\n" + "\n".join(history_lines))
+
 # --- Telegram App ---
 application = Application.builder().token(BOT_TOKEN).build()
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("balance", balance_cmd))
 application.add_handler(CommandHandler("credit", credit_cmd))
 application.add_handler(CommandHandler("debit", debit_cmd))
+application.add_handler(CommandHandler("history", history_cmd))
 
 # --- Flask Webhook ---
 flask_app = Flask(__name__)
