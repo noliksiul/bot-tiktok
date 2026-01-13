@@ -3,7 +3,7 @@ import asyncio
 from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
-from sqlalchemy import Column, BigInteger, Integer, Text, TIMESTAMP, ForeignKey, func, CheckConstraint, select
+from sqlalchemy import Column, BigInteger, Integer, Text, TIMESTAMP, ForeignKey, func, CheckConstraint, select, text
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -50,10 +50,10 @@ async def init_db():
         await conn.run_sync(Base.metadata.create_all)
         # 🔒 Crear índices únicos para evitar duplicados
         await conn.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS unique_user_telegram_id ON users(telegram_id)"
+            text("CREATE UNIQUE INDEX IF NOT EXISTS unique_user_telegram_id ON users(telegram_id)")
         )
         await conn.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS unique_balance_per_user ON balances(user_id)"
+            text("CREATE UNIQUE INDEX IF NOT EXISTS unique_balance_per_user ON balances(user_id)")
         )
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
@@ -106,7 +106,7 @@ async def credit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with async_session() as session:
         user, balance = await get_or_create_user_and_balance(session, update.effective_user)
         balance.balance += amount
-        session.add(balance)  # 🔑 marcar balance como modificado
+        session.add(balance)
         session.add(Transaction(user_id=user.id, amount=amount, type="credit", description="Ingreso"))
         await session.commit()
         await update.message.reply_text(f"Se acreditaron {amount}. Nuevo balance: {balance.balance}")
@@ -122,7 +122,7 @@ async def debit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Fondos insuficientes.")
             return
         balance.balance -= amount
-        session.add(balance)  # 🔑 marcar balance como modificado
+        session.add(balance)
         session.add(Transaction(user_id=user.id, amount=amount, type="debit", description="Retiro"))
         await session.commit()
         await update.message.reply_text(f"Se debitó {amount}. Nuevo balance: {balance.balance}")
@@ -145,14 +145,13 @@ async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- 🔴 Nuevo comando: resetdb ---
 async def resetdb_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)   # Borra todas las tablas
-        await conn.run_sync(Base.metadata.create_all) # Recrea las tablas
-        # Crear índices únicos
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)
         await conn.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS unique_user_telegram_id ON users(telegram_id)"
+            text("CREATE UNIQUE INDEX IF NOT EXISTS unique_user_telegram_id ON users(telegram_id)")
         )
         await conn.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS unique_balance_per_user ON balances(user_id)"
+            text("CREATE UNIQUE INDEX IF NOT EXISTS unique_balance_per_user ON balances(user_id)")
         )
     await update.message.reply_text("Base de datos reiniciada: tablas borradas y recreadas.")
 
@@ -163,7 +162,7 @@ application.add_handler(CommandHandler("balance", balance_cmd))
 application.add_handler(CommandHandler("credit", credit_cmd))
 application.add_handler(CommandHandler("debit", debit_cmd))
 application.add_handler(CommandHandler("history", history_cmd))
-application.add_handler(CommandHandler("resetdb", resetdb_cmd))  # 🔴 añadido
+application.add_handler(CommandHandler("resetdb", resetdb_cmd))
 
 # --- Flask Webhook ---
 flask_app = Flask(__name__)
