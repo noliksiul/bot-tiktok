@@ -140,7 +140,7 @@ async def show_main_menu(update_or_query, context, message="🏠 Menú principal
         [InlineKeyboardButton("💰 Balance e historial", callback_data="balance")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    if isinstance(update_or_query, Update) and update_or_query.message:
+    if isinstance(update_or_query, Update) and getattr(update_or_query, "message", None):
         await update_or_query.message.reply_text(message, reply_markup=reply_markup)
     else:
         await update_or_query.edit_message_text(message, reply_markup=reply_markup)
@@ -181,7 +181,7 @@ async def save_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["state"] = None
     await show_main_menu(update, context)
 
-# --- Balance e historial ---
+# --- Balance e historial (funciona desde botón y comando) ---
 async def show_balance(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(update_or_query, Update):
         user_id = update_or_query.effective_user.id
@@ -218,7 +218,94 @@ async def show_balance(update_or_query, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_balance(update, context)
 
-# --- Subir seguimiento (publica en canal) ---
+# --- Ver seguimientos (envía mensaje nuevo, evita propios) ---
+async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
+    if isinstance(update_or_query, Update):
+        chat_id = update_or_query.effective_chat.id
+        user_id = update_or_query.effective_user.id
+    else:
+        query = update_or_query
+        chat_id = query.message.chat.id
+        user_id = query.from_user.id
+
+    async with async_session() as session:
+        res = await session.execute(
+            select(Seguimiento)
+            .where(Seguimiento.telegram_id != user_id)
+            .order_by(Seguimiento.created_at.desc())
+        )
+        rows = res.scalars().all()
+
+    if not rows:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="⚠️ No hay seguimientos disponibles por ahora.",
+            reply_markup=back_to_menu_keyboard()
+        )
+        return
+
+    seg = rows[0]
+    keyboard = [
+        [InlineKeyboardButton("🟡 Ya lo seguí ✅", callback_data=f"seguimiento_done_{seg.id}")],
+        [InlineKeyboardButton("🔙 Regresar al menú principal", callback_data="menu_principal")]
+    ]
+    texto = (
+        "👀 Seguimiento disponible:\n"
+        f"🔗 {seg.link}\n"
+        f"🗓️ {seg.created_at}\n\n"
+        "Pulsa el botón si ya seguiste."
+    )
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=texto,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+# --- Ver videos (envía mensaje nuevo, evita propios) ---
+async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
+    if isinstance(update_or_query, Update):
+        chat_id = update_or_query.effective_chat.id
+        user_id = update_or_query.effective_user.id
+    else:
+        query = update_or_query
+        chat_id = query.message.chat.id
+        user_id = query.from_user.id
+
+    async with async_session() as session:
+        res = await session.execute(
+            select(Video)
+            .where(Video.telegram_id != user_id)
+            .order_by(Video.created_at.desc())
+        )
+        rows = res.scalars().all()
+
+    if not rows:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="⚠️ No hay videos disponibles por ahora.",
+            reply_markup=back_to_menu_keyboard()
+        )
+        return
+
+    vid = rows[0]
+    keyboard = [
+        [InlineKeyboardButton("🟡 Ya apoyé (like/compartir) ⭐", callback_data=f"video_support_done_{vid.id}")],
+        [InlineKeyboardButton("🔙 Regresar al menú principal", callback_data="menu_principal")]
+    ]
+    texto = (
+        f"📺 Video ({vid.tipo}):\n"
+        f"📌 {vid.titulo}\n"
+        f"📝 {vid.descripcion}\n"
+        f"🔗 {vid.link}\n"
+        f"🗓️ {vid.created_at}\n\nPulsa el botón si ya apoyaste."
+    )
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=texto,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+# --- Subir seguimiento (descuenta puntos y publica en canal) ---
 async def save_seguimiento(update: Update, context: ContextTypes.DEFAULT_TYPE):
     link = update.message.text.strip()
     user_id = update.effective_user.id
@@ -229,14 +316,14 @@ async def save_seguimiento(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ No estás registrado. Usa /start primero.", reply_markup=back_to_menu_keyboard())
             context.user_data["state"] = None
             return
-        if user.balance < 3:
+        if (user.balance or 0) < 3:
             await update.message.reply_text("⚠️ No tienes suficientes puntos para subir seguimiento (mínimo 3).", reply_markup=back_to_menu_keyboard())
             context.user_data["state"] = None
             return
 
         seg = Seguimiento(telegram_id=user_id, link=link)
         session.add(seg)
-        user.balance -= 3
+        user.balance = (user.balance or 0) - 3
         mov = Movimiento(telegram_id=user_id, detalle="Subir seguimiento", puntos=-3)
         session.add(mov)
         await session.commit()
@@ -246,14 +333,15 @@ async def save_seguimiento(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Publicar en canal
     try:
+        alias = user.tiktok_user if user and user.tiktok_user else str(user_id)
         await context.bot.send_message(
             chat_id=CHANNEL_ID,
-            text=f"📢 Nuevo seguimiento publicado por @{user.tiktok_user or user_id}\n🔗 {link}\n\n👉 No olvides seguir nuestro canal de noticias, cupones y promociones."
+            text=f"📢 Nuevo seguimiento publicado por @{alias}\n🔗 {link}\n\n👉 No olvides seguir nuestro canal de noticias, cupones y promociones."
         )
     except Exception as e:
         print("Aviso: no se pudo publicar en el canal:", e)
 
-# --- Flujo subir video ---
+# --- Flujo subir video: título, descripción, link, publica en canal ---
 async def save_video_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["video_title"] = update.message.text.strip()
     context.user_data["state"] = "video_desc"
@@ -274,7 +362,7 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ No estás registrado. Usa /start primero.", reply_markup=back_to_menu_keyboard())
             context.user_data["state"] = None
             return
-        if user.balance < 5:
+        if (user.balance or 0) < 5:
             await update.message.reply_text("⚠️ No tienes suficientes puntos para subir video (mínimo 5).", reply_markup=back_to_menu_keyboard())
             context.user_data["state"] = None
             return
@@ -287,7 +375,7 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
             link=link
         )
         session.add(vid)
-        user.balance -= 5
+        user.balance = (user.balance or 0) - 5
         mov = Movimiento(telegram_id=user_id, detalle="Subir video", puntos=-5)
         session.add(mov)
         await session.commit()
@@ -297,9 +385,10 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Publicar en canal
     try:
+        alias = user.tiktok_user if user and user.tiktok_user else str(user_id)
         await context.bot.send_message(
             chat_id=CHANNEL_ID,
-            text=f"🎥 Nuevo video publicado por @{user.tiktok_user or user_id}\n📌 {context.user_data.get('video_title')}\n📝 {context.user_data.get('video_desc')}\n🔗 {link}\n\n👉 No olvides seguir nuestro canal de noticias, cupones y promociones."
+            text=f"🎥 Nuevo video publicado por @{alias}\n📌 {context.user_data.get('video_title')}\n📝 {context.user_data.get('video_desc')}\n🔗 {link}\n\n👉 No olvides seguir nuestro canal de noticias, cupones y promociones."
         )
     except Exception as e:
         print("Aviso: no se pudo publicar en el canal:", e)
@@ -317,7 +406,6 @@ async def handle_seguimiento_done(query, context: ContextTypes.DEFAULT_TYPE, seg
             return
         owner_id = seg.telegram_id
 
-        # Evitar duplicado
         res = await session.execute(
             select(Interaccion).where(
                 Interaccion.tipo == "seguimiento",
@@ -418,7 +506,7 @@ async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, v
         ]
         await context.bot.send_message(
             chat_id=owner_id,
-            text=f"🎥 Solicitud: @{actor_tt} indica que apoyó tu video (like/compartir).\nID: {inter_id}\n¿Aceptas otorgar {PUNTOS_APOYO_VIDEO} puntos?",
+            text=f"🎥 Solicitud: @{actor_tt} apoyó tu video.\nID: {inter_id}\n¿Aceptas otorgar {PUNTOS_APOYO_VIDEO} puntos?",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     except Exception as e:
@@ -619,3 +707,4 @@ if __name__ == "__main__":
         url_path=BOT_TOKEN,
         webhook_url=f"https://{RENDER_EXTERNAL_HOSTNAME}/{BOT_TOKEN}"
     )
+    
