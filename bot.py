@@ -48,13 +48,7 @@ class Transaction(Base):
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        # Crear índices únicos
-        await conn.execute(
-            text("CREATE UNIQUE INDEX IF NOT EXISTS unique_user_telegram_id ON users(telegram_id)")
-        )
-        await conn.execute(
-            text("CREATE UNIQUE INDEX IF NOT EXISTS unique_balance_per_user ON balances(user_id)")
-        )
+        # ❌ No crear índices aquí, para evitar errores si hay duplicados
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 RENDER_EXTERNAL_HOSTNAME = os.getenv("RENDER_EXTERNAL_HOSTNAME", "localhost")
@@ -152,7 +146,7 @@ async def fixdb_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
               GROUP BY user_id
             )
         """))
-        # Recrear índice único
+        # Crear índice único
         await conn.execute(
             text("CREATE UNIQUE INDEX IF NOT EXISTS unique_balance_per_user ON balances(user_id)")
         )
