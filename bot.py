@@ -218,7 +218,7 @@ async def show_balance(update_or_query, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_balance(update, context)
 
-# --- Ver seguimientos (envía mensaje nuevo, evita propios) ---
+# --- Ver seguimientos (no propios, solo una vez, envía mensaje nuevo) ---
 async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(update_or_query, Update):
         chat_id = update_or_query.effective_chat.id
@@ -232,6 +232,12 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
         res = await session.execute(
             select(Seguimiento)
             .where(Seguimiento.telegram_id != user_id)
+            .where(~Seguimiento.id.in_(
+                select(Interaccion.item_id).where(
+                    Interaccion.tipo == "seguimiento",
+                    Interaccion.actor_id == user_id
+                )
+            ))
             .order_by(Seguimiento.created_at.desc())
         )
         rows = res.scalars().all()
@@ -261,7 +267,7 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# --- Ver videos (envía mensaje nuevo, evita propios) ---
+# --- Ver videos (no propios, solo una vez, envía mensaje nuevo) ---
 async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(update_or_query, Update):
         chat_id = update_or_query.effective_chat.id
@@ -275,6 +281,12 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         res = await session.execute(
             select(Video)
             .where(Video.telegram_id != user_id)
+            .where(~Video.id.in_(
+                select(Interaccion.item_id).where(
+                    Interaccion.tipo == "video_support",
+                    Interaccion.actor_id == user_id
+                )
+            ))
             .order_by(Video.created_at.desc())
         )
         rows = res.scalars().all()
@@ -707,4 +719,3 @@ if __name__ == "__main__":
         url_path=BOT_TOKEN,
         webhook_url=f"https://{RENDER_EXTERNAL_HOSTNAME}/{BOT_TOKEN}"
     )
-    
