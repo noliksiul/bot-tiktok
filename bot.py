@@ -10,7 +10,7 @@ from telegram.ext import (
 )
 from sqlalchemy import (
     Column, Integer, BigInteger, Text, TIMESTAMP, func,
-    UniqueConstraint, select, text, ForeignKey
+    UniqueConstraint, select, text
 )
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
@@ -67,17 +67,17 @@ class Interaccion(Base):
     item_id = Column(Integer)
     actor_id = Column(BigInteger)
     owner_id = Column(BigInteger)
-    status = Column(Text, default="pending")  # pending | accepted | rejected
+    status = Column(Text, default="pending")
     puntos = Column(Integer, default=0)
     created_at = Column(TIMESTAMP, server_default=func.now())
     __table_args__ = (UniqueConstraint("tipo", "item_id", "actor_id", name="uniq_tipo_item_actor"),)
 
-# --- Inicialización DB con alteraciones seguras ---
+# --- Inicialización DB ---
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-        # Asegurar columnas críticas por si la DB antigua no las tiene
+        # Asegurar columnas críticas
         await conn.execute(text("""
             DO $$
             BEGIN
@@ -121,7 +121,6 @@ async def init_db():
 PUNTOS_APOYO_SEGUIMIENTO = 2
 PUNTOS_APOYO_VIDEO = 3
 
-# --- Utilidades UI ---
 def back_to_menu_keyboard():
     return InlineKeyboardMarkup(
         [[InlineKeyboardButton("🔙 Regresar al menú principal", callback_data="menu_principal")]]
@@ -143,7 +142,7 @@ async def show_main_menu(update_or_query, context, message="🏠 Menú principal
     else:
         await update_or_query.edit_message_text(message, reply_markup=reply_markup)
 
-# --- Start y registro TikTok ---
+# --- Start: se detiene en pedir usuario TikTok ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with async_session() as session:
         res = await session.execute(select(User).where(User.telegram_id == update.effective_user.id))
@@ -162,8 +161,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=back_to_menu_keyboard()
         )
         context.user_data["state"] = "tiktok_user"
-        await show_main_menu(update, context)
 
+# --- Guardar usuario TikTok y mostrar menú ---
 async def save_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tiktok_user = update.message.text.strip()
     if not tiktok_user:
@@ -178,6 +177,31 @@ async def save_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"✅ Usuario TikTok registrado: {tiktok_user}", reply_markup=back_to_menu_keyboard())
     context.user_data["state"] = None
     await show_main_menu(update, context)
+
+# --- Balance e historial ---
+async def show_balance(update_or_query, context: ContextTypes.DEFAULT_TYPE):
+    async with async_session() as session:
+        res = await session.execute(select(User).where(User.telegram_id == update_or_query.effective_user.id))
+        user = res.scalars().first()
+        balance = user.balance if user else 0
+        res = await session.execute(
+            select(Movimiento).where(Movimiento.telegram_id == update_or_query.effective_user.id)
+            .order_by(Movimiento.created_at.desc()).limit(10)
+        )
+        movimientos = res.scalars().all()
+    texto = f"💰 Tu balance actual: {balance} puntos\n\n📜 Últimos movimientos:\n"
+    if movimientos:
+        for m in movimientos:
+            texto += f"- {m.detalle}: {m.puntos} puntos ({m.created_at})\n"
+    else:
+        texto += "⚠️ No tienes historial todavía."
+    if isinstance(update_or_query, Update):
+        await update_or_query.message.reply_text(texto, reply_markup=back_to_menu_keyboard())
+    else:
+        await update_or_query.edit_message_text(texto, reply_markup=back_to_menu_keyboard())
+
+async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await show_balance(update, context)
 
 # --- Ver seguimientos (del resto) ---
 async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
@@ -442,7 +466,6 @@ async def approve_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_i
             return
 
         inter.status = "accepted"
-        # Otorgar puntos al actor
         res = await session.execute(select(User).where(User.telegram_id == inter.actor_id))
         actor = res.scalars().first()
         if actor:
@@ -487,31 +510,6 @@ async def reject_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_id
         )
     except Exception as e:
         print("Aviso: no se pudo notificar al actor:", e)
-
-# --- Balance e historial ---
-async def show_balance(update_or_query, context: ContextTypes.DEFAULT_TYPE):
-    async with async_session() as session:
-        res = await session.execute(select(User).where(User.telegram_id == update_or_query.effective_user.id))
-        user = res.scalars().first()
-        balance = user.balance if user else 0
-        res = await session.execute(
-            select(Movimiento).where(Movimiento.telegram_id == update_or_query.effective_user.id)
-            .order_by(Movimiento.created_at.desc()).limit(10)
-        )
-        movimientos = res.scalars().all()
-    texto = f"💰 Tu balance actual: {balance} puntos\n\n📜 Últimos movimientos:\n"
-    if movimientos:
-        for m in movimientos:
-            texto += f"- {m.detalle}: {m.puntos} puntos ({m.created_at})\n"
-    else:
-        texto += "⚠️ No tienes historial todavía."
-    if isinstance(update_or_query, Update):
-        await update_or_query.message.reply_text(texto, reply_markup=back_to_menu_keyboard())
-    else:
-        await update_or_query.edit_message_text(texto, reply_markup=back_to_menu_keyboard())
-
-async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await show_balance(update, context)
 
 # --- Callback principal (menú y acciones) ---
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -585,8 +583,9 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "menu_principal":
         context.user_data["state"] = None
         await show_main_menu(query, context)
+# bot.py (Parte 3/3)
 
-# --- Handler de texto ---
+# --- Handler de texto principal ---
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
@@ -606,7 +605,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "⚠️ Usa el menú para interactuar con el bot.\n\nSi es tu primera vez, escribe /start.",
             reply_markup=back_to_menu_keyboard()
         )
-    # bot.py (Parte 3/3)
 
 # --- Main ---
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
@@ -641,4 +639,3 @@ if __name__ == "__main__":
         url_path=BOT_TOKEN,
         webhook_url=f"https://{RENDER_EXTERNAL_HOSTNAME}/{BOT_TOKEN}"
     )
-    
