@@ -125,7 +125,7 @@ PUNTOS_APOYO_VIDEO = 3
 CHANNEL_ID = -1003468913370
 
 # --- Configuración administrador ---
-ADMIN_ID = 123456789  # tu Telegram ID aquí
+ADMIN_ID = 890166032  # tu Telegram ID aquí
 
 def back_to_menu_keyboard():
     return InlineKeyboardMarkup(
