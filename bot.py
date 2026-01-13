@@ -66,6 +66,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             session.add(user)
             await session.commit()
+        balance = await session.get(Balance, user.id)
+        if not balance:
             balance = Balance(user_id=user.id, balance=0)
             session.add(balance)
             await session.commit()
@@ -99,6 +101,7 @@ async def credit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             balance = Balance(user_id=user.id, balance=0)
             session.add(balance)
         balance.balance += amount
+        session.add(balance)
         session.add(Transaction(user_id=user.id, amount=amount, type="credit", description="Ingreso"))
         await session.commit()
         await update.message.reply_text(f"Se acreditaron {amount}. Nuevo balance: {balance.balance}")
@@ -121,18 +124,19 @@ async def debit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Fondos insuficientes.")
             return
         balance.balance -= amount
+        session.add(balance)
         session.add(Transaction(user_id=user.id, amount=amount, type="debit", description="Retiro"))
         await session.commit()
         await update.message.reply_text(f"Se debitó {amount}. Nuevo balance: {balance.balance}")
 
-# --- Construir aplicación Telegram ---
+# --- Telegram App ---
 application = Application.builder().token(BOT_TOKEN).build()
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("balance", balance_cmd))
 application.add_handler(CommandHandler("credit", credit_cmd))
 application.add_handler(CommandHandler("debit", debit_cmd))
 
-# --- Flask para Webhook ---
+# --- Flask Webhook ---
 flask_app = Flask(__name__)
 
 @flask_app.route(f"/{BOT_TOKEN}", methods=["POST"])
@@ -145,7 +149,7 @@ def webhook():
 def home():
     return "Bot de Telegram corriendo con Webhook en Render!"
 
-# --- Bloque final ---
+# --- Run ---
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.run_until_complete(init_db())
