@@ -3,7 +3,7 @@ import asyncio
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
-from sqlalchemy import Column, Integer, BigInteger, Text, TIMESTAMP, func, ForeignKey, UniqueConstraint, select
+from sqlalchemy import Column, Integer, BigInteger, Text, TIMESTAMP, func, ForeignKey, UniqueConstraint, select, text
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -64,9 +64,52 @@ class Interaccion(Base):
     created_at = Column(TIMESTAMP, server_default=func.now())
     __table_args__ = (UniqueConstraint("tipo", "item_id", "actor_id"),)
 
+# --- Inicialización DB con alteraciones ---
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+        # Asegurar columna tiktok_user en users
+        await conn.execute(text("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name='users' AND column_name='tiktok_user'
+                ) THEN
+                    ALTER TABLE users ADD COLUMN tiktok_user TEXT;
+                END IF;
+            END
+            $$;
+        """))
+
+        # Asegurar columna balance en users
+        await conn.execute(text("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name='users' AND column_name='balance'
+                ) THEN
+                    ALTER TABLE users ADD COLUMN balance INTEGER DEFAULT 10;
+                END IF;
+            END
+            $$;
+        """))
+
+        # Asegurar columna status en interacciones
+        await conn.execute(text("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name='interacciones' AND column_name='status'
+                ) THEN
+                    ALTER TABLE interacciones ADD COLUMN status TEXT DEFAULT 'pending';
+                END IF;
+            END
+            $$;
+        """))
 
 # --- Config puntos ---
 PUNTOS_APOYO_SEGUIMIENTO = 2
@@ -81,8 +124,8 @@ def back_to_menu_keyboard():
 # --- Handlers básicos ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with async_session() as session:
-        user = await session.execute(select(User).where(User.telegram_id == update.effective_user.id))
-        user = user.scalars().first()
+        result = await session.execute(select(User).where(User.telegram_id == update.effective_user.id))
+        user = result.scalars().first()
         if not user:
             user = User(telegram_id=update.effective_user.id, balance=10)
             session.add(user)
@@ -97,8 +140,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def save_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tiktok_user = update.message.text.strip()
     async with async_session() as session:
-        user = await session.execute(select(User).where(User.telegram_id == update.effective_user.id))
-        user = user.scalars().first()
+        result = await session.execute(select(User).where(User.telegram_id == update.effective_user.id))
+        user = result.scalars().first()
         if user:
             user.tiktok_user = tiktok_user
             await session.commit()
@@ -107,8 +150,8 @@ async def save_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def show_balance(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     async with async_session() as session:
-        user = await session.execute(select(User).where(User.telegram_id == update_or_query.effective_user.id))
-        user = user.scalars().first()
+        result = await session.execute(select(User).where(User.telegram_id == update_or_query.effective_user.id))
+        user = result.scalars().first()
         balance = user.balance if user else 0
         result = await session.execute(
             select(Movimiento).where(Movimiento.telegram_id == update_or_query.effective_user.id).order_by(Movimiento.created_at.desc()).limit(10)
@@ -176,9 +219,4 @@ def home():
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.run_until_complete(init_db())
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.environ.get("PORT", 10000)),
-        url_path=BOT_TOKEN,
-        webhook_url=f"https://{RENDER_EXTERNAL_HOSTNAME}/{BOT_TOKEN}"
-    )
+    application.run
