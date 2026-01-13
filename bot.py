@@ -125,7 +125,7 @@ PUNTOS_APOYO_VIDEO = 3
 CHANNEL_ID = -1003468913370
 
 # --- Configuración administrador ---
-ADMIN_ID = 890166032  # tu Telegram ID aquí
+ADMIN_ID = 890166032  # tu Telegram ID real
 
 def back_to_menu_keyboard():
     return InlineKeyboardMarkup(
@@ -148,7 +148,7 @@ async def show_main_menu(update_or_query, context, message="🏠 Menú principal
     else:
         await update_or_query.edit_message_text(message, reply_markup=reply_markup)
 
-# --- Start: se detiene en pedir usuario TikTok ---
+# --- Start ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with async_session() as session:
         res = await session.execute(select(User).where(User.telegram_id == update.effective_user.id))
@@ -168,7 +168,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         context.user_data["state"] = "tiktok_user"
 
-# --- Guardar usuario TikTok y mostrar menú ---
+# --- Guardar usuario TikTok ---
 async def save_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tiktok_user = update.message.text.strip()
     if not tiktok_user:
@@ -184,7 +184,7 @@ async def save_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["state"] = None
     await show_main_menu(update, context)
 
-# --- Balance e historial (botón y comando) ---
+# --- Balance ---
 async def show_balance(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(update_or_query, Update):
         user_id = update_or_query.effective_user.id
@@ -221,7 +221,27 @@ async def show_balance(update_or_query, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_balance(update, context)
 
-# --- Ver seguimientos (no propios, solo una vez, envía mensaje nuevo) ---
+# --- Comando listar usuarios (solo admin) ---
+async def listar_usuarios(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("❌ No tienes permiso para usar este comando.")
+        return
+
+    async with async_session() as session:
+        res = await session.execute(select(User))
+        usuarios = res.scalars().all()
+
+    if not usuarios:
+        await update.message.reply_text("⚠️ No hay usuarios registrados.")
+        return
+
+    texto = "👥 Usuarios registrados:\n"
+    for u in usuarios:
+        texto += f"- ID: {u.telegram_id}, TikTok: {u.tiktok_user}, Balance: {u.balance}\n"
+
+    await update.message.reply_text(texto)
+
+# --- Ver seguimientos (no propios, solo una vez) ---
 async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(update_or_query, Update):
         chat_id = update_or_query.effective_chat.id
@@ -270,7 +290,7 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# --- Ver videos (no propios, solo una vez, envía mensaje nuevo) ---
+# --- Ver videos (no propios, solo una vez) ---
 async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(update_or_query, Update):
         chat_id = update_or_query.effective_chat.id
@@ -421,7 +441,6 @@ async def handle_seguimiento_done(query, context: ContextTypes.DEFAULT_TYPE, seg
             return
         owner_id = seg.telegram_id
 
-        # Evitar duplicado del actor
         res = await session.execute(
             select(Interaccion).where(
                 Interaccion.tipo == "seguimiento",
@@ -528,7 +547,7 @@ async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, v
     except Exception as e:
         print("Aviso: no se pudo notificar al dueño del video:", e)
 
-# --- Aprobar interacción (regresa al menú y actor con botón menú) ---
+# --- Aprobar interacción ---
 async def approve_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_id: int):
     async with async_session() as session:
         res = await session.execute(select(Interaccion).where(Interaccion.id == inter_id))
@@ -567,7 +586,7 @@ async def approve_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_i
     except Exception as e:
         print("Aviso: no se pudo notificar al actor:", e)
 
-# --- Rechazar interacción (regresa al menú y actor con botón menú) ---
+# --- Rechazar interacción ---
 async def reject_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_id: int):
     async with async_session() as session:
         res = await session.execute(select(Interaccion).where(Interaccion.id == inter_id))
@@ -739,6 +758,7 @@ RENDER_EXTERNAL_HOSTNAME = os.getenv("RENDER_EXTERNAL_HOSTNAME", "localhost")
 application = Application.builder().token(BOT_TOKEN).build()
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("balance", cmd_balance))
+application.add_handler(CommandHandler("listar_usuarios", listar_usuarios))
 application.add_handler(CommandHandler("dar_puntos", dar_puntos))
 application.add_handler(CallbackQueryHandler(menu_handler))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
@@ -766,4 +786,3 @@ if __name__ == "__main__":
         url_path=BOT_TOKEN,
         webhook_url=f"https://{RENDER_EXTERNAL_HOSTNAME}/{BOT_TOKEN}"
     )
-    
