@@ -3,7 +3,7 @@ import asyncio
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
-from sqlalchemy import Column, Integer, BigInteger, Text, TIMESTAMP, func, ForeignKey, UniqueConstraint, select, text
+from sqlalchemy import Column, Integer, BigInteger, Text, TIMESTAMP, func, UniqueConstraint, select, text
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -218,5 +218,4 @@ def home():
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(init_db())
-    application.run
+    loop.run_until_complete(init_db
