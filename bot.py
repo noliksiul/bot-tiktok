@@ -48,7 +48,7 @@ class Transaction(Base):
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        # 🔒 Crear índices únicos para evitar duplicados
+        # Crear índices únicos
         await conn.execute(
             text("CREATE UNIQUE INDEX IF NOT EXISTS unique_user_telegram_id ON users(telegram_id)")
         )
@@ -61,7 +61,6 @@ RENDER_EXTERNAL_HOSTNAME = os.getenv("RENDER_EXTERNAL_HOSTNAME", "localhost")
 
 # --- Utilidad: obtener o crear usuario y balance ---
 async def get_or_create_user_and_balance(session: AsyncSession, tg_user):
-    # Buscar usuario por ID
     user = await session.get(User, tg_user.id)
     if not user:
         user = User(
@@ -74,7 +73,6 @@ async def get_or_create_user_and_balance(session: AsyncSession, tg_user):
         session.add(user)
         await session.commit()
 
-    # Buscar balance por user_id
     result = await session.execute(select(Balance).where(Balance.user_id == user.id))
     balance = result.scalars().first()
     if not balance:
@@ -142,18 +140,23 @@ async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             history_lines.append(f"{t.type.upper()} {t.amount} - {t.description} ({t.created_at})")
         await update.message.reply_text("Últimas transacciones:\n" + "\n".join(history_lines))
 
-# --- 🔴 Nuevo comando: resetdb ---
-async def resetdb_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# --- 🔴 Nuevo comando: fixdb ---
+async def fixdb_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
-        await conn.execute(
-            text("CREATE UNIQUE INDEX IF NOT EXISTS unique_user_telegram_id ON users(telegram_id)")
-        )
+        # Borrar duplicados en balances
+        await conn.execute(text("""
+            DELETE FROM balances
+            WHERE id NOT IN (
+              SELECT MIN(id)
+              FROM balances
+              GROUP BY user_id
+            )
+        """))
+        # Recrear índice único
         await conn.execute(
             text("CREATE UNIQUE INDEX IF NOT EXISTS unique_balance_per_user ON balances(user_id)")
         )
-    await update.message.reply_text("Base de datos reiniciada: tablas borradas y recreadas.")
+    await update.message.reply_text("Duplicados eliminados y el índice único recreado correctamente.")
 
 # --- Telegram App ---
 application = Application.builder().token(BOT_TOKEN).build()
@@ -162,7 +165,7 @@ application.add_handler(CommandHandler("balance", balance_cmd))
 application.add_handler(CommandHandler("credit", credit_cmd))
 application.add_handler(CommandHandler("debit", debit_cmd))
 application.add_handler(CommandHandler("history", history_cmd))
-application.add_handler(CommandHandler("resetdb", resetdb_cmd))
+application.add_handler(CommandHandler("fixdb", fixdb_cmd))
 
 # --- Flask Webhook ---
 flask_app = Flask(__name__)
