@@ -121,6 +121,9 @@ async def init_db():
 PUNTOS_APOYO_SEGUIMIENTO = 2
 PUNTOS_APOYO_VIDEO = 3
 
+# --- Canal de publicación ---
+CHANNEL_ID = -1003468913370
+
 def back_to_menu_keyboard():
     return InlineKeyboardMarkup(
         [[InlineKeyboardButton("🔙 Regresar al menú principal", callback_data="menu_principal")]]
@@ -178,7 +181,7 @@ async def save_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["state"] = None
     await show_main_menu(update, context)
 
-# --- Balance e historial (corregido) ---
+# --- Balance e historial ---
 async def show_balance(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(update_or_query, Update):
         user_id = update_or_query.effective_user.id
@@ -215,77 +218,7 @@ async def show_balance(update_or_query, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_balance(update, context)
 
-# --- Aquí seguirían los handlers de subir/ver seguimientos, videos, interacciones ---
-# (idénticos a los que ya te pasé antes, con la misma estructura)
-# bot.py (Parte 3/3)
-
-# --- Ver seguimientos (del resto) ---
-async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update_or_query.effective_user.id if isinstance(update_or_query, Update) else update_or_query.from_user.id
-    async with async_session() as session:
-        res = await session.execute(
-            select(Seguimiento).where(Seguimiento.telegram_id != user_id).order_by(Seguimiento.created_at.desc())
-        )
-        rows = res.scalars().all()
-
-    if not rows:
-        texto = "⚠️ No hay seguimientos disponibles por ahora."
-        reply_markup = back_to_menu_keyboard()
-        if isinstance(update_or_query, Update):
-            await update_or_query.message.reply_text(texto, reply_markup=reply_markup)
-        else:
-            await update_or_query.edit_message_text(texto, reply_markup=reply_markup)
-        return
-
-    seg = rows[0]
-    keyboard = [
-        [InlineKeyboardButton("🟡 Ya lo seguí ✅", callback_data=f"seguimiento_done_{seg.id}")],
-        [InlineKeyboardButton("🔙 Regresar al menú principal", callback_data="menu_principal")]
-    ]
-    texto = f"👀 Seguimiento:\n🔗 {seg.link}\n🗓️ {seg.created_at}\n\nPulsa el botón si ya seguiste."
-    markup = InlineKeyboardMarkup(keyboard)
-    if isinstance(update_or_query, Update):
-        await update_or_query.message.reply_text(texto, reply_markup=markup)
-    else:
-        await update_or_query.edit_message_text(texto, reply_markup=markup)
-
-# --- Ver videos (del resto) ---
-async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update_or_query.effective_user.id if isinstance(update_or_query, Update) else update_or_query.from_user.id
-    async with async_session() as session:
-        res = await session.execute(
-            select(Video).where(Video.telegram_id != user_id).order_by(Video.created_at.desc())
-        )
-        rows = res.scalars().all()
-
-    if not rows:
-        texto = "⚠️ No hay videos disponibles por ahora."
-        reply_markup = back_to_menu_keyboard()
-        if isinstance(update_or_query, Update):
-            await update_or_query.message.reply_text(texto, reply_markup=reply_markup)
-        else:
-            await update_or_query.edit_message_text(texto, reply_markup=reply_markup)
-        return
-
-    vid = rows[0]
-    keyboard = [
-        [InlineKeyboardButton("🟡 Ya apoyé (like/compartir) ⭐", callback_data=f"video_support_done_{vid.id}")],
-        [InlineKeyboardButton("🔙 Regresar al menú principal", callback_data="menu_principal")]
-    ]
-    texto = (
-        f"📺 Video ({vid.tipo}):\n"
-        f"📌 {vid.titulo}\n"
-        f"📝 {vid.descripcion}\n"
-        f"🔗 {vid.link}\n"
-        f"🗓️ {vid.created_at}\n\nPulsa el botón si ya apoyaste."
-    )
-    markup = InlineKeyboardMarkup(keyboard)
-    if isinstance(update_or_query, Update):
-        await update_or_query.message.reply_text(texto, reply_markup=markup)
-    else:
-        await update_or_query.edit_message_text(texto, reply_markup=markup)
-
-# --- Subir seguimiento ---
+# --- Subir seguimiento (publica en canal) ---
 async def save_seguimiento(update: Update, context: ContextTypes.DEFAULT_TYPE):
     link = update.message.text.strip()
     user_id = update.effective_user.id
@@ -311,7 +244,16 @@ async def save_seguimiento(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ Tu seguimiento se subió con éxito.", reply_markup=back_to_menu_keyboard())
     context.user_data["state"] = None
 
-# --- Flujo subir video: título, descripción, link ---
+    # Publicar en canal
+    try:
+        await context.bot.send_message(
+            chat_id=CHANNEL_ID,
+            text=f"📢 Nuevo seguimiento publicado por @{user.tiktok_user or user_id}\n🔗 {link}\n\n👉 No olvides seguir nuestro canal de noticias, cupones y promociones."
+        )
+    except Exception as e:
+        print("Aviso: no se pudo publicar en el canal:", e)
+
+# --- Flujo subir video ---
 async def save_video_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["video_title"] = update.message.text.strip()
     context.user_data["state"] = "video_desc"
@@ -353,6 +295,16 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ Tu video se subió con éxito.", reply_markup=back_to_menu_keyboard())
     context.user_data["state"] = None
 
+    # Publicar en canal
+    try:
+        await context.bot.send_message(
+            chat_id=CHANNEL_ID,
+            text=f"🎥 Nuevo video publicado por @{user.tiktok_user or user_id}\n📌 {context.user_data.get('video_title')}\n📝 {context.user_data.get('video_desc')}\n🔗 {link}\n\n👉 No olvides seguir nuestro canal de noticias, cupones y promociones."
+        )
+    except Exception as e:
+        print("Aviso: no se pudo publicar en el canal:", e)
+# bot.py (Parte 3/3)
+
 # --- Reclamo de apoyo seguimiento ---
 async def handle_seguimiento_done(query, context: ContextTypes.DEFAULT_TYPE, seg_id: int):
     actor_id = query.from_user.id
@@ -361,6 +313,7 @@ async def handle_seguimiento_done(query, context: ContextTypes.DEFAULT_TYPE, seg
         seg = res.scalars().first()
         if not seg:
             await query.edit_message_text("❌ Seguimiento no disponible.", reply_markup=back_to_menu_keyboard())
+            await show_main_menu(query, context)
             return
         owner_id = seg.telegram_id
 
@@ -375,6 +328,7 @@ async def handle_seguimiento_done(query, context: ContextTypes.DEFAULT_TYPE, seg
         exists = res.scalars().first()
         if exists:
             await query.edit_message_text(f"⚠️ Ya registraste apoyo para este seguimiento (estado: {exists.status}).", reply_markup=back_to_menu_keyboard())
+            await show_main_menu(query, context)
             return
 
         inter = Interaccion(
@@ -390,6 +344,7 @@ async def handle_seguimiento_done(query, context: ContextTypes.DEFAULT_TYPE, seg
         inter_id = inter.id
 
     await query.edit_message_text("🟡 Listo, se notificó al dueño para aprobación.", reply_markup=back_to_menu_keyboard())
+    await show_main_menu(query, context)
 
     # Notificar al dueño
     try:
@@ -418,6 +373,7 @@ async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, v
         vid = res.scalars().first()
         if not vid:
             await query.edit_message_text("❌ Video no disponible.", reply_markup=back_to_menu_keyboard())
+            await show_main_menu(query, context)
             return
         owner_id = vid.telegram_id
 
@@ -431,6 +387,7 @@ async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, v
         exists = res.scalars().first()
         if exists:
             await query.edit_message_text(f"⚠️ Ya registraste apoyo para este video (estado: {exists.status}).", reply_markup=back_to_menu_keyboard())
+            await show_main_menu(query, context)
             return
 
         inter = Interaccion(
@@ -446,7 +403,9 @@ async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, v
         inter_id = inter.id
 
     await query.edit_message_text("🟡 Listo, se notificó al dueño para aprobación.", reply_markup=back_to_menu_keyboard())
+    await show_main_menu(query, context)
 
+    # Notificar al dueño
     try:
         async with async_session() as session:
             res = await session.execute(select(User.tiktok_user).where(User.telegram_id == actor_id))
@@ -459,19 +418,20 @@ async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, v
         ]
         await context.bot.send_message(
             chat_id=owner_id,
-            text=f"🎥 Solicitud: @{actor_tt} indica que ya apoyó tu video (like/compartir).\nID: {inter_id}\n¿Aceptas otorgar {PUNTOS_APOYO_VIDEO} puntos?",
+            text=f"🎥 Solicitud: @{actor_tt} indica que apoyó tu video (like/compartir).\nID: {inter_id}\n¿Aceptas otorgar {PUNTOS_APOYO_VIDEO} puntos?",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     except Exception as e:
         print("Aviso: no se pudo notificar al dueño del video:", e)
 
-# --- Aprobar interacción ---
+# --- Aprobar interacción (regresa al menú) ---
 async def approve_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_id: int):
     async with async_session() as session:
         res = await session.execute(select(Interaccion).where(Interaccion.id == inter_id))
         inter = res.scalars().first()
         if not inter:
             await query.edit_message_text("❌ Interacción no encontrada.", reply_markup=back_to_menu_keyboard())
+            await show_main_menu(query, context)
             return
 
         if query.from_user.id != inter.owner_id:
@@ -479,6 +439,7 @@ async def approve_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_i
             return
         if inter.status != "pending":
             await query.edit_message_text(f"⚠️ Esta interacción ya está en estado: {inter.status}.", reply_markup=back_to_menu_keyboard())
+            await show_main_menu(query, context)
             return
 
         inter.status = "accepted"
@@ -491,6 +452,7 @@ async def approve_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_i
         await session.commit()
 
     await query.edit_message_text("✅ Interacción aprobada. Puntos otorgados.", reply_markup=back_to_menu_keyboard())
+    await show_main_menu(query, context)
     try:
         await context.bot.send_message(
             chat_id=inter.actor_id,
@@ -499,13 +461,14 @@ async def approve_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_i
     except Exception as e:
         print("Aviso: no se pudo notificar al actor:", e)
 
-# --- Rechazar interacción ---
+# --- Rechazar interacción (regresa al menú) ---
 async def reject_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_id: int):
     async with async_session() as session:
         res = await session.execute(select(Interaccion).where(Interaccion.id == inter_id))
         inter = res.scalars().first()
         if not inter:
             await query.edit_message_text("❌ Interacción no encontrada.", reply_markup=back_to_menu_keyboard())
+            await show_main_menu(query, context)
             return
 
         if query.from_user.id != inter.owner_id:
@@ -513,12 +476,14 @@ async def reject_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_id
             return
         if inter.status != "pending":
             await query.edit_message_text(f"⚠️ Esta interacción ya está en estado: {inter.status}.", reply_markup=back_to_menu_keyboard())
+            await show_main_menu(query, context)
             return
 
         inter.status = "rejected"
         await session.commit()
 
     await query.edit_message_text("❌ Interacción rechazada.", reply_markup=back_to_menu_keyboard())
+    await show_main_menu(query, context)
     try:
         await context.bot.send_message(
             chat_id=inter.actor_id,
