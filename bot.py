@@ -178,30 +178,46 @@ async def save_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["state"] = None
     await show_main_menu(update, context)
 
-# --- Balance e historial ---
+# --- Balance e historial (corregido) ---
 async def show_balance(update_or_query, context: ContextTypes.DEFAULT_TYPE):
+    if isinstance(update_or_query, Update):
+        user_id = update_or_query.effective_user.id
+        is_update = True
+    else:
+        user_id = update_or_query.from_user.id
+        is_update = False
+
     async with async_session() as session:
-        res = await session.execute(select(User).where(User.telegram_id == update_or_query.effective_user.id))
+        res = await session.execute(select(User).where(User.telegram_id == user_id))
         user = res.scalars().first()
         balance = user.balance if user else 0
         res = await session.execute(
-            select(Movimiento).where(Movimiento.telegram_id == update_or_query.effective_user.id)
-            .order_by(Movimiento.created_at.desc()).limit(10)
+            select(Movimiento)
+            .where(Movimiento.telegram_id == user_id)
+            .order_by(Movimiento.created_at.desc())
+            .limit(10)
         )
         movimientos = res.scalars().all()
+
     texto = f"💰 Tu balance actual: {balance} puntos\n\n📜 Últimos movimientos:\n"
     if movimientos:
         for m in movimientos:
             texto += f"- {m.detalle}: {m.puntos} puntos ({m.created_at})\n"
     else:
         texto += "⚠️ No tienes historial todavía."
-    if isinstance(update_or_query, Update):
-        await update_or_query.message.reply_text(texto, reply_markup=back_to_menu_keyboard())
+
+    reply_markup = back_to_menu_keyboard()
+    if is_update:
+        await update_or_query.message.reply_text(texto, reply_markup=reply_markup)
     else:
-        await update_or_query.edit_message_text(texto, reply_markup=back_to_menu_keyboard())
+        await update_or_query.edit_message_text(texto, reply_markup=reply_markup)
 
 async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_balance(update, context)
+
+# --- Aquí seguirían los handlers de subir/ver seguimientos, videos, interacciones ---
+# (idénticos a los que ya te pasé antes, con la misma estructura)
+# bot.py (Parte 3/3)
 
 # --- Ver seguimientos (del resto) ---
 async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
@@ -583,7 +599,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "menu_principal":
         context.user_data["state"] = None
         await show_main_menu(query, context)
-# bot.py (Parte 3/3)
 
 # --- Handler de texto principal ---
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
