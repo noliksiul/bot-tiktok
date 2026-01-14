@@ -110,7 +110,7 @@ async def show_main_menu(update_or_query, context, message="🏠 Menú principal
     else:
         await update_or_query.edit_message_text(message, reply_markup=reply_markup)
 
-# --- Start (recordatorio siempre y validación @) ---
+# --- Start ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with async_session() as session:
         res = await session.execute(select(User).where(User.telegram_id == update.effective_user.id))
@@ -144,7 +144,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await show_main_menu(update, context)
 
-# --- Guardar usuario TikTok (requiere @) ---
+# --- Guardar usuario TikTok ---
 async def save_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tiktok_user = update.message.text.strip()
     if not tiktok_user.startswith("@"):
@@ -163,7 +163,7 @@ async def save_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["state"] = None
     await show_main_menu(update, context)
 
-# --- Comando para cambiar usuario TikTok (propio) ---
+# --- Cambiar usuario TikTok propio ---
 async def cambiar_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🔄 Envía tu nuevo usuario de TikTok (debe comenzar con @).",
@@ -189,40 +189,33 @@ async def save_new_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["state"] = None
     await show_main_menu(update, context)
 
-# --- Comando admin para cambiar usuario TikTok de otro ---
+# --- Cambiar usuario TikTok de otro (admin) ---
 async def cambiar_tiktok_usuario(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("❌ No tienes permiso para usar este comando.")
         return
-
     args = context.args
     if len(args) != 2:
         await update.message.reply_text("Uso: /cambiar_tiktok_usuario <telegram_id> <@nuevo_usuario>")
         return
-
     try:
         target_id = int(args[0])
     except:
-        await update.message.reply_text("⚠️ <telegram_id> debe ser un número. Ejemplo: /cambiar_tiktok_usuario 123456789 @nuevoalias")
+        await update.message.reply_text("⚠️ <telegram_id> debe ser un número.")
         return
-
     nuevo_alias = args[1].strip()
     if not nuevo_alias.startswith("@"):
-        await update.message.reply_text("⚠️ El usuario TikTok debe comenzar con @. Ejemplo: @rosjimcaro")
+        await update.message.reply_text("⚠️ El usuario TikTok debe comenzar con @.")
         return
-
     async with async_session() as session:
         res = await session.execute(select(User).where(User.telegram_id == target_id))
         user = res.scalars().first()
         if not user:
             await update.message.reply_text("❌ Usuario no encontrado.")
             return
-
         user.tiktok_user = nuevo_alias
         await session.commit()
-
     await update.message.reply_text(f"✅ Usuario TikTok de {target_id} actualizado a: {nuevo_alias}")
-
     try:
         await context.bot.send_message(
             chat_id=target_id,
@@ -475,122 +468,6 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print("Aviso: no se pudo publicar en el canal:", e)
 # bot.py (Parte 3/3)
 
-# --- Reclamo de apoyo seguimiento ---
-async def handle_seguimiento_done(query, context: ContextTypes.DEFAULT_TYPE, seg_id: int):
-    actor_id = query.from_user.id
-    async with async_session() as session:
-        res = await session.execute(select(Seguimiento).where(Seguimiento.id == seg_id))
-        seg = res.scalars().first()
-        if not seg:
-            await query.edit_message_text("❌ Seguimiento no disponible.", reply_markup=back_to_menu_keyboard())
-            await show_main_menu(query, context)
-            return
-        owner_id = seg.telegram_id
-
-        res = await session.execute(
-            select(Interaccion).where(
-                Interaccion.tipo == "seguimiento",
-                Interaccion.item_id == seg_id,
-                Interaccion.actor_id == actor_id
-            )
-        )
-        exists = res.scalars().first()
-        if exists:
-            await query.edit_message_text(f"⚠️ Ya registraste apoyo para este seguimiento (estado: {exists.status}).", reply_markup=back_to_menu_keyboard())
-            await show_main_menu(query, context)
-            return
-
-        inter = Interaccion(
-            tipo="seguimiento",
-            item_id=seg_id,
-            actor_id=actor_id,
-            owner_id=owner_id,
-            status="pending",
-            puntos=PUNTOS_APOYO_SEGUIMIENTO
-        )
-        session.add(inter)
-        await session.commit()
-        inter_id = inter.id
-
-    await query.edit_message_text("🟡 Listo, se notificó al dueño para aprobación.", reply_markup=back_to_menu_keyboard())
-    await show_main_menu(query, context)
-
-    try:
-        async with async_session() as session:
-            res = await session.execute(select(User.tiktok_user).where(User.telegram_id == actor_id))
-            actor_tt = res.scalar()
-        actor_tt = actor_tt if actor_tt else str(actor_id)
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("✅ Aceptar", callback_data=f"approve_interaction_{inter_id}")],
-            [InlineKeyboardButton("❌ Rechazar", callback_data=f"reject_interaction_{inter_id}")],
-            [InlineKeyboardButton("🔙 Regresar al menú principal", callback_data="menu_principal")]
-        ])
-        await context.bot.send_message(
-            chat_id=owner_id,
-            text=f"📈 Solicitud: {actor_tt} indica que ya siguió tu perfil.\nID: {inter_id}\n¿Aceptas otorgar {PUNTOS_APOYO_SEGUIMIENTO} puntos?",
-            reply_markup=keyboard
-        )
-    except Exception as e:
-        print("Aviso: no se pudo notificar al dueño del seguimiento:", e)
-
-# --- Reclamo de apoyo video ---
-async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, vid_id: int):
-    actor_id = query.from_user.id
-    async with async_session() as session:
-        res = await session.execute(select(Video).where(Video.id == vid_id))
-        vid = res.scalars().first()
-        if not vid:
-            await query.edit_message_text("❌ Video no disponible.", reply_markup=back_to_menu_keyboard())
-            await show_main_menu(query, context)
-            return
-        owner_id = vid.telegram_id
-
-        res = await session.execute(
-            select(Interaccion).where(
-                Interaccion.tipo == "video_support",
-                Interaccion.item_id == vid_id,
-                Interaccion.actor_id == actor_id
-            )
-        )
-        exists = res.scalars().first()
-        if exists:
-            await query.edit_message_text(f"⚠️ Ya registraste apoyo para este video (estado: {exists.status}).", reply_markup=back_to_menu_keyboard())
-            await show_main_menu(query, context)
-            return
-
-        inter = Interaccion(
-            tipo="video_support",
-            item_id=vid_id,
-            actor_id=actor_id,
-            owner_id=owner_id,
-            status="pending",
-            puntos=PUNTOS_APOYO_VIDEO
-        )
-        session.add(inter)
-        await session.commit()
-        inter_id = inter.id
-
-    await query.edit_message_text("🟡 Listo, se notificó al dueño para aprobación.", reply_markup=back_to_menu_keyboard())
-    await show_main_menu(query, context)
-
-    try:
-        async with async_session() as session:
-            res = await session.execute(select(User.tiktok_user).where(User.telegram_id == actor_id))
-            actor_tt = res.scalar()
-        actor_tt = actor_tt if actor_tt else str(actor_id)
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("✅ Aceptar", callback_data=f"approve_interaction_{inter_id}")],
-            [InlineKeyboardButton("❌ Rechazar", callback_data=f"reject_interaction_{inter_id}")],
-            [InlineKeyboardButton("🔙 Regresar al menú principal", callback_data="menu_principal")]
-        ])
-        await context.bot.send_message(
-            chat_id=owner_id,
-            text=f"🎥 Solicitud: {actor_tt} apoyó tu video.\nID: {inter_id}\n¿Aceptas otorgar {PUNTOS_APOYO_VIDEO} puntos?",
-            reply_markup=keyboard
-        )
-    except Exception as e:
-        print("Aviso: no se pudo notificar al dueño del video:", e)
-
 # --- Aprobar interacción ---
 async def approve_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_id: int):
     async with async_session() as session:
@@ -621,11 +498,10 @@ async def approve_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_i
     await query.edit_message_text("✅ Interacción aprobada. Puntos otorgados.", reply_markup=back_to_menu_keyboard())
     await show_main_menu(query, context)
     try:
-        keyboard = back_to_menu_keyboard()
         await context.bot.send_message(
             chat_id=inter.actor_id,
             text=f"✅ Tu apoyo en {inter.tipo} fue aprobado. Ganaste {inter.puntos} puntos.",
-            reply_markup=keyboard
+            reply_markup=back_to_menu_keyboard()
         )
     except Exception as e:
         print("Aviso: no se pudo notificar al actor:", e)
@@ -654,11 +530,10 @@ async def reject_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_id
     await query.edit_message_text("❌ Interacción rechazada.", reply_markup=back_to_menu_keyboard())
     await show_main_menu(query, context)
     try:
-        keyboard = back_to_menu_keyboard()
         await context.bot.send_message(
             chat_id=inter.actor_id,
             text=f"❌ Tu apoyo en {inter.tipo} fue rechazado.",
-            reply_markup=keyboard
+            reply_markup=back_to_menu_keyboard()
         )
     except Exception as e:
         print("Aviso: no se pudo notificar al actor:", e)
@@ -821,6 +696,7 @@ def webhook():
     application.update_queue.put(update)
     return "ok"
 
+# --- Endpoint raíz para UptimeRobot ---
 @flask_app.route("/")
 def home():
     return "Bot de Telegram corriendo con Webhook en Render!"
@@ -835,4 +711,3 @@ if __name__ == "__main__":
         url_path=BOT_TOKEN,
         webhook_url=f"https://{RENDER_EXTERNAL_HOSTNAME}/{BOT_TOKEN}"
     )
-    
