@@ -110,7 +110,7 @@ async def show_main_menu(update_or_query, context, message="🏠 Menú principal
     else:
         await update_or_query.edit_message_text(message, reply_markup=reply_markup)
 
-# --- Start ---
+# --- Start (siempre muestra recordatorio y valida TikTok con @) ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with async_session() as session:
         res = await session.execute(select(User).where(User.telegram_id == update.effective_user.id))
@@ -120,35 +120,41 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             session.add(user)
             await session.commit()
 
+        # Recordatorio siempre
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📢 Ir al canal", url=CHANNEL_URL)],
+            [InlineKeyboardButton("👥 Ir al grupo", url=GROUP_URL)],
+            [InlineKeyboardButton("🔙 Regresar al menú principal", callback_data="menu_principal")]
+        ])
         await update.message.reply_text(
-            f"👋 Hola {update.effective_user.first_name}, bienvenido.\nTu balance actual es: {user.balance}",
+            "📢 Recuerda seguir nuestro canal y grupo para no perderte amistades, promociones y códigos para el bot.",
+            reply_markup=keyboard
+        )
+
+        # Balance
+        await update.message.reply_text(
+            f"👋 Hola {update.effective_user.first_name}, tu balance actual es: {user.balance}",
             reply_markup=back_to_menu_keyboard()
         )
 
+        # Pedir TikTok si falta
         if not user.tiktok_user:
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("📢 Ir al canal", url=CHANNEL_URL)],
-                [InlineKeyboardButton("👥 Ir al grupo", url=GROUP_URL)],
-                [InlineKeyboardButton("🔙 Regresar al menú principal", callback_data="menu_principal")]
-            ])
             await update.message.reply_text(
-                "📢 No olvides seguir este canal y este grupo para que no pierdas la oportunidad "
-                "de hacer nuevas amistades, promociones y códigos para el bot.",
-                reply_markup=keyboard
-            )
-            await update.message.reply_text(
-                "Por favor escribe tu usuario de TikTok para registrarte.",
+                "Por favor escribe tu usuario de TikTok (debe comenzar con @).",
                 reply_markup=back_to_menu_keyboard()
             )
             context.user_data["state"] = "tiktok_user"
         else:
             await show_main_menu(update, context)
 
-# --- Guardar usuario TikTok ---
+# --- Guardar usuario TikTok (requiere @) ---
 async def save_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tiktok_user = update.message.text.strip()
-    if not tiktok_user:
-        await update.message.reply_text("⚠️ Envía un usuario válido.", reply_markup=back_to_menu_keyboard())
+    if not tiktok_user.startswith("@"):
+        await update.message.reply_text(
+            "⚠️ Tu usuario de TikTok debe comenzar con @. Ejemplo: @rosjimcaro",
+            reply_markup=back_to_menu_keyboard()
+        )
         return
     async with async_session() as session:
         res = await session.execute(select(User).where(User.telegram_id == update.effective_user.id))
@@ -160,7 +166,33 @@ async def save_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["state"] = None
     await show_main_menu(update, context)
 
-# --- Balance ---
+# --- Comando para cambiar usuario TikTok ---
+async def cambiar_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🔄 Envía tu nuevo usuario de TikTok (debe comenzar con @).",
+        reply_markup=back_to_menu_keyboard()
+    )
+    context.user_data["state"] = "cambiar_tiktok"
+
+async def save_new_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    tiktok_user = update.message.text.strip()
+    if not tiktok_user.startswith("@"):
+        await update.message.reply_text(
+            "⚠️ Tu usuario de TikTok debe comenzar con @. Ejemplo: @rosjimcaro",
+            reply_markup=back_to_menu_keyboard()
+        )
+        return
+    async with async_session() as session:
+        res = await session.execute(select(User).where(User.telegram_id == update.effective_user.id))
+        user = res.scalars().first()
+        if user:
+            user.tiktok_user = tiktok_user
+            await session.commit()
+    await update.message.reply_text(f"✅ Usuario TikTok actualizado: {tiktok_user}", reply_markup=back_to_menu_keyboard())
+    context.user_data["state"] = None
+    await show_main_menu(update, context)
+
+# --- Balance e historial ---
 async def show_balance(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(update_or_query, Update):
         user_id = update_or_query.effective_user.id
@@ -713,6 +745,8 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     state = context.user_data.get("state")
     if state == "tiktok_user":
         await save_tiktok(update, context)
+    elif state == "cambiar_tiktok":
+        await save_new_tiktok(update, context)
     elif state == "seguimiento_link":
         await save_seguimiento(update, context)
     elif state == "video_title":
@@ -737,6 +771,7 @@ application.add_handler(CommandHandler("inicio", start))   # /inicio usa la mism
 application.add_handler(CommandHandler("balance", cmd_balance))
 application.add_handler(CommandHandler("listar_usuarios", listar_usuarios))
 application.add_handler(CommandHandler("dar_puntos", dar_puntos))
+application.add_handler(CommandHandler("cambiar_tiktok", cambiar_tiktok))
 application.add_handler(CallbackQueryHandler(menu_handler))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
@@ -763,4 +798,3 @@ if __name__ == "__main__":
         url_path=BOT_TOKEN,
         webhook_url=f"https://{RENDER_EXTERNAL_HOSTNAME}/{BOT_TOKEN}"
     )
-    
