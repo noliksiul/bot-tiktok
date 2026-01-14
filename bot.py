@@ -769,7 +769,8 @@ flask_app = Flask(__name__)
 @flask_app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-    application.process_update(update)     # ✅ procesa directamente la actualización
+    # Corrección: ejecutar la coroutine en el loop
+    asyncio.get_event_loop().create_task(application.process_update(update))
     return "ok"
 
 # --- Endpoint raíz para UptimeRobot ---
