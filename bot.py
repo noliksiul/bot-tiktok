@@ -378,10 +378,15 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 RENDER_EXTERNAL_HOSTNAME = os.getenv("RENDER_EXTERNAL_HOSTNAME", "localhost")
 
 application = Application.builder().token(BOT_TOKEN).build()
+
+# Comandos principales
 application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("inicio", start))   # ✅ ahora /inicio usa la misma función
 application.add_handler(CommandHandler("balance", cmd_balance))
 application.add_handler(CommandHandler("listar_usuarios", listar_usuarios))
 application.add_handler(CommandHandler("dar_puntos", dar_puntos))
+
+# Handlers de menú y texto
 application.add_handler(CallbackQueryHandler(menu_handler))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
