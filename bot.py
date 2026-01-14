@@ -769,9 +769,11 @@ flask_app = Flask(__name__)
 @flask_app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-    application.update_queue.put(update)
+    # Corrección: procesar directamente la actualización
+    application.process_update(update)
     return "ok"
 
+# --- Endpoint raíz para UptimeRobot ---
 @flask_app.route("/")
 def home():
     return "Bot de Telegram corriendo con Webhook en Render!"
@@ -780,7 +782,6 @@ def home():
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.run_until_complete(init_db())
-    # Arranca Flask en lugar de run_webhook
     port = int(os.environ.get("PORT", 10000))
     flask_app.run(host="0.0.0.0", port=port)
 
