@@ -769,8 +769,7 @@ flask_app = Flask(__name__)
 @flask_app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-    # Corrección: procesar directamente la actualización
-    application.process_update(update)
+    application.process_update(update)     # ✅ procesa directamente la actualización
     return "ok"
 
 # --- Endpoint raíz para UptimeRobot ---
