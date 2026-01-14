@@ -1,4 +1,3 @@
-render funcional
 # bot.py (Parte 1/3)
 
 import os
