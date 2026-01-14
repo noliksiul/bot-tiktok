@@ -1,3 +1,4 @@
+render funcional
 # bot.py (Parte 1/3)
 
 import os
@@ -10,7 +11,7 @@ from telegram.ext import (
 )
 from sqlalchemy import (
     Column, Integer, BigInteger, Text, TIMESTAMP, func,
-    UniqueConstraint, select
+    UniqueConstraint, select, text
 )
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
@@ -77,14 +78,52 @@ async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+        # Asegurar columnas críticas
+        await conn.execute(text("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name='users' AND column_name='tiktok_user'
+                ) THEN
+                    ALTER TABLE users ADD COLUMN tiktok_user TEXT;
+                END IF;
+            END
+            $$;
+        """))
+
+        await conn.execute(text("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name='users' AND column_name='balance'
+                ) THEN
+                    ALTER TABLE users ADD COLUMN balance INTEGER DEFAULT 10;
+                END IF;
+            END
+            $$;
+        """))
+
+        await conn.execute(text("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name='interacciones' AND column_name='status'
+                ) THEN
+                    ALTER TABLE interacciones ADD COLUMN status TEXT DEFAULT 'pending';
+                END IF;
+            END
+            $$;
+        """))
+
 # --- Config puntos ---
 PUNTOS_APOYO_SEGUIMIENTO = 2
 PUNTOS_APOYO_VIDEO = 3
 
-# --- Canal y grupo ---
+# --- Canal de publicación ---
 CHANNEL_ID = -1003468913370
-GROUP_URL = "https://t.me/+9sy0_CwwjnxlOTJh"
-CHANNEL_URL = "https://t.me/apoyotiktok002"
 
 # --- Configuración administrador ---
 ADMIN_ID = 890166032  # tu Telegram ID real
@@ -120,38 +159,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             session.add(user)
             await session.commit()
 
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📢 Ir al canal", url=CHANNEL_URL)],
-            [InlineKeyboardButton("👥 Ir al grupo", url=GROUP_URL)],
-            [InlineKeyboardButton("🔙 Regresar al menú principal", callback_data="menu_principal")]
-        ])
         await update.message.reply_text(
-            "📢 Recuerda seguir nuestro canal y grupo para no perderte amistades, promociones y códigos para el bot.",
-            reply_markup=keyboard
-        )
-
-        await update.message.reply_text(
-            f"👋 Hola {update.effective_user.first_name}, tu balance actual es: {user.balance}",
+            f"👋 Hola {update.effective_user.first_name}, bienvenido.\nTu balance actual es: {user.balance}",
             reply_markup=back_to_menu_keyboard()
         )
-
-        if not user.tiktok_user:
-            await update.message.reply_text(
-                "Por favor escribe tu usuario de TikTok (debe comenzar con @).",
-                reply_markup=back_to_menu_keyboard()
-            )
-            context.user_data["state"] = "tiktok_user"
-        else:
-            await show_main_menu(update, context)
+        await update.message.reply_text(
+            "Por favor escribe tu usuario de TikTok para registrarte.",
+            reply_markup=back_to_menu_keyboard()
+        )
+        context.user_data["state"] = "tiktok_user"
 
 # --- Guardar usuario TikTok ---
 async def save_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tiktok_user = update.message.text.strip()
-    if not tiktok_user.startswith("@"):
-        await update.message.reply_text(
-            "⚠️ Tu usuario de TikTok debe comenzar con @. Ejemplo: @rosjimcaro",
-            reply_markup=back_to_menu_keyboard()
-        )
+    if not tiktok_user:
+        await update.message.reply_text("⚠️ Envía un usuario válido.", reply_markup=back_to_menu_keyboard())
         return
     async with async_session() as session:
         res = await session.execute(select(User).where(User.telegram_id == update.effective_user.id))
@@ -163,69 +185,7 @@ async def save_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["state"] = None
     await show_main_menu(update, context)
 
-# --- Cambiar usuario TikTok propio ---
-async def cambiar_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🔄 Envía tu nuevo usuario de TikTok (debe comenzar con @).",
-        reply_markup=back_to_menu_keyboard()
-    )
-    context.user_data["state"] = "cambiar_tiktok"
-
-async def save_new_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    tiktok_user = update.message.text.strip()
-    if not tiktok_user.startswith("@"):
-        await update.message.reply_text(
-            "⚠️ Tu usuario de TikTok debe comenzar con @. Ejemplo: @rosjimcaro",
-            reply_markup=back_to_menu_keyboard()
-        )
-        return
-    async with async_session() as session:
-        res = await session.execute(select(User).where(User.telegram_id == update.effective_user.id))
-        user = res.scalars().first()
-        if user:
-            user.tiktok_user = tiktok_user
-            await session.commit()
-    await update.message.reply_text(f"✅ Usuario TikTok actualizado: {tiktok_user}", reply_markup=back_to_menu_keyboard())
-    context.user_data["state"] = None
-    await show_main_menu(update, context)
-
-# --- Cambiar usuario TikTok de otro (admin) ---
-async def cambiar_tiktok_usuario(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("❌ No tienes permiso para usar este comando.")
-        return
-    args = context.args
-    if len(args) != 2:
-        await update.message.reply_text("Uso: /cambiar_tiktok_usuario <telegram_id> <@nuevo_usuario>")
-        return
-    try:
-        target_id = int(args[0])
-    except:
-        await update.message.reply_text("⚠️ <telegram_id> debe ser un número.")
-        return
-    nuevo_alias = args[1].strip()
-    if not nuevo_alias.startswith("@"):
-        await update.message.reply_text("⚠️ El usuario TikTok debe comenzar con @.")
-        return
-    async with async_session() as session:
-        res = await session.execute(select(User).where(User.telegram_id == target_id))
-        user = res.scalars().first()
-        if not user:
-            await update.message.reply_text("❌ Usuario no encontrado.")
-            return
-        user.tiktok_user = nuevo_alias
-        await session.commit()
-    await update.message.reply_text(f"✅ Usuario TikTok de {target_id} actualizado a: {nuevo_alias}")
-    try:
-        await context.bot.send_message(
-            chat_id=target_id,
-            text=f"🔄 Tu usuario de TikTok fue actualizado por el administrador a: {nuevo_alias}",
-            reply_markup=back_to_menu_keyboard()
-        )
-    except Exception as e:
-        print("Aviso: no se pudo notificar al usuario afectado:", e)
-
-# --- Balance e historial ---
+# --- Balance ---
 async def show_balance(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(update_or_query, Update):
         user_id = update_or_query.effective_user.id
@@ -262,7 +222,7 @@ async def show_balance(update_or_query, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_balance(update, context)
 
-# --- Listar usuarios (solo admin) ---
+# --- Comando listar usuarios (solo admin) ---
 async def listar_usuarios(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("❌ No tienes permiso para usar este comando.")
@@ -381,7 +341,7 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# --- Subir seguimiento ---
+# --- Subir seguimiento (descuenta puntos y publica en canal) ---
 async def save_seguimiento(update: Update, context: ContextTypes.DEFAULT_TYPE):
     link = update.message.text.strip()
     user_id = update.effective_user.id
@@ -407,16 +367,17 @@ async def save_seguimiento(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ Tu seguimiento se subió con éxito.", reply_markup=back_to_menu_keyboard())
     context.user_data["state"] = None
 
+    # Publicar en canal
     try:
         alias = user.tiktok_user if user and user.tiktok_user else str(user_id)
         await context.bot.send_message(
             chat_id=CHANNEL_ID,
-            text=f"📢 Nuevo seguimiento publicado por {alias}\n🔗 {link}\n\n👉 No olvides seguir nuestro canal de noticias, cupones y promociones."
+            text=f"📢 Nuevo seguimiento publicado por @{alias}\n🔗 {link}\n\n👉 No olvides seguir nuestro canal de noticias, cupones y promociones."
         )
     except Exception as e:
         print("Aviso: no se pudo publicar en el canal:", e)
 
-# --- Flujo subir video ---
+# --- Flujo subir video: título, descripción, link, publica en canal ---
 async def save_video_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["video_title"] = update.message.text.strip()
     context.user_data["state"] = "video_desc"
@@ -458,15 +419,134 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ Tu video se subió con éxito.", reply_markup=back_to_menu_keyboard())
     context.user_data["state"] = None
 
+    # Publicar en canal
     try:
         alias = user.tiktok_user if user and user.tiktok_user else str(user_id)
         await context.bot.send_message(
             chat_id=CHANNEL_ID,
-            text=f"🎥 Nuevo video publicado por {alias}\n📌 {context.user_data.get('video_title')}\n📝 {context.user_data.get('video_desc')}\n🔗 {link}\n\n👉 No olvides seguir nuestro canal de noticias, cupones y promociones."
+            text=f"🎥 Nuevo video publicado por @{alias}\n📌 {context.user_data.get('video_title')}\n📝 {context.user_data.get('video_desc')}\n🔗 {link}\n\n👉 No olvides seguir nuestro canal de noticias, cupones y promociones."
         )
     except Exception as e:
         print("Aviso: no se pudo publicar en el canal:", e)
 # bot.py (Parte 3/3)
+
+# --- Reclamo de apoyo seguimiento ---
+async def handle_seguimiento_done(query, context: ContextTypes.DEFAULT_TYPE, seg_id: int):
+    actor_id = query.from_user.id
+    async with async_session() as session:
+        res = await session.execute(select(Seguimiento).where(Seguimiento.id == seg_id))
+        seg = res.scalars().first()
+        if not seg:
+            await query.edit_message_text("❌ Seguimiento no disponible.", reply_markup=back_to_menu_keyboard())
+            await show_main_menu(query, context)
+            return
+        owner_id = seg.telegram_id
+
+        res = await session.execute(
+            select(Interaccion).where(
+                Interaccion.tipo == "seguimiento",
+                Interaccion.item_id == seg_id,
+                Interaccion.actor_id == actor_id
+            )
+        )
+        exists = res.scalars().first()
+        if exists:
+            await query.edit_message_text(f"⚠️ Ya registraste apoyo para este seguimiento (estado: {exists.status}).", reply_markup=back_to_menu_keyboard())
+            await show_main_menu(query, context)
+            return
+
+        inter = Interaccion(
+            tipo="seguimiento",
+            item_id=seg_id,
+            actor_id=actor_id,
+            owner_id=owner_id,
+            status="pending",
+            puntos=PUNTOS_APOYO_SEGUIMIENTO
+        )
+        session.add(inter)
+        await session.commit()
+        inter_id = inter.id
+
+    await query.edit_message_text("🟡 Listo, se notificó al dueño para aprobación.", reply_markup=back_to_menu_keyboard())
+    await show_main_menu(query, context)
+
+    # Notificar al dueño
+    try:
+        async with async_session() as session:
+            res = await session.execute(select(User.tiktok_user).where(User.telegram_id == actor_id))
+            actor_tt = res.scalar()
+        actor_tt = actor_tt if actor_tt else str(actor_id)
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Aceptar", callback_data=f"approve_interaction_{inter_id}")],
+            [InlineKeyboardButton("❌ Rechazar", callback_data=f"reject_interaction_{inter_id}")],
+            [InlineKeyboardButton("🔙 Regresar al menú principal", callback_data="menu_principal")]
+        ])
+        await context.bot.send_message(
+            chat_id=owner_id,
+            text=f"📈 Solicitud: @{actor_tt} indica que ya siguió tu perfil.\nID: {inter_id}\n¿Aceptas otorgar {PUNTOS_APOYO_SEGUIMIENTO} puntos?",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        print("Aviso: no se pudo notificar al dueño del seguimiento:", e)
+
+# --- Reclamo de apoyo video ---
+async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, vid_id: int):
+    actor_id = query.from_user.id
+    async with async_session() as session:
+        res = await session.execute(select(Video).where(Video.id == vid_id))
+        vid = res.scalars().first()
+        if not vid:
+            await query.edit_message_text("❌ Video no disponible.", reply_markup=back_to_menu_keyboard())
+            await show_main_menu(query, context)
+            return
+        owner_id = vid.telegram_id
+
+        res = await session.execute(
+            select(Interaccion).where(
+                Interaccion.tipo == "video_support",
+                Interaccion.item_id == vid_id,
+                Interaccion.actor_id == actor_id
+            )
+        )
+        exists = res.scalars().first()
+        if exists:
+            await query.edit_message_text(f"⚠️ Ya registraste apoyo para este video (estado: {exists.status}).", reply_markup=back_to_menu_keyboard())
+            await show_main_menu(query, context)
+            return
+
+        inter = Interaccion(
+            tipo="video_support",
+            item_id=vid_id,
+            actor_id=actor_id,
+            owner_id=owner_id,
+            status="pending",
+            puntos=PUNTOS_APOYO_VIDEO
+        )
+        session.add(inter)
+        await session.commit()
+        inter_id = inter.id
+
+    await query.edit_message_text("🟡 Listo, se notificó al dueño para aprobación.", reply_markup=back_to_menu_keyboard())
+    await show_main_menu(query, context)
+
+    # Notificar al dueño
+    try:
+        async with async_session() as session:
+            res = await session.execute(select(User.tiktok_user).where(User.telegram_id == actor_id))
+            actor_tt = res.scalar()
+        actor_tt = actor_tt if actor_tt else str(actor_id)
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Aceptar", callback_data=f"approve_interaction_{inter_id}")],
+            [InlineKeyboardButton("❌ Rechazar", callback_data=f"reject_interaction_{inter_id}")],
+            [InlineKeyboardButton("🔙 Regresar al menú principal", callback_data="menu_principal")]
+        ])
+        await context.bot.send_message(
+            chat_id=owner_id,
+            text=f"🎥 Solicitud: @{actor_tt} apoyó tu video.\nID: {inter_id}\n¿Aceptas otorgar {PUNTOS_APOYO_VIDEO} puntos?",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        print("Aviso: no se pudo notificar al dueño del video:", e)
 
 # --- Aprobar interacción ---
 async def approve_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_id: int):
@@ -498,10 +578,11 @@ async def approve_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_i
     await query.edit_message_text("✅ Interacción aprobada. Puntos otorgados.", reply_markup=back_to_menu_keyboard())
     await show_main_menu(query, context)
     try:
+        keyboard = back_to_menu_keyboard()
         await context.bot.send_message(
             chat_id=inter.actor_id,
             text=f"✅ Tu apoyo en {inter.tipo} fue aprobado. Ganaste {inter.puntos} puntos.",
-            reply_markup=back_to_menu_keyboard()
+            reply_markup=keyboard
         )
     except Exception as e:
         print("Aviso: no se pudo notificar al actor:", e)
@@ -530,15 +611,16 @@ async def reject_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_id
     await query.edit_message_text("❌ Interacción rechazada.", reply_markup=back_to_menu_keyboard())
     await show_main_menu(query, context)
     try:
+        keyboard = back_to_menu_keyboard()
         await context.bot.send_message(
             chat_id=inter.actor_id,
             text=f"❌ Tu apoyo en {inter.tipo} fue rechazado.",
-            reply_markup=back_to_menu_keyboard()
+            reply_markup=keyboard
         )
     except Exception as e:
         print("Aviso: no se pudo notificar al actor:", e)
 
-# --- Dar puntos (admin) ---
+# --- Comando exclusivo admin: /dar_puntos <usuario_id> <cantidad> ---
 async def dar_puntos(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("❌ No tienes permiso para usar este comando.")
@@ -656,8 +738,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     state = context.user_data.get("state")
     if state == "tiktok_user":
         await save_tiktok(update, context)
-    elif state == "cambiar_tiktok":
-        await save_new_tiktok(update, context)
     elif state == "seguimiento_link":
         await save_seguimiento(update, context)
     elif state == "video_title":
@@ -678,12 +758,9 @@ RENDER_EXTERNAL_HOSTNAME = os.getenv("RENDER_EXTERNAL_HOSTNAME", "localhost")
 
 application = Application.builder().token(BOT_TOKEN).build()
 application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("inicio", start))
 application.add_handler(CommandHandler("balance", cmd_balance))
 application.add_handler(CommandHandler("listar_usuarios", listar_usuarios))
 application.add_handler(CommandHandler("dar_puntos", dar_puntos))
-application.add_handler(CommandHandler("cambiar_tiktok", cambiar_tiktok))
-application.add_handler(CommandHandler("cambiar_tiktok_usuario", cambiar_tiktok_usuario))
 application.add_handler(CallbackQueryHandler(menu_handler))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
@@ -696,7 +773,6 @@ def webhook():
     application.update_queue.put(update)
     return "ok"
 
-# --- Endpoint raíz para UptimeRobot ---
 @flask_app.route("/")
 def home():
     return "Bot de Telegram corriendo con Webhook en Render!"
@@ -705,9 +781,7 @@ def home():
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.run_until_complete(init_db())
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.environ.get("PORT", 10000)),
-        url_path=BOT_TOKEN,
-        webhook_url=f"https://{RENDER_EXTERNAL_HOSTNAME}/{BOT_TOKEN}"
-    )
+    # Arranca Flask en lugar de run_webhook
+    port = int(os.environ.get("PORT", 10000))
+    flask_app.run(host="0.0.0.0", port=port)
+
