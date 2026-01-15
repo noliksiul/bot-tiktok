@@ -706,4 +706,9 @@ def webhook():
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.run_until_complete(init_db())
-    flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.environ.get("PORT", 10000)),
+        url_path=BOT_TOKEN,
+        webhook_url=f"https://{RENDER_EXTERNAL_HOSTNAME}/{BOT_TOKEN}"
+    )
