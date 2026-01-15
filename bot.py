@@ -687,14 +687,23 @@ application.add_handler(CommandHandler("cambiar_tiktok_usuario", cambiar_tiktok_
 application.add_handler(CallbackQueryHandler(menu_handler))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
+from flask import Flask, request
+
+flask_app = Flask(__name__)
+
+# --- Endpoint raíz para UptimeRobot ---
+@flask_app.route("/")
+def home():
+    return "Bot activo y saludable!", 200
+
+# --- Webhook de Telegram ---
+@flask_app.route(f"/{BOT_TOKEN}", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    application.update_queue.put(update)
+    return "ok", 200
 # --- Run ---
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.run_until_complete(init_db())
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.environ.get("PORT", 10000)),
-        url_path=BOT_TOKEN,
-        webhook_url=f"https://{RENDER_EXTERNAL_HOSTNAME}/{BOT_TOKEN}",
-        
-    )
+    flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
