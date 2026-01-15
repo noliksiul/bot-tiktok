@@ -687,20 +687,6 @@ application.add_handler(CommandHandler("cambiar_tiktok_usuario", cambiar_tiktok_
 application.add_handler(CallbackQueryHandler(menu_handler))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
-# --- Flask Webhook ---
-flask_app = Flask(__name__)
-
-@flask_app.route(f"/{BOT_TOKEN}", methods=["POST"])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
-    application.update_queue.put(update)
-    return "ok"
-
-# --- Endpoint raíz para UptimeRobot ---
-@flask_app.route("/")
-def home():
-    return "Bot de Telegram corriendo con Webhook en Render!"
-
 # --- Run ---
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
@@ -710,5 +696,5 @@ if __name__ == "__main__":
         port=int(os.environ.get("PORT", 10000)),
         url_path=BOT_TOKEN,
         webhook_url=f"https://{RENDER_EXTERNAL_HOSTNAME}/{BOT_TOKEN}",
-        health_check_path="/"   # 👈 esto crea el endpoint raíz
+        
     )
