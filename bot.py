@@ -681,6 +681,77 @@ async def handle_seguimiento_done(query, context: ContextTypes.DEFAULT_TYPE, seg
             callback_no=f"reject_interaction_{inter.id}"
         )
     )
+# --- Aprobar interacción ---
+async def approve_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_id: int):
+    async with async_session() as session:
+        res = await session.execute(select(Interaccion).where(Interaccion.id == inter_id))
+        inter = res.scalars().first()
+        if not inter:
+            await query.edit_message_text("❌ Interacción no encontrada.", reply_markup=back_to_menu_keyboard())
+            await show_main_menu(query, context)
+            return
+
+        if query.from_user.id != inter.owner_id:
+            await query.answer("No puedes aprobar esta interacción.", show_alert=True)
+            return
+        if inter.status != "pending":
+            await query.edit_message_text(f"⚠️ Esta interacción ya está en estado: {inter.status}.", reply_markup=back_to_menu_keyboard())
+            await show_main_menu(query, context)
+            return
+
+        inter.status = "accepted"
+        res_actor = await session.execute(select(User).where(User.telegram_id == inter.actor_id))
+        actor = res_actor.scalars().first()
+        if actor:
+            actor.balance = (actor.balance or 0) + (inter.puntos or 0)
+            mov = Movimiento(telegram_id=inter.actor_id, detalle=f"Apoyo {inter.tipo} aprobado", puntos=inter.puntos)
+            session.add(mov)
+            if actor.referrer_id:
+                res_ref = await session.execute(select(User).where(User.telegram_id == actor.referrer_id))
+                referrer = res_ref.scalars().first()
+                if referrer:
+                    referrer.balance = (referrer.balance or 0) + PUNTOS_REFERIDO_BONUS
+                    session.add(Movimiento(
+                        telegram_id=referrer.telegram_id,
+                        detalle="Bonus por referido",
+                        puntos=PUNTOS_REFERIDO_BONUS
+                    ))
+                    await notify_user(
+                        context,
+                        chat_id=referrer.telegram_id,
+                        text=f"💸 Recibiste {PUNTOS_REFERIDO_BONUS} puntos por la interacción aceptada de tu referido {actor.telegram_id}."
+                    )
+        await session.commit()
+
+    await query.edit_message_text("✅ Interacción aprobada. Puntos otorgados.", reply_markup=back_to_menu_keyboard())
+    await show_main_menu(query, context)
+    await notify_user(context, chat_id=inter.actor_id, text=f"✅ Tu apoyo en {inter.tipo} fue aprobado. Ganaste {inter.puntos} puntos.", reply_markup=back_to_menu_keyboard())
+
+# --- Rechazar interacción ---
+async def reject_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_id: int):
+    async with async_session() as session:
+        res = await session.execute(select(Interaccion).where(Interaccion.id == inter_id))
+        inter = res.scalars().first()
+        if not inter:
+            await query.edit_message_text("❌ Interacción no encontrada.", reply_markup=back_to_menu_keyboard())
+            await show_main_menu(query, context)
+            return
+
+        if query.from_user.id != inter.owner_id:
+            await query.answer("No puedes rechazar esta interacción.", show_alert=True)
+            return
+        if inter.status != "pending":
+            await query.edit_message_text(f"⚠️ Esta interacción ya está en estado: {inter.status}.", reply_markup=back_to_menu_keyboard())
+            await show_main_menu(query, context)
+            return
+
+        inter.status = "rejected"
+        await session.commit()
+
+    await query.edit_message_text("❌ Interacción rechazada.", reply_markup=back_to_menu_keyboard())
+    await show_main_menu(query, context)
+    await notify_user(context, chat_id=inter.actor_id, text=f"❌ Tu apoyo en {inter.tipo} fue rechazado.", reply_markup=back_to_menu_keyboard())
+
 
 # --- Registrar interacción de video (notifica con TikTok del actor) ---
 async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, vid_id: int):
