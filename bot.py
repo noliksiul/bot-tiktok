@@ -538,7 +538,7 @@ async def save_seguimiento(update: Update, context: ContextTypes.DEFAULT_TYPE):
         seg = Seguimiento(telegram_id=user_id, link=link)
         session.add(seg)
         user.balance = (user.balance or 0) - 3
-        mov = Movimiento(telegram_id=user
+        mov = Movimiento(telegram_id=user)
 # bot.py (Parte 3/5)
 
 # --- Ver seguimientos (no propios, solo una vez) ---
