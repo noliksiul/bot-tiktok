@@ -958,9 +958,8 @@ for u in usuarios:
         texto += f"👑 Admin dueño: ID {u.telegram_id}, TikTok: {u.tiktok_user}, Balance: {u.balance}\n"
     elif await is_subadmin(u.telegram_id):
         texto += f"🛡️ Subadmin: ID {u.telegram_id}, TikTok: {u.tiktok_user}, Balance: {u.balance}\n"
-        else:
+        else:   # 👈 este else está mal indentado
         texto += f"- Usuario: ID {u.telegram_id}, TikTok: {u.tiktok_user}, Balance: {u.balance}\n"
-
 # --- Gestión de SubAdmins ---
 async def add_subadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
