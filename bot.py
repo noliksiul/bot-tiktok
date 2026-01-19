@@ -1467,7 +1467,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await save_new_tiktok(update, context)
     elif state == "seguimiento_link":
         await save_seguimiento(update, context)
-     elif state == "live_link":   # 👈 AÑADE ESTE BLOQUE AQUÍ
+    elif state == "live_link":   # 👈 AÑADE ESTE BLOQUE AQUÍ
         await save_live_link(update, context)    
     elif state == "video_title":
         await save_video_title(update, context)
