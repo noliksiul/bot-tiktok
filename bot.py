@@ -952,14 +952,16 @@ async def listar_usuarios(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ No hay usuarios registrados.")
         return
 
-    texto = "👥 Usuarios registrados:\n"
+texto = "👥 Usuarios registrados:\n"
 for u in usuarios:
     if u.telegram_id == ADMIN_ID:
         texto += f"👑 Admin dueño: ID {u.telegram_id}, TikTok: {u.tiktok_user}, Balance: {u.balance}\n"
     elif await is_subadmin(u.telegram_id):
         texto += f"🛡️ Subadmin: ID {u.telegram_id}, TikTok: {u.tiktok_user}, Balance: {u.balance}\n"
-        else:   # 👈 este else está mal indentado
+    else:
         texto += f"- Usuario: ID {u.telegram_id}, TikTok: {u.tiktok_user}, Balance: {u.balance}\n"
+
+
 # --- Gestión de SubAdmins ---
 async def add_subadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
