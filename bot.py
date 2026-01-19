@@ -482,43 +482,48 @@ async def save_seguimiento(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print("Aviso: no se pudo publicar en el canal:", e)
 # --- Subir live ---
-async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    link = update.message.text.strip()
-    user_id = update.effective_user.id
+async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, link: str):
     async with async_session() as session:
         res = await session.execute(select(User).where(User.telegram_id == user_id))
-        user = res.scalars().first()
-        if not user:
-            await update.message.reply_text("❌ No estás registrado. Usa /start primero.", reply_markup=back_to_menu_keyboard())
-            context.user_data["state"] = None
-            return
-        if (user.balance or 0) < 3:
-            await update.message.reply_text("⚠️ No tienes suficientes puntos para subir live (mínimo 3).", reply_markup=back_to_menu_keyboard())
-            context.user_data["state"] = None
+        u = res.scalars().first()
+        if not u:
+            await update.message.reply_text("⚠️ No estás registrado en el sistema.")
             return
 
-        live = Live(telegram_id=user_id, link=link)
+        # Guardar el live
+        live = Live(
+            telegram_id=user_id,
+            link=link,
+            alias=u.tiktok_user,
+            puntos=0
+        )
         session.add(live)
-        user.balance = (user.balance or 0) - 3
-        mov = Movimiento(telegram_id=user_id, detalle="Subir live", puntos=-3)
-        session.add(mov)
         await session.commit()
 
-    await update.message.reply_text(
-        "✅ Tu live se subió con éxito.\n\n"
-        "⚠️ Recuerda que los apoyos deben aprobarse en 2 días o se auto-aprueban.",
-        reply_markup=back_to_menu_keyboard()
+    # ✅ Publicar en el canal
+    await publish_to_channel(
+        context,
+        f"🔴 Nuevo live publicado por {u.tiktok_user}\n\n{link}\n\n¡Apóyalo para ganar puntos!"
     )
-    context.user_data["state"] = None
 
-    try:
-        alias = user.tiktok_user if user and user.tiktok_user else str(user_id)
-        await context.bot.send_message(
-            chat_id=CHANNEL_ID,
-            text=f"📢 Nuevo live publicado por {alias}\n🔗 {link}"
-        )
-    except Exception as e:
-        print("Aviso: no se pudo publicar en el canal:", e)
+    # ✅ Notificar a todos los usuarios (excepto el que subió)
+    async with async_session() as session:
+        res = await session.execute(select(User.telegram_id).where(User.telegram_id != user_id))
+        todos = res.scalars().all()
+        for uid in todos:
+            try:
+                await context.bot.send_message(
+                    chat_id=uid,
+                    text=(
+                        f"📢 Hey! El usuario {u.tiktok_user} está en LIVE 🔴\n\n"
+                        f"👉 Solo por entrar puedes ganar puntos.\n"
+                        f"💖 Si le das 'Quiéreme' podrás ganar puntos extra (pendiente de validación)."
+                    )
+                )
+            except Exception as e:
+                print(f"No se pudo notificar a {uid}: {e}")
+
+    await update.message.reply_text("✅ Live registrado y notificado a la comunidad.")
 # --- Subir video: flujo por pasos ---
 async def save_video_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["video_title"] = update.message.text.strip()
@@ -966,28 +971,39 @@ async def listar_usuarios(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(texto)
 
 # --- Gestión de SubAdmins ---
+# --- Gestión de SubAdmins ---
 async def add_subadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("❌ No tienes permiso para usar este comando.")
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("❌ Solo el dueño puede agregar subadmins.")
         return
+
     args = context.args
     if len(args) != 1:
         await update.message.reply_text("Uso: /add_subadmin <telegram_id>")
         return
+
     try:
         sub_id = int(args[0])
     except:
-        await update.message.reply_text("⚠️ <telegram_id> debe ser un número.")
+        await update.message.reply_text("⚠️ El ID debe ser un número.")
         return
+
     async with async_session() as session:
-        res = await session.execute(select(SubAdmin).where(SubAdmin.telegram_id == sub_id))
-        exists = res.scalars().first()
-        if exists:
-            await update.message.reply_text("⚠️ Ya es subadmin.")
-            return
-        session.add(SubAdmin(telegram_id=sub_id))
+        subadmin = SubAdmin(telegram_id=sub_id)
+        session.add(subadmin)
         await session.commit()
+
     await update.message.reply_text(f"✅ Subadmin agregado: {sub_id}")
+
+    # ✅ Notificación al subadmin agregado
+    try:
+        await context.bot.send_message(
+            chat_id=sub_id,
+            text="🛡️ Has sido agregado como subadmin.\n\nAhora puedes proponer acciones como dar puntos o crear cupones."
+        )
+    except Exception as e:
+        print(f"No se pudo notificar al subadmin {sub_id}: {e}")
 
 async def remove_subadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
@@ -1223,15 +1239,15 @@ async def cobrar_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"✅ Cupón {code} cobrado. Recibiste {reward} puntos.")
 
 # --- Acciones administrativas propuestas por subadmin ---
+# --- Acciones administrativas propuestas por subadmin ---
 async def dar_puntos(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    if not await is_subadmin(user_id) and user_id != ADMIN_ID:
-        await update.message.reply_text("❌ No tienes permiso para proponer esta acción.")
-        return
     args = context.args
+
     if len(args) != 2:
         await update.message.reply_text("Uso: /dar_puntos <telegram_id> <cantidad>")
         return
+
     try:
         target_id = int(args[0])
         cantidad = int(args[1])
@@ -1239,25 +1255,39 @@ async def dar_puntos(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ Ambos parámetros deben ser números.")
         return
 
-    expires = datetime.utcnow() + timedelta(days=AUTO_APPROVE_AFTER_DAYS)
-    async with async_session() as session:
-        action = AdminAction(
-            tipo="dar_puntos",
-            target_id=target_id,
-            cantidad=cantidad,
-            subadmin_id=user_id,
-            status="pending",
-            expires_at=expires,
-            note=f"Propuesto por {user_id}"
-        )
-        session.add(action)
-        await session.commit()
+    # ✅ Si el dueño ejecuta, se aplica directo sin aprobación
+    if user_id == ADMIN_ID:
+        async with async_session() as session:
+            res_u = await session.execute(select(User).where(User.telegram_id == target_id))
+            u = res_u.scalars().first()
+            if u:
+                u.balance = (u.balance or 0) + cantidad
+                session.add(Movimiento(
+                    telegram_id=u.telegram_id,
+                    detalle=f"Puntos otorgados por admin ({cantidad})",
+                    puntos=cantidad
+                ))
+                await session.commit()
+        await update.message.reply_text(f"✅ Puntos otorgados directamente: {cantidad} a {target_id}.")
+        return
 
-    await update.message.reply_text(f"🟡 Acción propuesta: dar {cantidad} puntos a {target_id}. Queda pendiente de aprobación del admin.")
-    await notify_admin(
-        context,
-        text=f"🟡 Acción pendiente: dar {cantidad} puntos a {target_id} (propuesta por {user_id}).",
-    )
+    # ✅ Si es subadmin, se crea acción pendiente de aprobación
+    if await is_subadmin(user_id):
+        async with async_session() as session:
+            action = AdminAction(
+                tipo="dar_puntos",
+                detalle=f"Dar {cantidad} puntos a {target_id}",
+                propuesto_por=user_id,
+                target_id=target_id,
+                puntos=cantidad
+            )
+            session.add(action)
+            await session.commit()
+        await update.message.reply_text(
+            f"🟡 Acción propuesta: dar {cantidad} puntos a {target_id}. Queda pendiente de aprobación del admin."
+        )
+    else:
+        await update.message.reply_text("❌ No tienes permiso para usar este comando.")
 
 async def cambiar_tiktok_usuario(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -1354,7 +1384,6 @@ async def reject_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action_
     await query.edit_message_text("❌ Acción administrativa rechazada.", reply_markup=back_to_menu_keyboard())
 # bot.py (Parte 5/5)
 
-# --- Callback principal (menú y acciones) ---
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     try:
@@ -1370,6 +1399,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=back_to_menu_keyboard()
         )
         context.user_data["state"] = "seguimiento_link"
+# --- Callback principal (menú y acciones) ---
 
     elif data == "subir_video":
         keyboard = [
@@ -1380,8 +1410,11 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🤝 Colaboración", callback_data="video_tipo_colaboracion")],
             [InlineKeyboardButton("🔙 Regresar al menú principal", callback_data="menu_principal")]
         ]
-        await query.edit_message_text("📌 ¿Qué tipo de video quieres subir?", reply_markup=InlineKeyboardMarkup(keyboard))
-        context.user_data["state"] = None
+        await query.edit_message_text(
+            "📌 ¿Qué tipo de video quieres subir?",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        context.user_data["state"] = None   # ✅ aquí solo debe ser None
 
     elif data.startswith("video_tipo_"):
         tipos = {
@@ -1392,11 +1425,12 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "video_tipo_colaboracion": "Colaboración"
         }
         context.user_data["video_tipo"] = tipos.get(data, "Normal")
-        context.user_data["state"] = "video_title"
+        context.user_data["state"] = "video_title"   # ✅ aquí sí se activa el título
         await query.edit_message_text(
             f"🎬 Tipo seleccionado: {context.user_data['video_tipo']}\n\nAhora envíame el título de tu video:",
             reply_markup=back_to_menu_keyboard()
         )
+
 
     elif data == "ver_seguimiento":
         await show_seguimientos(query, context)
@@ -1486,28 +1520,38 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=back_to_menu_keyboard()
         )
 
+
 # --- Comando: lista de comandos ---
 async def comandos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     texto = (
         "📋 Lista de comandos disponibles:\n\n"
-        "👤 Usuario:\n"
-        "• /start - Iniciar bot\n"
-        "• /balance - Ver balance\n"
-        "• /mi_ref_link - Obtener tu link de referido\n"
-        "• /cambiar_tiktok - Cambiar tu usuario TikTok\n"
-        "• Subir seguimiento y videos desde el menú principal\n\n"
-        "👑 Admin/Subadmin:\n"
-        "• /listar_usuarios - Listar usuarios\n"
-        "• /dar_puntos <id> <cantidad> - Proponer dar puntos (subadmin) o ejecutar (admin)\n"
-        "• /cambiar_tiktok_usuario <id> <@usuario> - Proponer/ejecutar cambio de TikTok\n"
-        "• /add_subadmin <id> - Agregar subadmin (admin)\n"
-        "• /remove_subadmin <id> - Quitar subadmin (admin)\n"
+        "• /start - Iniciar el bot y registrarte\n"
+        "• /balance - Ver tu balance de puntos\n"
+        "• /mi_ref_link - Obtener tu link de referidos\n"
+        "• /listar_usuarios - Ver lista de usuarios (solo admin)\n\n"
+        "👥 Gestión de subadmins:\n"
+        "• /add_subadmin <telegram_id> - Agregar subadmin (solo dueño)\n"
+        "• /remove_subadmin <telegram_id> - Quitar subadmin (solo dueño)\n\n"
+        "🎬 Videos:\n"
+        "• Subir video desde el menú principal\n"
+        "• Apoyar videos para ganar puntos\n\n"
+        "🔴 Lives:\n"
+        "• Subir live desde el menú principal (costo: 3 puntos)\n"
+        "• Apoyar lives para ganar puntos\n"
+        "• Dar 'Quiéreme' en un live para puntos extra (pendiente de validación)\n\n"
+        "🎁 Cupones:\n"
+        "• /subir_cupon <puntos> <ganadores> <codigo> - Crear cupón (admin o subadmin)\n"
+        "• /cobrar_cupon <codigo> - Canjear cupón\n\n"
+        "🛡️ Acciones administrativas:\n"
+        "• /dar_puntos <telegram_id> <cantidad> - Dar puntos (dueño directo, subadmin con aprobación)\n"
+        "• /cambiar_tiktok_usuario <telegram_id> <nuevo_alias_con_@> - Cambiar alias TikTok (subadmin con aprobación)\n"
     )
+
+    # ✅ Mantener tu estructura para que funcione desde comando y menú
     if isinstance(update_or_query, Update):
         await update_or_query.message.reply_text(texto, reply_markup=back_to_menu_keyboard())
     else:
         await update_or_query.edit_message_text(texto, reply_markup=back_to_menu_keyboard())
-
 # --- Comando: mi link de referido ---
 async def cmd_my_ref_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_my_ref_link(update, context)
