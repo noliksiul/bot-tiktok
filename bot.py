@@ -1432,7 +1432,8 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("reject_admin_action_"):
         action_id = int(data.split("_")[-1])
         await reject_admin_action(query, context, action_id)
- # 👇 Aquí van tus nuevos bloques, con la misma indentación
+
+    # 👇 Bloques de Live ya corregidos
     elif data == "subir_live":
         await query.edit_message_text(
             "🔗 Envía el link de tu live de TikTok (costo: 3 puntos).",
@@ -1445,11 +1446,11 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("live_view_"):
         live_id = int(data.split("_")[-1])
-        # TODO: lógica de temporizador y acreditación automática de 0.5
+        await handle_live_view(query, context, live_id)
 
     elif data.startswith("live_quiereme_"):
         live_id = int(data.split("_")[-1])
-        # TODO: lógica de temporizador, acreditación de 0.5 y solicitud de aprobación para 0.5 extra
+        await handle_live_quiereme(query, context, live_id)
 
     elif data == "menu_principal":
         context.user_data["state"] = None
