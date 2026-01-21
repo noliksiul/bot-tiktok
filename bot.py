@@ -971,11 +971,10 @@ async def listar_usuarios(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(texto)
 
 # --- Gestión de SubAdmins ---
-# --- Gestión de SubAdmins ---
+
 async def add_subadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id != ADMIN_ID:
-        await update.message.reply_text("❌ Solo el dueño puede agregar subadmins.")
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("❌ No tienes permiso para usar este comando.")
         return
 
     args = context.args
@@ -986,24 +985,34 @@ async def add_subadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         sub_id = int(args[0])
     except:
-        await update.message.reply_text("⚠️ El ID debe ser un número.")
+        await update.message.reply_text("⚠️ <telegram_id> debe ser un número.")
         return
 
     async with async_session() as session:
-        subadmin = SubAdmin(telegram_id=sub_id)
-        session.add(subadmin)
+        # ✅ Validar duplicados antes de insertar
+        res = await session.execute(select(SubAdmin).where(SubAdmin.telegram_id == sub_id))
+        exists = res.scalars().first()
+        if exists:
+            await update.message.reply_text("⚠️ Ya es subadmin.")
+            return
+
+        session.add(SubAdmin(telegram_id=sub_id))
         await session.commit()
 
+    # Mensaje al admin que ejecutó el comando
     await update.message.reply_text(f"✅ Subadmin agregado: {sub_id}")
 
-    # ✅ Notificación al subadmin agregado
-    try:
-        await context.bot.send_message(
-            chat_id=sub_id,
-            text="🛡️ Has sido agregado como subadmin.\n\nAhora puedes proponer acciones como dar puntos o crear cupones."
+    # ✅ Notificación al subadmin agregado con mensajes explicativos
+    await notify_user(
+        context,
+        chat_id=sub_id,
+        text=(
+            "🎉 Has sido promovido a Subadmin.\n\n"
+            "Tendrás acceso a los comandos de administración.\n"
+            "⚠️ Las acciones de 'dar puntos' y 'cambiar TikTok' requieren autorización del admin principal.\n"
+            "Cada solicitud que hagas será notificada al admin para aprobación."
         )
-    except Exception as e:
-        print(f"No se pudo notificar al subadmin {sub_id}: {e}")
+    )
 
 async def remove_subadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
@@ -1239,7 +1248,8 @@ async def cobrar_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"✅ Cupón {code} cobrado. Recibiste {reward} puntos.")
 
 # --- Acciones administrativas propuestas por subadmin ---
-# --- Acciones administrativas propuestas por subadmin ---
+
+
 async def dar_puntos(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     args = context.args
@@ -1264,30 +1274,46 @@ async def dar_puntos(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 u.balance = (u.balance or 0) + cantidad
                 session.add(Movimiento(
                     telegram_id=u.telegram_id,
-                    detalle=f"Puntos otorgados por admin ({cantidad})",
+                    detalle=f"🎁 Puntos otorgados por admin",
                     puntos=cantidad
                 ))
                 await session.commit()
-        await update.message.reply_text(f"✅ Puntos otorgados directamente: {cantidad} a {target_id}.")
+
+        # Mensaje al admin
+        await update.message.reply_text(f"🎁 El admin otorgó {cantidad} puntos a ID {target_id}.")
+
+        # ✅ Notificación al usuario que recibió los puntos
+        try:
+            await context.bot.send_message(
+                chat_id=target_id,
+                text=f"🎁 Has recibido {cantidad} puntos directamente del administrador."
+            )
+        except Exception as e:
+            print(f"No se pudo notificar al usuario {target_id}: {e}")
         return
 
     # ✅ Si es subadmin, se crea acción pendiente de aprobación
     if await is_subadmin(user_id):
+        expires = datetime.utcnow() + timedelta(days=AUTO_APPROVE_AFTER_DAYS)
         async with async_session() as session:
             action = AdminAction(
                 tipo="dar_puntos",
-                detalle=f"Dar {cantidad} puntos a {target_id}",
-                propuesto_por=user_id,
                 target_id=target_id,
-                puntos=cantidad
+                cantidad=cantidad,
+                subadmin_id=user_id,
+                status="pending",
+                expires_at=expires,
+                note=f"Dar {cantidad} puntos a {target_id}"   # 👈 aquí usamos note en lugar de detalle
             )
             session.add(action)
             await session.commit()
         await update.message.reply_text(
             f"🟡 Acción propuesta: dar {cantidad} puntos a {target_id}. Queda pendiente de aprobación del admin."
         )
+        await notify_admin(context, text=f"🟡 Acción pendiente: dar {cantidad} puntos a {target_id}.")
     else:
         await update.message.reply_text("❌ No tienes permiso para usar este comando.")
+
 
 async def cambiar_tiktok_usuario(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
