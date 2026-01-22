@@ -1780,7 +1780,9 @@ async def preflight():
 loop = asyncio.get_event_loop()
 loop.run_until_complete(preflight())
 
-application = Application.builder().token(BOT_TOKEN).build()
+application = Application.builder().token(
+    BOT_TOKEN).post_init(on_startup).build()
+
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("inicio", start))
 application.add_handler(CommandHandler("balance", cmd_balance))
@@ -1794,11 +1796,12 @@ application.add_handler(CommandHandler("remove_subadmin", remove_subadmin))
 application.add_handler(CommandHandler("subir_cupon", subir_cupon))
 application.add_handler(CommandHandler("cobrar_cupon", cobrar_cupon))
 application.add_handler(CommandHandler("mi_ref_link", cmd_my_ref_link))
-application.add_handler(CommandHandler("comandos", comandos))  # añadido
+application.add_handler(CommandHandler("comandos", comandos))
 
 application.add_handler(MessageHandler(
     filters.TEXT & ~filters.COMMAND, text_handler))
 application.add_handler(CallbackQueryHandler(menu_handler))
+
 flask_app = Flask(__name__)
 
 
@@ -1814,14 +1817,7 @@ def webhook():
     return "ok", 200
 
 
-async def on_startup(app: Application):
-    app.job_queue.run_repeating(lambda _: auto_approve_loop(
-        app), interval=AUTO_APPROVE_INTERVAL_SECONDS, first=5)
-    app.job_queue.run_repeating(lambda _: referral_weekly_summary_loop(
-        app), interval=3600*24*7, first=10)
-
 if __name__ == "__main__":
-    application.post_init(on_startup)
     application.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 10000)),
