@@ -917,8 +917,6 @@ async def approve_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_i
                         chat_id=referrer.telegram_id,
                         text=f"💸 Recibiste {PUNTOS_REFERIDO_BONUS} puntos por la interacción aceptada de tu referido {actor.telegram_id}."
                         reply_markup=back_to_menu_keyboard()   # 👈 Agregado
-)
-
                     )
         await session.commit()
 
@@ -969,13 +967,13 @@ async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, v
 
         expires = datetime.utcnow() + timedelta(days=AUTO_APPROVE_AFTER_DAYS)
         inter = Interaccion(
-            tipo = "video_support",
-            item_id = vid.id,
-            actor_id = user_id,
-            owner_id = vid.telegram_id,
-            status = "pending",
-            puntos = PUNTOS_APOYO_VIDEO,
-            expires_at = expires
+            tipo="video_support",
+            item_id=vid.id,
+            actor_id=user_id,
+            owner_id=vid.telegram_id,
+            status="pending",
+            puntos=PUNTOS_APOYO_VIDEO,
+            expires_at=expires
         )
         session.add(inter)
         await session.commit()
@@ -987,8 +985,8 @@ async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, v
     await query.edit_message_text("🟡 Tu apoyo fue registrado y está pendiente de aprobación del dueño.", reply_markup=back_to_menu_keyboard())
     await notify_user(
         context,
-        chat_id = vid.telegram_id,
-        text = (
+        chat_id=vid.telegram_id,
+        text=(
             f"📩 Nuevo apoyo a tu video:\n"
             f"Item ID: {vid.id}\n"
             f"Actor: {user_id}\n"
@@ -996,7 +994,7 @@ async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, v
             f"Puntos: {PUNTOS_APOYO_VIDEO}\n\n"
             "¿Apruebas?"
         ),
-        reply_markup = yes_no_keyboard(
+        reply_markup=yes_no_keyboard(
             callback_yes=f"approve_interaction_{inter.id}",
             callback_no=f"reject_interaction_{inter.id}"
         )
