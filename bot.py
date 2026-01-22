@@ -653,6 +653,7 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     except Exception as e:
         print("Aviso: no se pudo publicar en el canal:", e)
+
 # bot.py (Parte 3/5)
 
 # --- Ver seguimientos (no propios, solo una vez) ---
@@ -1723,6 +1724,11 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("reject_admin_action_"):
         action_id = int(data.split("_")[-1])
         await reject_admin_action(query, context, action_id)
+
+    # --- Callback principal (menú y acciones) ---
+    elif data == "menu_principal":
+        await show_main_menu(query, context)
+        return
 
     # 👇 Bloques de Live ya corregidos
 
