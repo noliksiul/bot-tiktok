@@ -79,7 +79,7 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     telegram_id = Column(BigInteger, unique=True, index=True)
     tiktok_user = Column(Text)
-    balance = Column(Integer, default=10)
+    balance = Column(Float, default=10)   # ✅ CAMBIAR a Float
     referrer_id = Column(BigInteger, nullable=True, index=True)
     referral_code = Column(Text, unique=True, index=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
@@ -180,6 +180,9 @@ async def migrate_db():
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_users_referrer_id ON users(referrer_id);"))
         await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_users_referral_code ON users(referral_code);"))
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id);"))
+
+        # users: convertir balance a FLOAT
+        await conn.execute(text("ALTER TABLE users ALTER COLUMN balance TYPE FLOAT USING balance::float;"))
 
         # interacciones: expires_at + índice
         await conn.execute(text("ALTER TABLE interacciones ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP;"))
