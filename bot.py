@@ -42,7 +42,7 @@ PUNTOS_REFERIDO_BONUS = 0.25
 
 # Lives
 PUNTOS_LIVE_SOLO_VER = 0.5
-PUNTOS_LIVE_QUIEREME_EXTRA = 0.5
+PUNTOS_LIVE_QUIEREME_EXTRA = 1.5
 LIVE_VIEW_MINUTES = 5
 
 
@@ -90,7 +90,7 @@ class Movimiento(Base):
     id = Column(Integer, primary_key=True)
     telegram_id = Column(BigInteger, index=True)
     detalle = Column(Text)
-    puntos = Column(Integer)
+    puntos = Column(Float)   # ✅ CAMBIAR a Float
     created_at = Column(TIMESTAMP, server_default=func.now())
 
 
@@ -191,8 +191,14 @@ async def migrate_db():
         await conn.execute(text("ALTER TABLE admin_actions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP;"))
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_admin_actions_status_expires ON admin_actions(status, expires_at);"))
 
-        # movimientos: índice por usuario
+        # interacciones: convertir puntos a FLOAT
+        await conn.execute(text("ALTER TABLE interacciones ALTER COLUMN puntos TYPE FLOAT USING puntos::float;"))
+
+# movimientos: índice por usuario
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_movimientos_telegram_id ON movimientos(telegram_id);"))
+
+# movimientos: convertir puntos a FLOAT
+        await conn.execute(text("ALTER TABLE movimientos ALTER COLUMN puntos TYPE FLOAT USING puntos::float;"))
 
         # Seguimiento/Video: índices por dueño
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_seguimientos_telegram_id ON seguimientos(telegram_id);"))
