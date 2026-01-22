@@ -1526,19 +1526,33 @@ async def cambiar_tiktok_usuario(update: Update, context: ContextTypes.DEFAULT_T
 
 
 async def approve_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action_id: int):
+    # Verificamos que solo el ADMIN_ID pueda aprobar
     if query.from_user.id != ADMIN_ID:
         await query.answer("❌ Solo el admin puede aprobar.", show_alert=True)
         return
+
     async with async_session() as session:
+        # Buscar la acción en la base de datos
         res = await session.execute(select(AdminAction).where(AdminAction.id == action_id))
         action = res.scalars().first()
+
+        # Si no existe la acción
         if not action:
-            await query.edit_message_text("❌ Acción no encontrada.", reply_markup=back_to_menu_keyboard())
-            return
-        if action.status != "pending":
-            await query.edit_message_text(f"⚠️ Acción ya está en estado: {action.status}.", reply_markup=back_to_menu_keyboard())
+            await query.edit_message_text(
+                "❌ Acción no encontrada.",
+                reply_markup=back_to_menu_keyboard()
+            )
             return
 
+        # Si la acción ya no está pendiente
+        if action.status != "pending":
+            await query.edit_message_text(
+                f"⚠️ Acción ya está en estado: {action.status}.",
+                reply_markup=back_to_menu_keyboard()
+            )
+            return
+
+        # Si la acción es dar puntos
         if action.tipo == "dar_puntos":
             res_u = await session.execute(select(User).where(User.telegram_id == action.target_id))
             u = res_u.scalars().first()
@@ -1549,36 +1563,62 @@ async def approve_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action
                     detalle=f"Puntos otorgados por admin ({action.cantidad})",
                     puntos=action.cantidad or 0
                 ))
+
+        # Si la acción es cambiar el alias de TikTok
         elif action.tipo == "cambiar_tiktok":
             res_u = await session.execute(select(User).where(User.telegram_id == action.target_id))
             u = res_u.scalars().first()
             if u and action.nuevo_alias:
                 u.tiktok_user = action.nuevo_alias
 
+        # Actualizamos el estado a aceptado y guardamos
         action.status = "accepted"
         await session.commit()
 
-    await query.edit_message_text("✅ Acción administrativa aprobada y aplicado el cambio.", reply_markup=back_to_menu_keyboard())
+    # Mensaje final con botón de regreso al menú principal
+    await query.edit_message_text(
+        "✅ Acción administrativa aprobada y aplicado el cambio.",
+        reply_markup=back_to_menu_keyboard()
+    )
 
 
 async def reject_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action_id: int):
+    # Verificamos que solo el ADMIN_ID pueda rechazar
     if query.from_user.id != ADMIN_ID:
         await query.answer("❌ Solo el admin puede rechazar.", show_alert=True)
         return
+
     async with async_session() as session:
+        # Buscar la acción en la base de datos
         res = await session.execute(select(AdminAction).where(AdminAction.id == action_id))
         action = res.scalars().first()
+
+        # Si no existe la acción
         if not action:
-            await query.edit_message_text("❌ Acción no encontrada.", reply_markup=back_to_menu_keyboard())
-            return
-        if action.status != "pending":
-            await query.edit_message_text(f"⚠️ Acción ya está en estado: {action.status}.", reply_markup=back_to_menu_keyboard())
+            await query.edit_message_text(
+                "❌ Acción no encontrada.",
+                reply_markup=back_to_menu_keyboard()
+            )
             return
 
+        # Si la acción ya no está pendiente
+        if action.status != "pending":
+            await query.edit_message_text(
+                f"⚠️ Acción ya está en estado: {action.status}.",
+                reply_markup=back_to_menu_keyboard()
+            )
+            return
+
+        # Actualizamos el estado a rechazado y guardamos
         action.status = "rejected"
         await session.commit()
 
-    await query.edit_message_text("❌ Acción administrativa rechazada.", reply_markup=back_to_menu_keyboard())
+    # Mensaje final con botón de regreso al menú principal
+    await query.edit_message_text(
+        "❌ Acción administrativa rechazada.",
+        reply_markup=back_to_menu_keyboard()
+    )
+
 
 # bot.py (Parte 5/5)
 
@@ -1695,6 +1735,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "ver_live":
         await show_lives(query, context)
+        return   # 👈 aquí termina el flujo
 
     elif data.startswith("live_view_"):
         live_id = int(data.split("_")[-1])
