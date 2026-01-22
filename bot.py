@@ -915,7 +915,7 @@ async def approve_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_i
                     await notify_user(
                         context,
                         chat_id=referrer.telegram_id,
-                        text=f"💸 Recibiste {PUNTOS_REFERIDO_BONUS} puntos por la interacción aceptada de tu referido {actor.telegram_id}."
+                        text=f"💸 Recibiste {PUNTOS_REFERIDO_BONUS} puntos por la interacción aceptada de tu referido {actor.telegram_id}.",
                         reply_markup=back_to_menu_keyboard()   # 👈 Agregado
                     )
         await session.commit()
