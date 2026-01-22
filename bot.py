@@ -120,7 +120,7 @@ class Interaccion(Base):
     owner_id = Column(BigInteger)  # dueño del seguimiento/video
     # pending | accepted | rejected | auto_accepted
     status = Column(Text, default="pending")
-    puntos = Column(Integer, default=0)
+    puntos = Column(Float, default=0)   # 👈 CAMBIAR a Float
     created_at = Column(TIMESTAMP, server_default=func.now())
     expires_at = Column(TIMESTAMP)  # fecha límite para auto-aprobar
     __table_args__ = (UniqueConstraint("tipo", "item_id",
@@ -198,6 +198,9 @@ async def migrate_db():
         # Lives: columnas nuevas
         await conn.execute(text("ALTER TABLE lives ADD COLUMN IF NOT EXISTS alias TEXT;"))
         await conn.execute(text("ALTER TABLE lives ADD COLUMN IF NOT EXISTS puntos INTEGER DEFAULT 0;"))
+        await conn.execute(text("ALTER TABLE interacciones ALTER COLUMN puntos TYPE FLOAT USING puntos::float;"))
+
+
 # --- Helpers de referidos ---
 
 
