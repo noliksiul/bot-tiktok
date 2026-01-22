@@ -14,8 +14,10 @@ from telegram.ext import (
 )
 from sqlalchemy import (
     Column, Integer, BigInteger, Text, TIMESTAMP, func,
-    UniqueConstraint, select, text
+    UniqueConstraint, select, text, Float   # 👈 AGREGA Float
 )
+
+
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
