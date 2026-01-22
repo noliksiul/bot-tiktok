@@ -1780,6 +1780,16 @@ async def preflight():
 loop = asyncio.get_event_loop()
 loop.run_until_complete(preflight())
 
+# ✅ Opción 1: definir on_startup antes de construir la aplicación
+
+
+async def on_startup(app: Application):
+    app.job_queue.run_repeating(lambda _: auto_approve_loop(app),
+                                interval=AUTO_APPROVE_INTERVAL_SECONDS, first=5)
+    app.job_queue.run_repeating(lambda _: referral_weekly_summary_loop(app),
+                                interval=3600*24*7, first=10)
+
+
 application = Application.builder().token(
     BOT_TOKEN).post_init(on_startup).build()
 
