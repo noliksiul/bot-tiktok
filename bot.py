@@ -406,10 +406,10 @@ async def referral_weekly_summary_loop(application: Application):
                         try:
                             await application.bot.send_message(
                                 chat_id=chat_id,
-                                text=f"📊 Resumen semanal: ganaste {total} puntos por referidos en los últimos 7 días."
+                                text=f"📊 Resumen semanal: ganaste {total:.2f} puntos por referidos en los últimos 7 días.",
                                 reply_markup=back_to_menu_keyboard()
-
                             )
+
                         except Exception as e:
                             print("Aviso: no se pudo enviar resumen semanal:", e)
         except Exception as e:
