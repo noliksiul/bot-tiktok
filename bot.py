@@ -53,6 +53,8 @@ CHANNEL_URL = "https://t.me/apoyotiktok002"
 
 # --- Configuración administrador ---
 ADMIN_ID = 890166032
+auto_ref_counter = 0
+
 
 # --- Utilidades UI ---
 
@@ -160,6 +162,28 @@ class Live(Base):
     puntos = Column(Integer, default=0)   # 👈 nuevo campo
     created_at = Column(TIMESTAMP, server_default=func.now())
 
+# --- Modelos de cupones ---
+
+
+class Cupon(Base):
+    __tablename__ = "cupones"
+    id = Column(Integer, primary_key=True)
+    codigo = Column(Text, unique=True, index=True)
+    puntos = Column(Float)
+    ganadores = Column(Integer)
+    usados = Column(Integer, default=0)
+    creado_por = Column(BigInteger)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+
+class CuponClaim(Base):
+    __tablename__ = "cupon_claims"
+    id = Column(Integer, primary_key=True)
+    codigo = Column(Text, index=True)
+    telegram_id = Column(BigInteger, index=True)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+    # UNIQUE(codigo, telegram_id) está en la migración
+
 # --- Inicialización DB ---
 
 
@@ -176,6 +200,7 @@ async def migrate_db():
         await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS referrer_id BIGINT;"))
         await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code TEXT;"))
         await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();"))
+
         # users: índices/unique
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_users_referrer_id ON users(referrer_id);"))
         await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_users_referral_code ON users(referral_code);"))
@@ -187,32 +212,57 @@ async def migrate_db():
         # interacciones: expires_at + índice
         await conn.execute(text("ALTER TABLE interacciones ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP;"))
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_interacciones_status_expires ON interacciones(status, expires_at);"))
+
         # interacciones: convertir puntos a FLOAT
         await conn.execute(text("ALTER TABLE interacciones ALTER COLUMN puntos TYPE FLOAT USING puntos::float;"))
+
+        # cupones: tabla principal
+        await conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS cupones (
+            id SERIAL PRIMARY KEY,
+            codigo TEXT UNIQUE,
+            puntos FLOAT,
+            ganadores INTEGER,
+            usados INTEGER DEFAULT 0,
+            creado_por BIGINT,
+            created_at TIMESTAMP DEFAULT NOW()
+        );
+        """))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_cupones_codigo ON cupones(codigo);"))
+
+        # cupon_claims: quién cobró qué cupón (evita doble cobro)
+        await conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS cupon_claims (
+            id SERIAL PRIMARY KEY,
+            codigo TEXT,
+            telegram_id BIGINT,
+            created_at TIMESTAMP DEFAULT NOW(),
+            UNIQUE (codigo, telegram_id)
+        );
+        """))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_cupon_claims_codigo ON cupon_claims(codigo);"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_cupon_claims_user ON cupon_claims(telegram_id);"))
 
         # admin_actions: expires_at + índice
         await conn.execute(text("ALTER TABLE admin_actions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP;"))
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_admin_actions_status_expires ON admin_actions(status, expires_at);"))
 
-        # interacciones: convertir puntos a FLOAT
-        await conn.execute(text("ALTER TABLE interacciones ALTER COLUMN puntos TYPE FLOAT USING puntos::float;"))
-
-# movimientos: índice por usuario
+        # movimientos: índice por usuario
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_movimientos_telegram_id ON movimientos(telegram_id);"))
 
-# movimientos: convertir puntos a FLOAT
+        # movimientos: convertir puntos a FLOAT
         await conn.execute(text("ALTER TABLE movimientos ALTER COLUMN puntos TYPE FLOAT USING puntos::float;"))
 
         # Seguimiento/Video: índices por dueño
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_seguimientos_telegram_id ON seguimientos(telegram_id);"))
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_videos_telegram_id ON videos(telegram_id);"))
+
         # Lives: índice por dueño
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_lives_telegram_id ON lives(telegram_id);"))
+
         # Lives: columnas nuevas
         await conn.execute(text("ALTER TABLE lives ADD COLUMN IF NOT EXISTS alias TEXT;"))
-        await conn.execute(text("ALTER TABLE lives ADD COLUMN IF NOT EXISTS puntos INTEGER DEFAULT 0;"))
-
-
+        await conn.execute(text("ALTER TABLE lives ADD COLUMN IF NOT EXISTS puntos FLOAT DEFAULT 0;"))
 # --- Helpers de referidos ---
 
 
@@ -232,7 +282,53 @@ async def notify_user(context: ContextTypes.DEFAULT_TYPE, chat_id: int, text: st
         await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup)
     except Exception as e:
         print("Aviso: no se pudo notificar al usuario:", e)
+# --- Cupones: subir cupón (admin/subadmin) ---
 
+
+async def subir_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # /subir_cupon <puntos> <ganadores> <codigo>
+    if update.message is None:
+        return
+    args = context.args
+    if len(args) < 3:
+        await update.message.reply_text(
+            "Uso: /subir_cupon <puntos> <ganadores> <codigo>\nEj: /subir_cupon 2.5 100 BIENVENIDO2026",
+            reply_markup=back_to_menu_keyboard()
+        )
+        return
+
+    try:
+        puntos = float(args[0])
+        ganadores = int(args[1])
+        codigo = args[2].strip()
+    except Exception:
+        await update.message.reply_text("Formato inválido. Ej: /subir_cupon 2.5 100 BIENVENIDO2026", reply_markup=back_to_menu_keyboard())
+        return
+
+    uid = update.effective_user.id
+    async with async_session() as session:
+        es_admin = (uid == ADMIN_ID)
+        res_sa = await session.execute(select(SubAdmin).where(SubAdmin.telegram_id == uid))
+        es_subadmin = res_sa.scalars().first() is not None
+        if not (es_admin or es_subadmin):
+            await update.message.reply_text("❌ No tienes permisos para crear cupones.", reply_markup=back_to_menu_keyboard())
+            return
+
+        res = await session.execute(select(Cupon).where(Cupon.codigo == codigo))
+        existe = res.scalars().first()
+        if existe:
+            await update.message.reply_text("⚠️ Ese código ya existe. Usa otro.", reply_markup=back_to_menu_keyboard())
+            return
+
+        cupon = Cupon(codigo=codigo, puntos=puntos,
+                      ganadores=ganadores, creado_por=uid)
+        session.add(cupon)
+        await session.commit()
+
+    await update.message.reply_text(
+        f"✅ Cupón creado:\n• Código: {codigo}\n• Puntos: {puntos:.2f}\n• Ganadores: {ganadores}",
+        reply_markup=back_to_menu_keyboard()
+    )
 # --- Tarea periódica: auto-acreditación ---
 AUTO_APPROVE_INTERVAL_SECONDS = 60
 AUTO_APPROVE_AFTER_DAYS = 2
@@ -311,12 +407,15 @@ async def referral_weekly_summary_loop(application: Application):
                             await application.bot.send_message(
                                 chat_id=chat_id,
                                 text=f"📊 Resumen semanal: ganaste {total} puntos por referidos en los últimos 7 días."
+                                reply_markup=back_to_menu_keyboard()
+
                             )
                         except Exception as e:
                             print("Aviso: no se pudo enviar resumen semanal:", e)
         except Exception as e:
             print("Error en referral_weekly_summary_loop:", e)
         await asyncio.sleep(3600 * 24 * 7)  # cada semana
+
 # bot.py (Parte 2/5)
 
 # --- Menú principal ---
@@ -365,27 +464,49 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user = res.scalars().first()
 
         if not user:
-            code = secrets.token_urlsafe(6)
-            user = User(
-                telegram_id=update.effective_user.id,
-                balance=10,
-                referral_code=code
+        code = secrets.token_urlsafe(6)
+        user = User(
+            telegram_id=update.effective_user.id,
+            balance=10,
+            referral_code=code
+        )
+        if ref_code:
+            # si viene con código de referido
+            res_ref = await session.execute(select(User).where(User.referral_code == ref_code))
+            referrer = res_ref.scalars().first()
+            if referrer and referrer.telegram_id != update.effective_user.id:
+                user.referrer_id = referrer.telegram_id
+        else:
+            # ✅ Asignación automática si NO trae ref_code
+            # Reparto 3:1 entre ADMIN y subadmin
+
+            global auto_ref_counter
+            try:
+                auto_ref_counter += 1
+            except NameError:
+                auto_ref_counter = 1
+
+            if auto_ref_counter % 4 == 0:
+                # Cada 4º usuario → subadmin
+                res_sa = await session.execute(select(SubAdmin).order_by(SubAdmin.id.asc()))
+                sa = res_sa.scalars().first()
+                if sa:
+                    user.referrer_id = sa.telegram_id
+                else:
+                    user.referrer_id = ADMIN_ID   # fallback si no hay subadmin
+            else:
+                # Los otros 3 → dueño
+                user.referrer_id = ADMIN_ID
+
+        session.add(user)
+        await session.commit()
+
+        if user.referrer_id:
+            await notify_user(
+                context,
+                chat_id=user.referrer_id,
+                text=f"🎉 Nuevo referido: {update.effective_user.id} (@{update.effective_user.username or 'sin_username'}) se registró con tu link."
             )
-            if ref_code:
-                res_ref = await session.execute(select(User).where(User.referral_code == ref_code))
-                referrer = res_ref.scalars().first()
-                if referrer and referrer.telegram_id != update.effective_user.id:
-                    user.referrer_id = referrer.telegram_id
-            session.add(user)
-            await session.commit()
-
-            if user.referrer_id:
-                await notify_user(
-                    context,
-                    chat_id=user.referrer_id,
-                    text=f"🎉 Nuevo referido: {update.effective_user.id} (@{update.effective_user.username or 'sin_username'}) se registró con tu link."
-                )
-
     # Bienvenida sin saldo y sin botón extra
     nombre = update.effective_user.first_name or ""
     usuario = f"@{update.effective_user.username}" if update.effective_user.username else ""
@@ -506,6 +627,56 @@ async def save_new_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["state"] = None
     await show_main_menu(update, context)
 
+    # --- Cupones: cobrar cupón (usuarios) ---
+
+
+async def cobrar_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # /cobrar_cupon <codigo>
+    if update.message is None:
+        return
+    args = context.args
+    if len(args) < 1:
+        await update.message.reply_text("Uso: /cobrar_cupon <codigo>", reply_markup=back_to_menu_keyboard())
+        return
+
+    codigo = args[0].strip()
+    uid = update.effective_user.id
+
+    async with async_session() as session:
+        res = await session.execute(select(Cupon).where(Cupon.codigo == codigo))
+        cupon = res.scalars().first()
+        if not cupon:
+            await update.message.reply_text("❌ Cupón no encontrado.", reply_markup=back_to_menu_keyboard())
+            return
+
+        if cupon.usados >= cupon.ganadores:
+            await update.message.reply_text("⚠️ Cupón agotado.", reply_markup=back_to_menu_keyboard())
+            return
+
+        res_claim = await session.execute(select(CuponClaim).where(CuponClaim.codigo == codigo, CuponClaim.telegram_id == uid))
+        ya_cobrado = res_claim.scalars().first()
+        if ya_cobrado:
+            await update.message.reply_text("⚠️ Ya cobraste este cupón.", reply_markup=back_to_menu_keyboard())
+            return
+
+        res_u = await session.execute(select(User).where(User.telegram_id == uid))
+        user = res_u.scalars().first()
+        if not user:
+            await update.message.reply_text("❌ No estás registrado. Usa /start primero.", reply_markup=back_to_menu_keyboard())
+            return
+
+        user.balance = (user.balance or 0) + (cupon.puntos or 0)
+        session.add(Movimiento(telegram_id=uid,
+                    detalle=f"Cobro cupón {codigo}", puntos=cupon.puntos))
+        cupon.usados += 1
+        session.add(CuponClaim(codigo=codigo, telegram_id=uid))
+        await session.commit()
+
+    await update.message.reply_text(
+        f"✅ Cupón {codigo} cobrado. Sumaste {cupon.puntos:.2f} puntos.",
+        reply_markup=back_to_menu_keyboard()
+    )
+
 # --- Subir seguimiento ---
 
 
@@ -555,11 +726,18 @@ async def save_seguimiento(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     link = update.message.text.strip()
+
     async with async_session() as session:
+        # Validar usuario
         res = await session.execute(select(User).where(User.telegram_id == user_id))
         u = res.scalars().first()
         if not u:
             await update.message.reply_text("⚠️ No estás registrado en el sistema.", reply_markup=back_to_menu_keyboard())
+            return
+
+        # Cobro: subir live cuesta 3 puntos
+        if (u.balance or 0) < 3:
+            await update.message.reply_text("⚠️ No tienes suficientes puntos para subir un live (mínimo 3).", reply_markup=back_to_menu_keyboard())
             return
 
         # Guardar el live
@@ -570,18 +748,33 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
             puntos=0
         )
         session.add(live)
+
+        # Registrar costo y movimiento
+        u.balance = (u.balance or 0) - 3
+        session.add(Movimiento(telegram_id=user_id,
+                    detalle="Subir live", puntos=-3))
+
         await session.commit()
 
-    # ✅ Publicar en el canal
+    # ✅ Publicar en el canal con botones
     try:
+        alias = u.tiktok_user or (
+            f"@{update.effective_user.username}" if update.effective_user.username else str(user_id))
+        canal_markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔴 Ver live en vivo",
+                                  callback_data="ver_live")],
+            [InlineKeyboardButton(
+                "🔙 Regresar al menú principal", callback_data="menu_principal")]
+        ])
         await context.bot.send_message(
             chat_id=CHANNEL_ID,
-            text=f"🔴 Nuevo live publicado por {u.tiktok_user}\n\n{link}\n\n¡Apóyalo para ganar puntos!"
+            text=f"🔴 Nuevo live publicado por {alias}\n\n{link}\n\n¡Apóyalo para ganar puntos!",
+            reply_markup=canal_markup
         )
     except Exception as e:
         print("No se pudo publicar en el canal:", e)
 
-    # ✅ Notificar a todos los usuarios (excepto el que subió)
+    # ✅ Notificar a todos los usuarios (excepto el que subió) con botones
     async with async_session() as session:
         res = await session.execute(select(User.telegram_id).where(User.telegram_id != user_id))
         todos = res.scalars().all()
@@ -590,17 +783,22 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.send_message(
                     chat_id=uid,
                     text=(
-                        f"📢 Hey! El usuario {u.tiktok_user} está en LIVE 🔴\n\n"
+                        f"📢 Hey! {alias} está en LIVE 🔴\n\n"
                         f"👉 Solo por entrar puedes ganar puntos.\n"
                         f"💖 Si le das 'Quiéreme' podrás ganar puntos extra (pendiente de validación)."
-                    )
+                    ),
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton(
+                            "🔴 Ver live en vivo", callback_data="ver_live")],
+                        [InlineKeyboardButton(
+                            "🔙 Regresar al menú principal", callback_data="menu_principal")]
+                    ])
                 )
             except Exception as e:
                 print(f"No se pudo notificar a {uid}: {e}")
 
-    await update.message.reply_text("✅ Live registrado y notificado a la comunidad.", reply_markup=back_to_menu_keyboard())
+    await update.message.reply_text("✅ Live registrado, publicado y notificado a la comunidad.", reply_markup=back_to_menu_keyboard())
     context.user_data["state"] = None
-
 
 # --- Subir video: flujo por pasos ---
 
@@ -645,8 +843,8 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         session.add(vid)
         user.balance = (user.balance or 0) - 5
-        mov = Movimiento(telegram_id=user_id, detalle="Subir video", puntos=-5)
-        session.add(mov)
+        session.add(Movimiento(telegram_id=user_id,
+                    detalle="Subir video", puntos=-5))
         await session.commit()
 
     await update.message.reply_text(
@@ -661,13 +859,21 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["video_tipo"] = None
 
     try:
-        alias = user.tiktok_user if user and user.tiktok_user else str(user_id)
+        alias = user.tiktok_user if user and user.tiktok_user else (
+            f"@{update.effective_user.username}" if update.effective_user.username else str(user_id))
+        canal_markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📺 Ver videos", callback_data="ver_video")],
+            [InlineKeyboardButton(
+                "🔙 Regresar al menú principal", callback_data="menu_principal")]
+        ])
         await context.bot.send_message(
             chat_id=CHANNEL_ID,
-            text=f"📢 Nuevo video ({tipo}) publicado por {alias}\n📌 {titulo}\n📝 {descripcion}\n🔗 {link}"
+            text=f"📢 Nuevo video ({tipo}) publicado por {alias}\n📌 {titulo}\n📝 {descripcion}\n🔗 {link}",
+            reply_markup=canal_markup
         )
     except Exception as e:
         print("Aviso: no se pudo publicar en el canal:", e)
+
 
 # bot.py (Parte 3/5)
 
@@ -1870,6 +2076,8 @@ application.add_handler(CommandHandler("subir_cupon", subir_cupon))
 application.add_handler(CommandHandler("cobrar_cupon", cobrar_cupon))
 application.add_handler(CommandHandler("mi_ref_link", cmd_my_ref_link))
 application.add_handler(CommandHandler("comandos", comandos))
+application.add_handler(CommandHandler("subir_cupon", subir_cupon))
+application.add_handler(CommandHandler("cobrar_cupon", cobrar_cupon))
 
 application.add_handler(MessageHandler(
     filters.TEXT & ~filters.COMMAND, text_handler))
