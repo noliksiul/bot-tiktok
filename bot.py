@@ -1509,14 +1509,14 @@ async def subir_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ Parámetros inválidos.")
         return
     async with async_session() as session:
-        coupon = Coupon(
+        cupon = Cupon(
             code=code,
             total_points=total_points,
             winners_limit=winners_limit,
             created_by=update.effective_user.id,
             active=1
         )
-        session.add(coupon)
+        session.add(cupon)
         await session.commit()
     await update.message.reply_text(f"✅ Cupón creado: código {code}, {total_points} puntos, {winners_limit} ganadores.")
 
@@ -1529,19 +1529,19 @@ async def cobrar_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
     code = args[0]
     user_id = update.effective_user.id
     async with async_session() as session:
-        res = await session.execute(select(Coupon).where(Coupon.code == code, Coupon.active == 1))
-        coupon = res.scalars().first()
-        if not coupon:
+        res = await session.execute(select(Cupon).where(Cupon.code == code, Cupon.active == 1))
+        cupon = res.scalars().first()
+        if not cupon:
             await update.message.reply_text("❌ Cupón no válido o agotado.")
             return
-        reward = coupon.total_points // coupon.winners_limit
+        reward = cupon.total_points // cupon.winners_limit
         res_movs = await session.execute(
             select(Movimiento).where(
                 Movimiento.detalle.like(f"Cobro cupón {code}%"))
         )
         winners = res_movs.scalars().all()
-        if len(winners) >= coupon.winners_limit:
-            coupon.active = 0
+        if len(winners) >= cupon.winners_limit:
+            cupon.active = 0
             await session.commit()
             await update.message.reply_text("⚠️ Ya no hay recompensas disponibles para este cupón.")
             return
