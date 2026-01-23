@@ -287,16 +287,15 @@ async def notify_user(context: ContextTypes.DEFAULT_TYPE, chat_id: int, text: st
 
 
 async def subir_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    # Uso: /subir_cupon <puntos> <ganadores> <codigo>
-    if update.message is None:
+    uid = update.effective_user.id
+    # Solo admin o subadmin pueden crear
+    if uid != ADMIN_ID and not await is_subadmin(uid):
+        await update.message.reply_text("❌ No tienes permiso para crear cupones.")
         return
+
     args = context.args
     if len(args) < 3:
-        await update.message.reply_text(
-            "Uso: /subir_cupon <puntos> <ganadores> <codigo>\nEj: /subir_cupon 2.5 100 BIENVENIDO2026",
-            reply_markup=back_to_menu_keyboard()
-        )
+        await update.message.reply_text("Uso: /subir_cupon <puntos> <ganadores> <codigo>")
         return
 
     try:
@@ -304,22 +303,15 @@ async def subir_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ganadores = int(args[1])
         codigo = args[2].strip()
     except Exception:
-        await update.message.reply_text("Formato inválido. Ej: /subir_cupon 2.5 100 BIENVENIDO2026", reply_markup=back_to_menu_keyboard())
+        await update.message.reply_text("⚠️ Parámetros inválidos.")
         return
 
-    uid = update.effective_user.id
     async with async_session() as session:
-        es_admin = (uid == ADMIN_ID)
-        res_sa = await session.execute(select(SubAdmin).where(SubAdmin.telegram_id == uid))
-        es_subadmin = res_sa.scalars().first() is not None
-        if not (es_admin or es_subadmin):
-            await update.message.reply_text("❌ No tienes permisos para crear cupones.", reply_markup=back_to_menu_keyboard())
-            return
-
+        # Verificar si ya existe
         res = await session.execute(select(Cupon).where(Cupon.codigo == codigo))
         existe = res.scalars().first()
         if existe:
-            await update.message.reply_text("⚠️ Ese código ya existe. Usa otro.", reply_markup=back_to_menu_keyboard())
+            await update.message.reply_text("⚠️ Ese código ya existe.")
             return
 
         cupon = Cupon(codigo=codigo, puntos=puntos,
@@ -328,8 +320,7 @@ async def subir_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await session.commit()
 
     await update.message.reply_text(
-        f"✅ Se subió cupón con éxito\n• Código: {codigo}\n• Puntos: {puntos:.2f}\n• Ganadores: {ganadores}",
-        reply_markup=back_to_menu_keyboard()
+        f"✅ Se subió cupón con éxito\n• Código: {codigo}\n• Puntos: {puntos:.2f}\n• Ganadores: {ganadores}"
     )
 
 
@@ -1369,62 +1360,45 @@ async def listar_usuarios(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # --- Gestión de Cupones ---
+# --- Gestión de Cupones  subir---
 async def subir_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        if not await is_subadmin(update.effective_user.id):
-            await update.message.reply_text("❌ No tienes permiso para crear cupones.")
-            return
-        args = context.args
-        if len(args) < 3:
-            await update.message.reply_text("Uso: /subir_cupon <total_puntos> <num_ganadores> <codigo>")
-            return
-        try:
-            total_points = int(args[0])
-            winners_limit = int(args[1])
-            code = args[2]
-        except:
-            await update.message.reply_text("⚠️ Parámetros inválidos.")
-            return
-        expires = datetime.utcnow() + timedelta(days=AUTO_APPROVE_AFTER_DAYS)
-        async with async_session() as session:
-            action = AdminAction(
-                tipo="crear_cupon",
-                target_id=0,
-                cantidad=total_points,
-                nuevo_alias=code,
-                subadmin_id=update.effective_user.id,
-                status="pending",
-                expires_at=expires,
-                note=f"Ganadores: {winners_limit}"
-            )
-            session.add(action)
-            await session.commit()
-        await update.message.reply_text(f"🟡 Cupón propuesto: código {code}, {total_points} puntos, {winners_limit} ganadores. Pendiente de aprobación.")
-        await notify_admin(context, text=f"🟡 Acción pendiente: crear cupón {code} ({total_points} puntos, {winners_limit} ganadores).")
+    uid = update.effective_user.id
+    # Solo admin o subadmin pueden crear
+    if uid != ADMIN_ID and not await is_subadmin(uid):
+        await update.message.reply_text("❌ No tienes permiso para crear cupones.")
         return
 
     args = context.args
     if len(args) < 3:
-        await update.message.reply_text("Uso: /subir_cupon <total_puntos> <num_ganadores> <codigo>")
+        await update.message.reply_text("Uso: /subir_cupon <puntos> <ganadores> <codigo>")
         return
+
     try:
-        total_points = int(args[0])
-        winners_limit = int(args[1])
-        code = args[2]
-    except:
+        puntos = float(args[0])
+        ganadores = int(args[1])
+        codigo = args[2].strip()
+    except Exception:
         await update.message.reply_text("⚠️ Parámetros inválidos.")
         return
+
     async with async_session() as session:
-        cupon = Cupon(
-            code=code,
-            total_points=total_points,
-            winners_limit=winners_limit,
-            created_by=update.effective_user.id,
-            active=1
-        )
+        # Verificar si ya existe
+        res = await session.execute(select(Cupon).where(Cupon.codigo == codigo))
+        existe = res.scalars().first()
+        if existe:
+            await update.message.reply_text("⚠️ Ese código ya existe.")
+            return
+
+        cupon = Cupon(codigo=codigo, puntos=puntos,
+                      ganadores=ganadores, creado_por=uid)
         session.add(cupon)
         await session.commit()
-    await update.message.reply_text(f"✅ Cupón creado: código {code}, {total_points} puntos, {winners_limit} ganadores.")
+
+    await update.message.reply_text(
+        f"✅ Se subió cupón con éxito\n• Código: {codigo}\n• Puntos: {puntos:.2f}\n• Ganadores: {ganadores}"
+    )
+
+# --- Gestión de Cupones cobrar ---
 
 
 async def cobrar_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1432,128 +1406,50 @@ async def cobrar_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(args) < 1:
         await update.message.reply_text("Uso: /cobrar_cupon <codigo>")
         return
-    code = args[0]
-    user_id = update.effective_user.id
+
+    codigo = args[0].strip()
+    uid = update.effective_user.id
+
     async with async_session() as session:
-        res = await session.execute(select(Cupon).where(Cupon.code == code, Cupon.active == 1))
+        res = await session.execute(select(Cupon).where(Cupon.codigo == codigo))
         cupon = res.scalars().first()
         if not cupon:
-            await update.message.reply_text("❌ Cupón no válido o agotado.")
+            await update.message.reply_text("❌ Cupón no encontrado.")
             return
-        reward = cupon.total_points // cupon.winners_limit
-        res_movs = await session.execute(
-            select(Movimiento).where(
-                Movimiento.detalle.like(f"Cobro cupón {code}%"))
+
+        if cupon.usados >= cupon.ganadores:
+            await update.message.reply_text("⚠️ Cupón agotado.")
+            return
+
+        # Verificar si ya lo cobró
+        res_claim = await session.execute(
+            select(CuponClaim).where(CuponClaim.codigo ==
+                                     codigo, CuponClaim.telegram_id == uid)
         )
-        winners = res_movs.scalars().all()
-        if len(winners) >= cupon.winners_limit:
-            cupon.active = 0
-            await session.commit()
-            await update.message.reply_text("⚠️ Ya no hay recompensas disponibles para este cupón.")
+        ya_cobrado = res_claim.scalars().first()
+        if ya_cobrado:
+            await update.message.reply_text("⚠️ Ya cobraste este cupón.")
             return
-        res_user = await session.execute(select(User).where(User.telegram_id == user_id))
-        user = res_user.scalars().first()
-        if user:
-            user.balance = (user.balance or 0) + reward
-            mov = Movimiento(telegram_id=user_id,
-                             detalle=f"Cobro cupón {code}", puntos=reward)
-            session.add(mov)
-            await session.commit()
-        await update.message.reply_text(f"✅ Cupón {code} cobrado. Recibiste {reward} puntos.")
-# --- Gestión de Cupones ---
 
+        # Verificar usuario
+        res_u = await session.execute(select(User).where(User.telegram_id == uid))
+        user = res_u.scalars().first()
+        if not user:
+            await update.message.reply_text("❌ No estás registrado. Usa /start primero.")
+            return
 
-async def subir_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        if not await is_subadmin(update.effective_user.id):
-            await update.message.reply_text("❌ No tienes permiso para crear cupones.")
-            return
-        args = context.args
-        if len(args) < 3:
-            await update.message.reply_text("Uso: /subir_cupon <total_puntos> <num_ganadores> <codigo>")
-            return
-        try:
-            total_points = int(args[0])
-            winners_limit = int(args[1])
-            code = args[2]
-        except:
-            await update.message.reply_text("⚠️ Parámetros inválidos.")
-            return
-        expires = datetime.utcnow() + timedelta(days=AUTO_APPROVE_AFTER_DAYS)
-        async with async_session() as session:
-            action = AdminAction(
-                tipo="crear_cupon",
-                target_id=0,
-                cantidad=total_points,
-                nuevo_alias=code,
-                subadmin_id=update.effective_user.id,
-                status="pending",
-                expires_at=expires,
-                note=f"Ganadores: {winners_limit}"
-            )
-            session.add(action)
-            await session.commit()
-        await update.message.reply_text(f"🟡 Cupón propuesto: código {code}, {total_points} puntos, {winners_limit} ganadores. Pendiente de aprobación.")
-        await notify_admin(context, text=f"🟡 Acción pendiente: crear cupón {code} ({total_points} puntos, {winners_limit} ganadores).")
-        return
-
-    args = context.args
-    if len(args) < 3:
-        await update.message.reply_text("Uso: /subir_cupon <total_puntos> <num_ganadores> <codigo>")
-        return
-    try:
-        total_points = int(args[0])
-        winners_limit = int(args[1])
-        code = args[2]
-    except:
-        await update.message.reply_text("⚠️ Parámetros inválidos.")
-        return
-    async with async_session() as session:
-        cupon = Cupon(
-            code=code,
-            total_points=total_points,
-            winners_limit=winners_limit,
-            created_by=update.effective_user.id,
-            active=1
-        )
-        session.add(cupon)
+        # Acreditar puntos
+        user.balance = (user.balance or 0) + (cupon.puntos or 0)
+        session.add(Movimiento(telegram_id=uid,
+                    detalle=f"Cobro cupón {codigo}", puntos=cupon.puntos))
+        cupon.usados += 1
+        session.add(CuponClaim(codigo=codigo, telegram_id=uid))
         await session.commit()
-    await update.message.reply_text(f"✅ Cupón creado: código {code}, {total_points} puntos, {winners_limit} ganadores.")
 
+    await update.message.reply_text(
+        f"✅ Se cobró cupón con éxito\n• Código: {codigo}\n• Puntos sumados: {cupon.puntos:.2f}"
+    )
 
-async def cobrar_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    args = context.args
-    if len(args) < 1:
-        await update.message.reply_text("Uso: /cobrar_cupon <codigo>")
-        return
-    code = args[0]
-    user_id = update.effective_user.id
-    async with async_session() as session:
-        res = await session.execute(select(Cupon).where(Cupon.code == code, Cupon.active == 1))
-        cupon = res.scalars().first()
-        if not cupon:
-            await update.message.reply_text("❌ Cupón no válido o agotado.")
-            return
-        reward = cupon.total_points // cupon.winners_limit
-        res_movs = await session.execute(
-            select(Movimiento).where(
-                Movimiento.detalle.like(f"Cobro cupón {code}%"))
-        )
-        winners = res_movs.scalars().all()
-        if len(winners) >= cupon.winners_limit:
-            cupon.active = 0
-            await session.commit()
-            await update.message.reply_text("⚠️ Ya no hay recompensas disponibles para este cupón.")
-            return
-        res_user = await session.execute(select(User).where(User.telegram_id == user_id))
-        user = res_user.scalars().first()
-        if user:
-            user.balance = (user.balance or 0) + reward
-            mov = Movimiento(telegram_id=user_id,
-                             detalle=f"Cobro cupón {code}", puntos=reward)
-            session.add(mov)
-            await session.commit()
-        await update.message.reply_text(f"✅ Cupón {code} cobrado. Recibiste {reward} puntos.")
 
 # --- Acciones administrativas propuestas por subadmin ---
 
