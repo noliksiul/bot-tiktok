@@ -282,11 +282,13 @@ async def notify_user(context: ContextTypes.DEFAULT_TYPE, chat_id: int, text: st
         await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup)
     except Exception as e:
         print("Aviso: no se pudo notificar al usuario:", e)
+
 # --- Cupones: subir cupón (admin/subadmin) ---
 
 
 async def subir_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # /subir_cupon <puntos> <ganadores> <codigo>
+
+    # Uso: /subir_cupon <puntos> <ganadores> <codigo>
     if update.message is None:
         return
     args = context.args
@@ -326,9 +328,11 @@ async def subir_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await session.commit()
 
     await update.message.reply_text(
-        f"✅ Cupón creado:\n• Código: {codigo}\n• Puntos: {puntos:.2f}\n• Ganadores: {ganadores}",
+        f"✅ Se subió cupón con éxito\n• Código: {codigo}\n• Puntos: {puntos:.2f}\n• Ganadores: {ganadores}",
         reply_markup=back_to_menu_keyboard()
     )
+
+
 # --- Tarea periódica: auto-acreditación ---
 AUTO_APPROVE_INTERVAL_SECONDS = 60
 AUTO_APPROVE_AFTER_DAYS = 2
@@ -435,7 +439,9 @@ async def show_main_menu(update_or_query, context, message="🏠 Menú principal
                               callback_data="balance")],
         [InlineKeyboardButton("🔗 Mi link de referido",
                               callback_data="mi_ref_link")],
-        [InlineKeyboardButton("📋 Comandos", callback_data="comandos")]
+        [InlineKeyboardButton("📋 Comandos", callback_data="comandos")],
+        [InlineKeyboardButton("🧾 Subir cupón", callback_data="subir_cupon")],
+        [InlineKeyboardButton("💳 Cobrar cupón", callback_data="cobrar_cupon")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     if isinstance(update_or_query, Update) and getattr(update_or_query, "message", None):
@@ -594,43 +600,11 @@ async def save_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["state"] = None
     await show_main_menu(update, context)
 
-# --- Cambiar usuario TikTok propio ---
-
-
-async def cambiar_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🔄 Envía tu nuevo usuario de TikTok (debe comenzar con @).\n"
-        "Ejemplo: @lordnolik\n\n"
-        "⚠️ Recuerda que si está mal tu usuario pueden rechazar el apoyo y no obtener los puntos.",
-        reply_markup=back_to_menu_keyboard()
-    )
-    context.user_data["state"] = "cambiar_tiktok"
-
-
-async def save_new_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    tiktok_user = update.message.text.strip()
-    if not tiktok_user.startswith("@"):
-        await update.message.reply_text(
-            "⚠️ Tu usuario de TikTok debe comenzar con @. Ejemplo: @lordnolik\n"
-            "Recuerda que si está mal tu usuario pueden rechazar el apoyo y no obtener los puntos.",
-            reply_markup=back_to_menu_keyboard()
-        )
-        return
-    async with async_session() as session:
-        res = await session.execute(select(User).where(User.telegram_id == update.effective_user.id))
-        user = res.scalars().first()
-        if user:
-            user.tiktok_user = tiktok_user
-            await session.commit()
-    await update.message.reply_text(f"✅ Usuario TikTok actualizado: {tiktok_user}", reply_markup=back_to_menu_keyboard())
-    context.user_data["state"] = None
-    await show_main_menu(update, context)
-
-    # --- Cupones: cobrar cupón (usuarios) ---
+# --- Cupones: cobrar cupón (usuarios) ---
 
 
 async def cobrar_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # /cobrar_cupon <codigo>
+    # Uso: /cobrar_cupon <codigo>
     if update.message is None:
         return
     args = context.args
@@ -672,9 +646,43 @@ async def cobrar_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await session.commit()
 
     await update.message.reply_text(
-        f"✅ Cupón {codigo} cobrado. Sumaste {cupon.puntos:.2f} puntos.",
+        f"✅ Se cobró cupón con éxito\n• Código: {codigo}\n• Puntos sumados: {cupon.puntos:.2f}",
         reply_markup=back_to_menu_keyboard()
     )
+
+
+# --- Cambiar usuario TikTok propio ---
+
+
+async def cambiar_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🔄 Envía tu nuevo usuario de TikTok (debe comenzar con @).\n"
+        "Ejemplo: @lordnolik\n\n"
+        "⚠️ Recuerda que si está mal tu usuario pueden rechazar el apoyo y no obtener los puntos.",
+        reply_markup=back_to_menu_keyboard()
+    )
+    context.user_data["state"] = "cambiar_tiktok"
+
+
+async def save_new_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    tiktok_user = update.message.text.strip()
+    if not tiktok_user.startswith("@"):
+        await update.message.reply_text(
+            "⚠️ Tu usuario de TikTok debe comenzar con @. Ejemplo: @lordnolik\n"
+            "Recuerda que si está mal tu usuario pueden rechazar el apoyo y no obtener los puntos.",
+            reply_markup=back_to_menu_keyboard()
+        )
+        return
+    async with async_session() as session:
+        res = await session.execute(select(User).where(User.telegram_id == update.effective_user.id))
+        user = res.scalars().first()
+        if user:
+            user.tiktok_user = tiktok_user
+            await session.commit()
+    await update.message.reply_text(f"✅ Usuario TikTok actualizado: {tiktok_user}", reply_markup=back_to_menu_keyboard())
+    context.user_data["state"] = None
+    await show_main_menu(update, context)
+
 
 # --- Subir seguimiento ---
 
@@ -1946,6 +1954,18 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         action_id = int(data.split("_")[-1])
         await reject_admin_action(query, context, action_id)
 
+    elif data == "subir_cupon":
+        await query.edit_message_text(
+            "✍️ Envía el comando:\n/subir_cupon <puntos> <ganadores> <codigo>\n\nEjemplo:\n/subir_cupon 2.5 100 BIENVENIDO2026",
+            reply_markup=back_to_menu_keyboard()
+        )
+
+    elif data == "cobrar_cupon":
+        await query.edit_message_text(
+            "💳 Envía el comando:\n/cobrar_cupon <codigo>\n\nEjemplo:\n/cobrar_cupon BIENVENIDO2026",
+            reply_markup=back_to_menu_keyboard()
+        )
+
     # --- Callback principal (menú y acciones) ---
     elif data == "menu_principal":
         await show_main_menu(query, context)
@@ -2075,8 +2095,7 @@ application.add_handler(CommandHandler("subir_cupon", subir_cupon))
 application.add_handler(CommandHandler("cobrar_cupon", cobrar_cupon))
 application.add_handler(CommandHandler("mi_ref_link", cmd_my_ref_link))
 application.add_handler(CommandHandler("comandos", comandos))
-application.add_handler(CommandHandler("subir_cupon", subir_cupon))
-application.add_handler(CommandHandler("cobrar_cupon", cobrar_cupon))
+
 
 application.add_handler(MessageHandler(
     filters.TEXT & ~filters.COMMAND, text_handler))
