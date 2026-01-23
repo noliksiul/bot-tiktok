@@ -453,7 +453,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         token = args[0]
         if token.startswith("ref_"):
             ref_code = token.replace("ref_", "").strip()
-
     async with async_session() as session:
         try:
             res = await session.execute(select(User).where(User.telegram_id == update.effective_user.id))
@@ -464,49 +463,49 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user = res.scalars().first()
 
         if not user:
-        code = secrets.token_urlsafe(6)
-        user = User(
-            telegram_id=update.effective_user.id,
-            balance=10,
-            referral_code=code
-        )
-        if ref_code:
-            # si viene con código de referido
-            res_ref = await session.execute(select(User).where(User.referral_code == ref_code))
-            referrer = res_ref.scalars().first()
-            if referrer and referrer.telegram_id != update.effective_user.id:
-                user.referrer_id = referrer.telegram_id
-        else:
-            # ✅ Asignación automática si NO trae ref_code
-            # Reparto 3:1 entre ADMIN y subadmin
-
-            global auto_ref_counter
-            try:
-                auto_ref_counter += 1
-            except NameError:
-                auto_ref_counter = 1
-
-            if auto_ref_counter % 4 == 0:
-                # Cada 4º usuario → subadmin
-                res_sa = await session.execute(select(SubAdmin).order_by(SubAdmin.id.asc()))
-                sa = res_sa.scalars().first()
-                if sa:
-                    user.referrer_id = sa.telegram_id
-                else:
-                    user.referrer_id = ADMIN_ID   # fallback si no hay subadmin
-            else:
-                # Los otros 3 → dueño
-                user.referrer_id = ADMIN_ID
-
-        session.add(user)
-        await session.commit()
-
-        if user.referrer_id:
-            await notify_user(
-                context,
-                chat_id=user.referrer_id,
-                text=f"🎉 Nuevo referido: {update.effective_user.id} (@{update.effective_user.username or 'sin_username'}) se registró con tu link."
+            code = secrets.token_urlsafe(6)
+            user = User(
+                telegram_id=update.effective_user.id,
+                balance=10,
+                referral_code=code
             )
+            if ref_code:
+                # si viene con código de referido
+                res_ref = await session.execute(select(User).where(User.referral_code == ref_code))
+                referrer = res_ref.scalars().first()
+                if referrer and referrer.telegram_id != update.effective_user.id:
+                    user.referrer_id = referrer.telegram_id
+            else:
+                # ✅ Asignación automática si NO trae ref_code
+                # Reparto 3:1 entre ADMIN y subadmin
+
+                global auto_ref_counter
+                try:
+                    auto_ref_counter += 1
+                except NameError:
+                    auto_ref_counter = 1
+
+                if auto_ref_counter % 4 == 0:
+                    # Cada 4º usuario → subadmin
+                    res_sa = await session.execute(select(SubAdmin).order_by(SubAdmin.id.asc()))
+                    sa = res_sa.scalars().first()
+                    if sa:
+                        user.referrer_id = sa.telegram_id
+                    else:
+                        user.referrer_id = ADMIN_ID   # fallback si no hay subadmin
+                else:
+                    # Los otros 3 → dueño
+                    user.referrer_id = ADMIN_ID
+
+            session.add(user)
+            await session.commit()
+
+            if user.referrer_id:
+                await notify_user(
+                    context,
+                    chat_id=user.referrer_id,
+                    text=f"🎉 Nuevo referido: {update.effective_user.id} (@{update.effective_user.username or 'sin_username'}) se registró con tu link."
+                )
     # Bienvenida sin saldo y sin botón extra
     nombre = update.effective_user.first_name or ""
     usuario = f"@{update.effective_user.username}" if update.effective_user.username else ""
