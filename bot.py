@@ -423,8 +423,8 @@ async def show_main_menu(update_or_query, context, message="🏠 Menú principal
         [InlineKeyboardButton("🎥 Subir video", callback_data="subir_video")],
         [InlineKeyboardButton("👀 Ver seguimiento",
                               callback_data="ver_seguimiento")],
-        [InlineKeyboardButton("📺 Ver video", callback_data="ver_video")],
         [InlineKeyboardButton("📡 Subir live", callback_data="subir_live")],
+        [InlineKeyboardButton("📺 Ver video", callback_data="ver_video")],
         [InlineKeyboardButton("🔴 Ver live en vivo", callback_data="ver_live")],
         [InlineKeyboardButton("💰 Balance e historial",
                               callback_data="balance")],
@@ -911,10 +911,12 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
 
     seg = rows[0]
     keyboard = [
+        [InlineKeyboardButton("🔗 Ir al perfil", url=seg.link)],
         [InlineKeyboardButton(
-            "🟡 Ya lo seguí ✅", callback_data=f"seguimiento_done_{seg.id}")],
-        [InlineKeyboardButton("🔙 Regresar al menú principal",
-                              callback_data="menu_principal")]
+            "✅ Ya lo seguí", callback_data=f"seguimiento_done_{seg.id}")],
+        [InlineKeyboardButton(
+            "🔙 Regresar al menú principal", callback_data="menu_principal")]
+
     ]
     texto = (
         "👀 Seguimiento disponible:\n"
@@ -964,10 +966,14 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
 
     vid = rows[0]
     keyboard = [
-        [InlineKeyboardButton("🟡 Ya apoyé (like/compartir) ⭐",
+        [InlineKeyboardButton("🔗 Ir al video", url=vid.link)],
+        [InlineKeyboardButton("⭐ Ya di like y compartí",
                               callback_data=f"video_support_done_{vid.id}")],
         [InlineKeyboardButton("🔙 Regresar al menú principal",
                               callback_data="menu_principal")]
+
+
+
     ]
     texto = (
         f"📺 Video ({vid.tipo}):\n"
@@ -975,7 +981,9 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         f"📝 {vid.descripcion}\n"
         f"🔗 {vid.link}\n"
         f"🗓️ {vid.created_at}\n\n"
-        "⚠️ Si apoyas y luego dejas de seguir, serás candidato a baneo permanente.\n"
+        "⚠️ Recuerda dar like y compartir. El dueño supervisará tu apoyo.\n\n"
+        "Pulsa el botón si ya apoyaste."
+        "⚠️ Si apoyas y luego dejas de seguir o quitas like y compartida, serás candidato a baneo permanente.\n"
         "El apoyo es mutuo y el algoritmo del bot detecta y banea a quienes dejan de seguir.\n\n"
         "❓ Dudas o ayuda: pídelas en el grupo de Telegram.\n\n"
         "Pulsa el botón si ya apoyaste."
@@ -1015,12 +1023,16 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
 
     live = rows[0]
     keyboard = [
-        [InlineKeyboardButton("👀 Solo vi el live",
-                              callback_data=f"live_view_{live.id}")],
+        [InlineKeyboardButton("🔗 Ir al live", url=live.link)],
+        [InlineKeyboardButton(
+            "👀 Ya vi el live", callback_data=f"live_view_{live.id}")],
         [InlineKeyboardButton("❤️ Vi el live y di Quiéreme",
                               callback_data=f"live_quiereme_{live.id}")],
         [InlineKeyboardButton("🔙 Regresar al menú principal",
                               callback_data="menu_principal")]
+
+
+
     ]
     texto = (
         f"🔴 Live disponible:\n"
@@ -1858,9 +1870,10 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "cobrar_cupon":
         await query.edit_message_text(
-            "💳 Envía el comando:\n/cobrar_cupon <codigo>\n\nEjemplo:\n/cobrar_cupon BIENVENIDO2026",
+            "💳 Ingresa el código del cupón:",
             reply_markup=back_to_menu_keyboard()
         )
+        context.user_data["state"] = "cobrar_cupon"
 
     # --- Callback principal (menú y acciones) ---
     elif data == "menu_principal":
@@ -1908,6 +1921,11 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await save_video_desc(update, context)
     elif state == "video_link":
         await save_video_link(update, context)
+    elif state == "cobrar_cupon":
+        context.args = [update.message.text.strip()]
+        await cobrar_cupon(update, context)
+        context.user_data["state"] = None
+
     else:
         await update.message.reply_text(
             "⚠️ Usa el menú para interactuar con el bot.\n\nSi es tu primera vez, escribe /start.",
@@ -1935,7 +1953,6 @@ async def comandos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         "• Dar 'Quiéreme' en un live para puntos extra (pendiente de validación)\n\n"
         "🎁 Cupones:\n"
         "• /subir_cupon <puntos> <ganadores> <codigo> - Crear cupón (admin o subadmin)\n"
-        "• /cobrar_cupon <codigo> - Canjear cupón\n\n"
         "🛡️ Acciones administrativas:\n"
         "• /dar_puntos <telegram_id> <cantidad> - Dar puntos (dueño directo, subadmin con aprobación)\n"
         "• /cambiar_tiktok_usuario <telegram_id> <nuevo_alias_con_@> - Cambiar alias TikTok (subadmin con aprobación)\n"
