@@ -933,6 +933,7 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
         return
 
     seg = rows[0]
+
     keyboard = [
         [InlineKeyboardButton("🔗 Ir al perfil", url=seg.link)],
         [InlineKeyboardButton(
@@ -942,7 +943,7 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
 
     ]
     # Primer mensaje: solo botón para entrar al perfil
-    texto = (
+    text = (
         "👀 Seguimiento disponible:\n"
         f"🔗 {seg.link}\n"
         f"🗓️ {seg.created_at}\n\n"
@@ -1005,7 +1006,7 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     vid = rows[0]
 
     # Primer mensaje: solo botón para entrar al video
-    texto = (
+    text = (
         f"📺 Video ({vid.tipo}):\n"
         f"📌 {vid.titulo}\n"
         f"📝 {vid.descripcion}\n"
@@ -1090,7 +1091,7 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     live = rows[0]
 
     # Primer mensaje: solo botón para entrar al live con la nota
-    texto = (
+    text = (
         f"🔴 Live disponible:\n"
         f"🔗 {live.link}\n"
         f"🗓️ {live.created_at}\n\n"
