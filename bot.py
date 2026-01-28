@@ -1002,7 +1002,7 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=back_to_menu_keyboard()
         )
         return
-        vid = rows[0]
+    vid = rows[0]
 
     # Primer mensaje: solo botón para entrar al video
     texto = (
@@ -1087,7 +1087,7 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-        live = rows[0]
+    live = rows[0]
 
     # Primer mensaje: solo botón para entrar al live con la nota
     texto = (
