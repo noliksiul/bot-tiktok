@@ -926,13 +926,13 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
 
     if not rows:
         await context.bot.send_message(
-            chat_id=chat_id,
-            text="⚠️ No hay seguimientos disponibles por ahora.",
-            reply_markup=back_to_menu_keyboard()
-        )
-        return
+        chat_id=chat_id,
+        text="⚠️ No hay seguimientos disponibles por ahora.",
+        reply_markup=back_to_menu_keyboard()
+    )
+    return
 
-    seg = rows[0]
+seg = rows[0]   # 👈 aquí va
 
     keyboard = [
         [InlineKeyboardButton("🔗 Ir al perfil", url=seg.link)],
@@ -996,15 +996,18 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         )
         rows = res.scalars().all()
 
-    if not rows:
+   if not rows:
         await context.bot.send_message(
-            chat_id=chat_id,
-            text="⚠️ No hay videos disponibles por ahora.",
-            reply_markup=back_to_menu_keyboard()
-        )
-        return
-    vid = rows[0]
+        chat_id=chat_id,
+        text="⚠️ No hay videos disponibles por ahora.",
+        reply_markup=back_to_menu_keyboard()
+    )
+    def new_func():
+    return
 
+return new_func()
+
+vid = rows[0]   # 👈 aquí va
     # Primer mensaje: solo botón para entrar al video
     text = (
         f"📺 Video ({vid.tipo}):\n"
@@ -1023,23 +1026,7 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         ])
     )
 
-    # Segundo mensaje: botón de confirmación
-    texto_confirmacion = (
-        "⭐ Cuando hayas dado like y compartido, confirma aquí:\n\n"
-        "⚠️ Si apoyas y luego dejas de seguir o quitas el like/compartida, serás candidato a baneo permanente.\n"
-        "El apoyo es mutuo y el algoritmo del bot detecta y banea a quienes dejan de seguir.\n\n"
-        "❓ Dudas o ayuda: pídelas en el grupo de Telegram."
-    )
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text=texto_confirmacion,
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("⭐ Ya di like y compartí",
-                                  callback_data=f"video_support_done_{vid.id}")],
-            [InlineKeyboardButton(
-                "🔙 Regresar al menú principal", callback_data="menu_principal")]
-        ])
-    )
+
 
     # Segundo mensaje: botón de confirmación
     texto_confirmacion = (
@@ -1082,13 +1069,15 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
 
     if not rows:
         await context.bot.send_message(
-            chat_id=chat_id,
-            text="⚠️ No hay lives disponibles por ahora.",
-            reply_markup=back_to_menu_keyboard()
-        )
-        return
+        chat_id=chat_id,
+        text="⚠️ No hay lives disponibles por ahora.",
+        reply_markup=back_to_menu_keyboard()
+    )
+    return
 
-    live = rows[0]
+live = rows[0]   # 👈 aquí va
+
+
 
     # Primer mensaje: solo botón para entrar al live con la nota
     text = (
