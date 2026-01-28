@@ -979,8 +979,7 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=back_to_menu_keyboard()
         )
         return
-
-    vid = rows[0]
+ vid = rows[0]
 
     # Primer mensaje: solo botón para entrar al video
     texto = (
@@ -999,6 +998,23 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🔗 Ir al video", url=vid.link)]
         ])
     )
+
+    # Segundo mensaje: botón de confirmación
+    texto_confirmacion = (
+        "⭐ Cuando hayas dado like y compartido, confirma aquí:\n\n"
+        "⚠️ Si apoyas y luego dejas de seguir o quitas el like/compartida, serás candidato a baneo permanente.\n"
+        "El apoyo es mutuo y el algoritmo del bot detecta y banea a quienes dejan de seguir.\n\n"
+        "❓ Dudas o ayuda: pídelas en el grupo de Telegram."
+    )
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=texto_confirmacion,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("⭐ Ya di like y compartí", callback_data=f"video_support_done_{vid.id}")],
+            [InlineKeyboardButton("🔙 Regresar al menú principal", callback_data="menu_principal")]
+        ])
+    )
+
 
     # Segundo mensaje: botón de confirmación
     texto_confirmacion = (
@@ -1047,27 +1063,14 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    live = rows[0]
-    keyboard = [
-        [InlineKeyboardButton("🔗 Ir al live", url=live.link)],
-        [InlineKeyboardButton(
-            "👀 Ya vi el live", callback_data=f"live_view_{live.id}")],
-        [InlineKeyboardButton("❤️ Vi el live y di Quiéreme",
-                              callback_data=f"live_quiereme_{live.id}")],
-        [InlineKeyboardButton("🔙 Regresar al menú principal",
-                              callback_data="menu_principal")]
-
-
-
-    ]
-    live = rows[0]
+        live = rows[0]
 
     # Primer mensaje: solo botón para entrar al live con la nota
     texto = (
         f"🔴 Live disponible:\n"
         f"🔗 {live.link}\n"
         f"🗓️ {live.created_at}\n\n"
-        f"⚠️ Debes durar al menos {LIVE_VIEW_MINUTES} minutos en el live antes de confirmar."
+        "⚠️ Debes durar al menos 2 minutos en el live antes de confirmar."
     )
     await context.bot.send_message(
         chat_id=chat_id,
@@ -1076,6 +1079,31 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🔗 Ir al live", url=live.link)]
         ])
     )
+
+    # Mensaje intermedio: si intentas confirmar antes de tiempo
+    context.job_queue.run_once(
+        lambda _: context.bot.send_message(
+            chat_id=chat_id,
+            text="⏱️ Te falta tiempo, espera a que pasen los 2 minutos completos."
+        ),
+        when=60  # al minuto avisa que falta tiempo
+    )
+
+    # Segundo mensaje: botones de confirmación después de 2 minutos
+    context.job_queue.run_once(
+        lambda _: context.bot.send_message(
+            chat_id=chat_id,
+            text="⏱️ Ya pasaron los 2 minutos, confirma tu acción:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("👀 Ya vi el live", callback_data=f"live_view_{live.id}")],
+                [InlineKeyboardButton("❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{live.id}")],
+                [InlineKeyboardButton("🔙 Regresar al menú principal", callback_data="menu_principal")]
+            ])
+        ),
+        when=120  # 2 minutos en segundos
+    )
+
+
 
     # Segundo mensaje: botones de confirmación después de 5 minutos
     context.job_queue.run_once(
@@ -1093,6 +1121,77 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         ),
         when=LIVE_VIEW_MINUTES * 60
     )
+async def handle_live_view(query, context: ContextTypes.DEFAULT_TYPE, live_id: int):
+    user_id = query.from_user.id
+    async with async_session() as session:
+        res_live = await session.execute(select(Live).where(Live.id == live_id))
+        live = res_live.scalars().first()
+        if not live:
+            await query.edit_message_text("❌ Live no encontrado.", reply_markup=back_to_menu_keyboard())
+            return
+        if live.telegram_id == user_id:
+            await query.answer("No puedes apoyar tu propio live.", show_alert=True)
+            return
+
+        # Registrar interacción automática (solo ver)
+        expires = datetime.utcnow() + timedelta(days=AUTO_APPROVE_AFTER_DAYS)
+        inter = Interaccion(
+            tipo="live_view",
+            item_id=live.id,
+            actor_id=user_id,
+            owner_id=live.telegram_id,
+            status="pending",
+            puntos=PUNTOS_LIVE_SOLO_VER,
+            expires_at=expires
+        )
+        session.add(inter)
+        await session.commit()
+
+    await query.edit_message_text("🟡 Tu apoyo fue registrado y está pendiente de aprobación del dueño.", reply_markup=back_to_menu_keyboard())
+async def handle_live_quiereme(query, context: ContextTypes.DEFAULT_TYPE, live_id: int):
+    user_id = query.from_user.id
+    async with async_session() as session:
+        res_live = await session.execute(select(Live).where(Live.id == live_id))
+        live = res_live.scalars().first()
+        if not live:
+            await query.edit_message_text("❌ Live no encontrado.", reply_markup=back_to_menu_keyboard())
+            return
+        if live.telegram_id == user_id:
+            await query.answer("No puedes apoyar tu propio live.", show_alert=True)
+            return
+
+        expires = datetime.utcnow() + timedelta(days=AUTO_APPROVE_AFTER_DAYS)
+        inter = Interaccion(
+            tipo="live_quiereme",
+            item_id=live.id,
+            actor_id=user_id,
+            owner_id=live.telegram_id,
+            status="pending",
+            puntos=PUNTOS_LIVE_SOLO_VER + PUNTOS_LIVE_QUIEREME_EXTRA,
+            expires_at=expires
+        )
+        session.add(inter)
+        await session.commit()
+
+        # Notificar al dueño para aprobar/rechazar
+        await notify_user(
+            context,
+            chat_id=live.telegram_id,
+            text=(
+                f"📩 Nuevo apoyo a tu live:\n"
+                f"Item ID: {live.id}\n"
+                f"Actor: {user_id}\n"
+                f"Puntos: {PUNTOS_LIVE_SOLO_VER + PUNTOS_LIVE_QUIEREME_EXTRA}\n\n"
+                "¿Apruebas?"
+            ),
+            reply_markup=yes_no_keyboard(
+                callback_yes=f"approve_interaction_{inter.id}",
+                callback_no=f"reject_interaction_{inter.id}"
+            )
+        )
+
+    await query.edit_message_text("🟡 Tu apoyo fue registrado y está pendiente de aprobación del dueño.", reply_markup=back_to_menu_keyboard())
+
 
 
 # --- Registrar interacción de seguimiento (notifica con TikTok del actor) ---
