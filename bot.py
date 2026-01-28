@@ -942,7 +942,7 @@ keyboard = [
 
     ]
     # Primer mensaje: solo botón para entrar al perfil
-    text = (
+text = (
         "👀 Seguimiento disponible:\n"
         f"🔗 {seg.link}\n"
         f"🗓️ {seg.created_at}\n\n"
