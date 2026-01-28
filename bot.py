@@ -1002,14 +1002,13 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         text="⚠️ No hay videos disponibles por ahora.",
         reply_markup=back_to_menu_keyboard()
     )
-    def new_func():
-    return
+     return
 
-return new_func()
+
 
 vid = rows[0]   # 👈 aquí va
     # Primer mensaje: solo botón para entrar al video
-    text = (
+text = (
         f"📺 Video ({vid.tipo}):\n"
         f"📌 {vid.titulo}\n"
         f"📝 {vid.descripcion}\n"
@@ -1028,23 +1027,24 @@ vid = rows[0]   # 👈 aquí va
 
 
 
-    # Segundo mensaje: botón de confirmación
     texto_confirmacion = (
-        "⭐ Cuando hayas dado like y compartido, confirma aquí:\n\n"
-        "⚠️ Si apoyas y luego dejas de seguir o quitas el like/compartida, serás candidato a baneo permanente.\n"
-        "El apoyo es mutuo y el algoritmo del bot detecta y banea a quienes dejan de seguir.\n\n"
-        "❓ Dudas o ayuda: pídelas en el grupo de Telegram."
-    )
-    await context.bot.send_message(
+    "⭐ Cuando hayas dado like y compartido, confirma aquí:\n\n"
+    "⚠️ Si apoyas y luego dejas de seguir o quitas el like/compartida, serás candidato a baneo permanente.\n"
+    "El apoyo es mutuo y el algoritmo del bot detecta y banea a quienes dejan de seguir.\n\n"
+    "❓ Dudas o ayuda: pídelas en el grupo de Telegram."
+)
+
+    context.job_queue.run_once(
+    lambda _: context.bot.send_message(
         chat_id=chat_id,
         text=texto_confirmacion,
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("⭐ Ya di like y compartí",
-                                  callback_data=f"video_support_done_{vid.id}")],
-            [InlineKeyboardButton(
-                "🔙 Regresar al menú principal", callback_data="menu_principal")]
+            [InlineKeyboardButton("⭐ Ya di like y compartí", callback_data=f"video_support_done_{vid.id}")],
+            [InlineKeyboardButton("🔙 Regresar al menú principal", callback_data="menu_principal")]
         ])
-    )
+    ),
+    when=30   # segundos de espera antes de mostrar confirmación
+)
 
 
 # --- Ver lives (no propios, solo una vez) ---
