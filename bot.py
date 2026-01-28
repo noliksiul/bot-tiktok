@@ -918,17 +918,33 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
             "🔙 Regresar al menú principal", callback_data="menu_principal")]
 
     ]
+    # Primer mensaje: solo botón para entrar al perfil
     texto = (
         "👀 Seguimiento disponible:\n"
         f"🔗 {seg.link}\n"
         f"🗓️ {seg.created_at}\n\n"
-        "Pulsa el botón si ya seguiste."
+        "Primero entra al perfil y sigue al usuario."
     )
     await context.bot.send_message(
         chat_id=chat_id,
-        text=texto,
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        texto=texto,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔗 Ir al perfil", url=seg.link)]
+        ])
     )
+
+    # Segundo mensaje: botón de confirmación
+    await context.bot.send_message(
+        chat_id=chat_id,
+        texto="✅ Cuando hayas seguido, confirma aquí:",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton(
+                "✅ Ya lo seguí", callback_data=f"seguimiento_done_{seg.id}")],
+            [InlineKeyboardButton(
+                "🔙 Regresar al menú principal", callback_data="menu_principal")]
+        ])
+    )
+
 
 # --- Ver videos (no propios, solo una vez) ---
 
@@ -965,16 +981,8 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         return
 
     vid = rows[0]
-    keyboard = [
-        [InlineKeyboardButton("🔗 Ir al video", url=vid.link)],
-        [InlineKeyboardButton("⭐ Ya di like y compartí",
-                              callback_data=f"video_support_done_{vid.id}")],
-        [InlineKeyboardButton("🔙 Regresar al menú principal",
-                              callback_data="menu_principal")]
 
-
-
-    ]
+    # Primer mensaje: solo botón para entrar al video
     texto = (
         f"📺 Video ({vid.tipo}):\n"
         f"📌 {vid.titulo}\n"
@@ -982,17 +990,35 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         f"🔗 {vid.link}\n"
         f"🗓️ {vid.created_at}\n\n"
         "⚠️ Recuerda dar like y compartir. El dueño supervisará tu apoyo.\n\n"
-        "Pulsa el botón si ya apoyaste."
-        "⚠️ Si apoyas y luego dejas de seguir o quitas like y compartida, serás candidato a baneo permanente.\n"
-        "El apoyo es mutuo y el algoritmo del bot detecta y banea a quienes dejan de seguir.\n\n"
-        "❓ Dudas o ayuda: pídelas en el grupo de Telegram.\n\n"
-        "Pulsa el botón si ya apoyaste."
+        "Primero entra al video y apóyalo."
     )
     await context.bot.send_message(
         chat_id=chat_id,
         text=texto,
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔗 Ir al video", url=vid.link)]
+        ])
     )
+
+    # Segundo mensaje: botón de confirmación
+    texto_confirmacion = (
+        "⭐ Cuando hayas dado like y compartido, confirma aquí:\n\n"
+        "⚠️ Si apoyas y luego dejas de seguir o quitas el like/compartida, serás candidato a baneo permanente.\n"
+        "El apoyo es mutuo y el algoritmo del bot detecta y banea a quienes dejan de seguir.\n\n"
+        "❓ Dudas o ayuda: pídelas en el grupo de Telegram."
+    )
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=texto_confirmacion,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("⭐ Ya di like y compartí",
+                                  callback_data=f"video_support_done_{vid.id}")],
+            [InlineKeyboardButton(
+                "🔙 Regresar al menú principal", callback_data="menu_principal")]
+        ])
+    )
+
+
 # --- Ver lives (no propios, solo una vez) ---
 
 
@@ -1034,20 +1060,40 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
 
 
     ]
+    live = rows[0]
+
+    # Primer mensaje: solo botón para entrar al live con la nota
     texto = (
         f"🔴 Live disponible:\n"
         f"🔗 {live.link}\n"
         f"🗓️ {live.created_at}\n\n"
-        f"Recuerda durar {LIVE_VIEW_MINUTES} minutos en el live.\n"
-        "Puedes escoger solo una opción:\n"
-        f"• 👀 Solo vi el live → {PUNTOS_LIVE_SOLO_VER} puntos automáticos\n"
-        f"• ❤️ Vi el live y di 'Quiéreme' → {PUNTOS_LIVE_SOLO_VER} + {PUNTOS_LIVE_QUIEREME_EXTRA} puntos (requiere autorización del dueño)"
+        f"⚠️ Debes durar al menos {LIVE_VIEW_MINUTES} minutos en el live antes de confirmar."
     )
     await context.bot.send_message(
         chat_id=chat_id,
         text=texto,
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔗 Ir al live", url=live.link)]
+        ])
     )
+
+    # Segundo mensaje: botones de confirmación después de 5 minutos
+    context.job_queue.run_once(
+        lambda _: context.bot.send_message(
+            chat_id=chat_id,
+            text="⏱️ Ya pasaron los 5 minutos, confirma tu acción:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "👀 Ya vi el live", callback_data=f"live_view_{live.id}")],
+                [InlineKeyboardButton(
+                    "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{live.id}")],
+                [InlineKeyboardButton(
+                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
+            ])
+        ),
+        when=LIVE_VIEW_MINUTES * 60
+    )
+
 
 # --- Registrar interacción de seguimiento (notifica con TikTok del actor) ---
 
