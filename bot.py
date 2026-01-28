@@ -933,8 +933,7 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
     return
 
 seg = rows[0]   # 👈 aquí va
-
-    keyboard = [
+keyboard = [
         [InlineKeyboardButton("🔗 Ir al perfil", url=seg.link)],
         [InlineKeyboardButton(
             "✅ Ya lo seguí", callback_data=f"seguimiento_done_{seg.id}")],
