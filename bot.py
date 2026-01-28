@@ -926,47 +926,47 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
 
     if not rows:
         await context.bot.send_message(
-        chat_id=chat_id,
-        text="⚠️ No hay seguimientos disponibles por ahora.",
-        reply_markup=back_to_menu_keyboard()
-    )
+            chat_id=chat_id,
+            text="⚠️ No hay seguimientos disponibles por ahora.",
+            reply_markup=back_to_menu_keyboard()
+        )
     return
 
 seg = rows[0]   # 👈 aquí va
 keyboard = [
-        [InlineKeyboardButton("🔗 Ir al perfil", url=seg.link)],
+    [InlineKeyboardButton("🔗 Ir al perfil", url=seg.link)],
+    [InlineKeyboardButton(
+        "✅ Ya lo seguí", callback_data=f"seguimiento_done_{seg.id}")],
+    [InlineKeyboardButton(
+        "🔙 Regresar al menú principal", callback_data="menu_principal")]
+
+]
+# Primer mensaje: solo botón para entrar al perfil
+text = (
+    "👀 Seguimiento disponible:\n"
+    f"🔗 {seg.link}\n"
+    f"🗓️ {seg.created_at}\n\n"
+    "Primero entra al perfil y sigue al usuario."
+)
+await context.bot.send_message(
+    chat_id=chat_id,
+    texto=texto,
+    reply_markup=InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔗 Ir al perfil", url=seg.link)]
+    ])
+)
+
+# Segundo mensaje: botón de confirmación
+await context.bot.send_message(
+    chat_id=chat_id,
+    texto="✅ Cuando hayas seguido, confirma aquí:",
+    reply_markup=InlineKeyboardMarkup([
         [InlineKeyboardButton(
             "✅ Ya lo seguí", callback_data=f"seguimiento_done_{seg.id}")],
         [InlineKeyboardButton(
             "🔙 Regresar al menú principal", callback_data="menu_principal")]
-
-    ]
-    # Primer mensaje: solo botón para entrar al perfil
-text = (
-        "👀 Seguimiento disponible:\n"
-        f"🔗 {seg.link}\n"
-        f"🗓️ {seg.created_at}\n\n"
-        "Primero entra al perfil y sigue al usuario."
-    )
-await context.bot.send_message(
-        chat_id=chat_id,
-        texto=texto,
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔗 Ir al perfil", url=seg.link)]
-        ])
-    )
-
-    # Segundo mensaje: botón de confirmación
-await context.bot.send_message(
-        chat_id=chat_id,
-        texto="✅ Cuando hayas seguido, confirma aquí:",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(
-                "✅ Ya lo seguí", callback_data=f"seguimiento_done_{seg.id}")],
-            [InlineKeyboardButton(
-                "🔙 Regresar al menú principal", callback_data="menu_principal")]
-        ])
-    )
+    ])
+)
 
 
 # --- Ver videos (no propios, solo una vez) ---
@@ -995,51 +995,50 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         )
         rows = res.scalars().all()
 
-   if not rows:
+    if not rows:
         await context.bot.send_message(
-        chat_id=chat_id,
-        text="⚠️ No hay videos disponibles por ahora.",
-        reply_markup=back_to_menu_keyboard()
-    )
-     return
-
+            chat_id=chat_id,
+            text="⚠️ No hay videos disponibles por ahora.",
+            reply_markup=back_to_menu_keyboard()
+        )
+        return
 
 
 vid = rows[0]   # 👈 aquí va
-    # Primer mensaje: solo botón para entrar al video
+# Primer mensaje: solo botón para entrar al video
 text = (
-        f"📺 Video ({vid.tipo}):\n"
-        f"📌 {vid.titulo}\n"
-        f"📝 {vid.descripcion}\n"
-        f"🔗 {vid.link}\n"
-        f"🗓️ {vid.created_at}\n\n"
-        "⚠️ Recuerda dar like y compartir. El dueño supervisará tu apoyo.\n\n"
-        "Primero entra al video y apóyalo."
-    )
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text=texto,
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔗 Ir al video", url=vid.link)]
-        ])
-    )
+    f"📺 Video ({vid.tipo}):\n"
+    f"📌 {vid.titulo}\n"
+    f"📝 {vid.descripcion}\n"
+    f"🔗 {vid.link}\n"
+    f"🗓️ {vid.created_at}\n\n"
+    "⚠️ Recuerda dar like y compartir. El dueño supervisará tu apoyo.\n\n"
+    "Primero entra al video y apóyalo."
+)
+await context.bot.send_message(
+    chat_id=chat_id,
+    text=texto,
+    reply_markup=InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔗 Ir al video", url=vid.link)]
+    ])
+)
 
-
-
-    texto_confirmacion = (
+texto_confirmacion = (
     "⭐ Cuando hayas dado like y compartido, confirma aquí:\n\n"
     "⚠️ Si apoyas y luego dejas de seguir o quitas el like/compartida, serás candidato a baneo permanente.\n"
     "El apoyo es mutuo y el algoritmo del bot detecta y banea a quienes dejan de seguir.\n\n"
     "❓ Dudas o ayuda: pídelas en el grupo de Telegram."
 )
 
-    context.job_queue.run_once(
+context.job_queue.run_once(
     lambda _: context.bot.send_message(
         chat_id=chat_id,
         text=texto_confirmacion,
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("⭐ Ya di like y compartí", callback_data=f"video_support_done_{vid.id}")],
-            [InlineKeyboardButton("🔙 Regresar al menú principal", callback_data="menu_principal")]
+            [InlineKeyboardButton("⭐ Ya di like y compartí",
+                                  callback_data=f"video_support_done_{vid.id}")],
+            [InlineKeyboardButton(
+                "🔙 Regresar al menú principal", callback_data="menu_principal")]
         ])
     ),
     when=30   # segundos de espera antes de mostrar confirmación
@@ -1068,73 +1067,71 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
 
     if not rows:
         await context.bot.send_message(
-        chat_id=chat_id,
-        text="⚠️ No hay lives disponibles por ahora.",
-        reply_markup=back_to_menu_keyboard()
-    )
+            chat_id=chat_id,
+            text="⚠️ No hay lives disponibles por ahora.",
+            reply_markup=back_to_menu_keyboard()
+        )
     return
 
 live = rows[0]   # 👈 aquí va
 
+# Primer mensaje: solo botón para entrar al live con la nota
+text = (
+    f"🔴 Live disponible:\n"
+    f"🔗 {live.link}\n"
+    f"🗓️ {live.created_at}\n\n"
+    "⚠️ Debes durar al menos 2 minutos en el live antes de confirmar."
+)
+await context.bot.send_message(
+    chat_id=chat_id,
+    text=texto,
+    reply_markup=InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔗 Ir al live", url=live.link)]
+    ])
+)
 
-
-    # Primer mensaje: solo botón para entrar al live con la nota
-    text = (
-        f"🔴 Live disponible:\n"
-        f"🔗 {live.link}\n"
-        f"🗓️ {live.created_at}\n\n"
-        "⚠️ Debes durar al menos 2 minutos en el live antes de confirmar."
-    )
-    await context.bot.send_message(
+# Mensaje intermedio: si intentas confirmar antes de tiempo
+context.job_queue.run_once(
+    lambda _: context.bot.send_message(
         chat_id=chat_id,
-        text=texto,
+        text="⏱️ Te falta tiempo, espera a que pasen los 2 minutos completos."
+    ),
+    when=60  # al minuto avisa que falta tiempo
+)
+
+# Segundo mensaje: botones de confirmación después de 2 minutos
+context.job_queue.run_once(
+    lambda _: context.bot.send_message(
+        chat_id=chat_id,
+        text="⏱️ Ya pasaron los 2 minutos, confirma tu acción:",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔗 Ir al live", url=live.link)]
+            [InlineKeyboardButton(
+                "👀 Ya vi el live", callback_data=f"live_view_{live.id}")],
+            [InlineKeyboardButton(
+                "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{live.id}")],
+            [InlineKeyboardButton(
+                "🔙 Regresar al menú principal", callback_data="menu_principal")]
         ])
-    )
+    ),
+    when=120  # 2 minutos en segundos
+)
 
-    # Mensaje intermedio: si intentas confirmar antes de tiempo
-    context.job_queue.run_once(
-        lambda _: context.bot.send_message(
-            chat_id=chat_id,
-            text="⏱️ Te falta tiempo, espera a que pasen los 2 minutos completos."
-        ),
-        when=60  # al minuto avisa que falta tiempo
-    )
-
-    # Segundo mensaje: botones de confirmación después de 2 minutos
-    context.job_queue.run_once(
-        lambda _: context.bot.send_message(
-            chat_id=chat_id,
-            text="⏱️ Ya pasaron los 2 minutos, confirma tu acción:",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(
-                    "👀 Ya vi el live", callback_data=f"live_view_{live.id}")],
-                [InlineKeyboardButton(
-                    "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{live.id}")],
-                [InlineKeyboardButton(
-                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
-            ])
-        ),
-        when=120  # 2 minutos en segundos
-    )
-
-    # Segundo mensaje: botones de confirmación después de 5 minutos
-    context.job_queue.run_once(
-        lambda _: context.bot.send_message(
-            chat_id=chat_id,
-            text="⏱️ Ya pasaron los 5 minutos, confirma tu acción:",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(
-                    "👀 Ya vi el live", callback_data=f"live_view_{live.id}")],
-                [InlineKeyboardButton(
-                    "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{live.id}")],
-                [InlineKeyboardButton(
-                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
-            ])
-        ),
-        when=LIVE_VIEW_MINUTES * 60
-    )
+# Segundo mensaje: botones de confirmación después de 5 minutos
+context.job_queue.run_once(
+    lambda _: context.bot.send_message(
+        chat_id=chat_id,
+        text="⏱️ Ya pasaron los 5 minutos, confirma tu acción:",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton(
+                "👀 Ya vi el live", callback_data=f"live_view_{live.id}")],
+            [InlineKeyboardButton(
+                "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{live.id}")],
+            [InlineKeyboardButton(
+                "🔙 Regresar al menú principal", callback_data="menu_principal")]
+        ])
+    ),
+    when=LIVE_VIEW_MINUTES * 60
+)
 
 
 async def handle_live_view(query, context: ContextTypes.DEFAULT_TYPE, live_id: int):
