@@ -948,7 +948,7 @@ text = (
         f"🗓️ {seg.created_at}\n\n"
         "Primero entra al perfil y sigue al usuario."
     )
-    await context.bot.send_message(
+await context.bot.send_message(
         chat_id=chat_id,
         texto=texto,
         reply_markup=InlineKeyboardMarkup([
@@ -957,7 +957,7 @@ text = (
     )
 
     # Segundo mensaje: botón de confirmación
-    await context.bot.send_message(
+await context.bot.send_message(
         chat_id=chat_id,
         texto="✅ Cuando hayas seguido, confirma aquí:",
         reply_markup=InlineKeyboardMarkup([
