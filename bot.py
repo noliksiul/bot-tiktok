@@ -604,8 +604,6 @@ async def save_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # --- Cupones: cobrar cupón (usuarios)# --- Guardar usuario TikTok ---
- ---
-
 
 async def cobrar_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Uso: /cobrar_cupon <codigo>
@@ -698,8 +696,6 @@ async def save_new_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     context.user_data["state"] = None
     await show_main_menu(update, context)
-
-
 
 
 # --- Subir seguimiento ---
@@ -1037,11 +1033,12 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         chat_id=chat_id,
         text=texto_confirmacion,
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("⭐ Ya di like y compartí", callback_data=f"video_support_done_{vid.id}")],
-            [InlineKeyboardButton("🔙 Regresar al menú principal", callback_data="menu_principal")]
+            [InlineKeyboardButton("⭐ Ya di like y compartí",
+                                  callback_data=f"video_support_done_{vid.id}")],
+            [InlineKeyboardButton(
+                "🔙 Regresar al menú principal", callback_data="menu_principal")]
         ])
     )
-
 
     # Segundo mensaje: botón de confirmación
     texto_confirmacion = (
@@ -1122,15 +1119,16 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
             chat_id=chat_id,
             text="⏱️ Ya pasaron los 2 minutos, confirma tu acción:",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("👀 Ya vi el live", callback_data=f"live_view_{live.id}")],
-                [InlineKeyboardButton("❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{live.id}")],
-                [InlineKeyboardButton("🔙 Regresar al menú principal", callback_data="menu_principal")]
+                [InlineKeyboardButton(
+                    "👀 Ya vi el live", callback_data=f"live_view_{live.id}")],
+                [InlineKeyboardButton(
+                    "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{live.id}")],
+                [InlineKeyboardButton(
+                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
             ])
         ),
         when=120  # 2 minutos en segundos
     )
-
-
 
     # Segundo mensaje: botones de confirmación después de 5 minutos
     context.job_queue.run_once(
@@ -1148,6 +1146,8 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         ),
         when=LIVE_VIEW_MINUTES * 60
     )
+
+
 async def handle_live_view(query, context: ContextTypes.DEFAULT_TYPE, live_id: int):
     user_id = query.from_user.id
     async with async_session() as session:
@@ -1175,6 +1175,8 @@ async def handle_live_view(query, context: ContextTypes.DEFAULT_TYPE, live_id: i
         await session.commit()
 
     await query.edit_message_text("🟡 Tu apoyo fue registrado y está pendiente de aprobación del dueño.", reply_markup=back_to_menu_keyboard())
+
+
 async def handle_live_quiereme(query, context: ContextTypes.DEFAULT_TYPE, live_id: int):
     user_id = query.from_user.id
     async with async_session() as session:
@@ -1218,7 +1220,6 @@ async def handle_live_quiereme(query, context: ContextTypes.DEFAULT_TYPE, live_i
         )
 
     await query.edit_message_text("🟡 Tu apoyo fue registrado y está pendiente de aprobación del dueño.", reply_markup=back_to_menu_keyboard())
-
 
 
 # --- Registrar interacción de seguimiento (notifica con TikTok del actor) ---
