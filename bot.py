@@ -80,8 +80,9 @@ class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True)
     telegram_id = Column(BigInteger, unique=True, index=True)
-    tiktok_user = Column(Text)
-    balance = Column(Float, default=10)   # ✅ CAMBIAR a Float
+    # 👈 CAMBIO: ahora es único
+    tiktok_user = Column(Text, unique=True, index=True)
+    balance = Column(Float, default=10)
     referrer_id = Column(BigInteger, nullable=True, index=True)
     referral_code = Column(Text, unique=True, index=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
@@ -205,7 +206,7 @@ async def migrate_db():
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_users_referrer_id ON users(referrer_id);"))
         await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_users_referral_code ON users(referral_code);"))
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id);"))
-
+        await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_users_tiktok_user ON users(tiktok_user);"))
         # users: convertir balance a FLOAT
         await conn.execute(text("ALTER TABLE users ALTER COLUMN balance TYPE FLOAT USING balance::float;"))
 
@@ -569,8 +570,6 @@ async def show_my_ref_link(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update_or_query.edit_message_text(texto, reply_markup=reply_markup)
 
-# --- Guardar usuario TikTok ---
-
 
 async def save_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tiktok_user = update.message.text.strip()
@@ -581,17 +580,31 @@ async def save_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=back_to_menu_keyboard()
         )
         return
+
     async with async_session() as session:
         res = await session.execute(select(User).where(User.telegram_id == update.effective_user.id))
         user = res.scalars().first()
         if user:
             user.tiktok_user = tiktok_user
-            await session.commit()
-    await update.message.reply_text(f"✅ Usuario TikTok registrado: {tiktok_user}", reply_markup=back_to_menu_keyboard())
+            try:
+                await session.commit()
+            except Exception:
+                await update.message.reply_text(
+                    "⚠️ Ese usuario de TikTok ya está registrado por otra persona.",
+                    reply_markup=back_to_menu_keyboard()
+                )
+                return
+
+    await update.message.reply_text(
+        f"✅ Usuario TikTok registrado: {tiktok_user}",
+        reply_markup=back_to_menu_keyboard()
+    )
     context.user_data["state"] = None
     await show_main_menu(update, context)
 
-# --- Cupones: cobrar cupón (usuarios) ---
+
+# --- Cupones: cobrar cupón (usuarios)# --- Guardar usuario TikTok ---
+ ---
 
 
 async def cobrar_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -664,15 +677,29 @@ async def save_new_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=back_to_menu_keyboard()
         )
         return
+
     async with async_session() as session:
         res = await session.execute(select(User).where(User.telegram_id == update.effective_user.id))
         user = res.scalars().first()
         if user:
             user.tiktok_user = tiktok_user
-            await session.commit()
-    await update.message.reply_text(f"✅ Usuario TikTok actualizado: {tiktok_user}", reply_markup=back_to_menu_keyboard())
+            try:
+                await session.commit()
+            except Exception:
+                await update.message.reply_text(
+                    "⚠️ Ese usuario de TikTok ya está registrado por otra persona.",
+                    reply_markup=back_to_menu_keyboard()
+                )
+                return
+
+    await update.message.reply_text(
+        f"✅ Usuario TikTok actualizado: {tiktok_user}",
+        reply_markup=back_to_menu_keyboard()
+    )
     context.user_data["state"] = None
     await show_main_menu(update, context)
+
+
 
 
 # --- Subir seguimiento ---
@@ -979,7 +1006,7 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=back_to_menu_keyboard()
         )
         return
- vid = rows[0]
+        vid = rows[0]
 
     # Primer mensaje: solo botón para entrar al video
     texto = (
