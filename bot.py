@@ -2141,6 +2141,14 @@ async def preflight():
 loop = asyncio.get_event_loop()
 loop.run_until_complete(preflight())
 
+# --- Función de inicio para job_queue ---
+
+
+async def on_startup(app: Application):
+    # Solo dejamos la tarea de auto-aprobación
+    app.job_queue.run_repeating(lambda _: auto_approve_loop(app),
+                                interval=AUTO_APPROVE_INTERVAL_SECONDS, first=5)
+
 # ✅ Opción 1: definir on_startup antes de construir la aplicación
 
 application = Application.builder().token(
