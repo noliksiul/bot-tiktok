@@ -956,7 +956,7 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
                     "🔙 Regresar al menú principal", callback_data="menu_principal")]
             ])
         ),
-        when=30   # segundos de espera antes de mostrar confirmación
+        when=20   # segundos de espera antes de mostrar confirmación
     )
 
 # --- Ver videos (no propios, solo una vez) ---
@@ -1033,7 +1033,7 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                     "🔙 Regresar al menú principal", callback_data="menu_principal")]
             ])
         ),
-        when=30   # segundos de espera antes de mostrar confirmación
+        when=20   # segundos de espera antes de mostrar confirmación
     )
 
 # --- Ver lives (no propios, solo una vez) ---
