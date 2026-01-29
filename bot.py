@@ -913,12 +913,6 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
         res = await session.execute(
             select(Seguimiento)
             .where(Seguimiento.telegram_id != user_id)
-            .where(~Seguimiento.id.in_(
-                select(Interaccion.item_id).where(
-                    Interaccion.tipo == "seguimiento",
-                    Interaccion.actor_id == user_id
-                )
-            ))
             .order_by(Seguimiento.created_at.desc())
         )
         rows = res.scalars().all()
@@ -929,7 +923,7 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
             text="⚠️ No hay seguimientos disponibles por ahora.",
             reply_markup=back_to_menu_keyboard()
         )
-        return   # 👈 el return debe estar dentro del if
+        return
 
     seg = rows[0]
 
@@ -938,9 +932,10 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
         f"🔗 {seg.link}\n"
         f"🗓️ {seg.created_at}\n\n"
         "Primero entra al perfil y sigue al usuario."
+        "Recuerda no dejar de seguir inmediatamente despues de ganar los puntos,si lo hacen y te detecta algorimo puede ser baneo permanente."
     )
 
-    # Primer mensaje: botón para entrar al perfil
+# Primer mensaje: solo botón para entrar al perfil
     await context.bot.send_message(
         chat_id=chat_id,
         text=texto,
@@ -949,16 +944,19 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
         ])
     )
 
-    # Segundo mensaje: botón de confirmación
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text="✅ Cuando hayas seguido, confirma aquí:",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(
-                "✅ Ya lo seguí", callback_data=f"seguimiento_done_{seg.id}")],
-            [InlineKeyboardButton(
-                "🔙 Regresar al menú principal", callback_data="menu_principal")]
-        ])
+    # Mensaje de confirmación diferido (ejemplo: después de 30 segundos)
+    context.job_queue.run_once(
+        lambda _: context.bot.send_message(
+            chat_id=chat_id,
+            text="✅ Cuando hayas seguido, confirma aquí:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "✅ Ya lo seguí", callback_data=f"seguimiento_done_{seg.id}")],
+                [InlineKeyboardButton(
+                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
+            ])
+        ),
+        when=30   # segundos de espera antes de mostrar confirmación
     )
 
 # --- Ver videos (no propios, solo una vez) ---
