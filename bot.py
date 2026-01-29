@@ -1115,6 +1115,31 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         ),
         when=LIVE_VIEW_MINUTES * 60
     )
+    # acreditar puntos al actor
+
+
+async def handle_live_view(query, context: ContextTypes.DEFAULT_TYPE, live_id: int):
+    user_id = query.from_user.id
+    async with async_session() as session:
+        res_live = await session.execute(select(Live).where(Live.id == live_id))
+        live = res_live.scalars().first()
+        if not live:
+            await query.edit_message_text("❌ Live no encontrado.", reply_markup=back_to_menu_keyboard())
+            return
+        if live.telegram_id == user_id:
+            await query.answer("No puedes apoyar tu propio live.", show_alert=True)
+            return
+
+        # Registrar interacción automática (aprobada de inmediato)
+        inter = Interaccion(
+            tipo="live_view",
+            item_id=live.id,
+            actor_id=user_id,
+            owner_id=live.telegram_id,
+            status="accepted",   # 👈 directo a aceptado
+            puntos=PUNTOS_LIVE_SOLO_VER
+        )
+        session.add(inter)
 
 
 async def handle_live_quiereme(query, context: ContextTypes.DEFAULT_TYPE, live_id: int):
