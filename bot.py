@@ -384,33 +384,33 @@ async def auto_approve_loop(application: Application):
 # --- Resumen semanal de referidos ---
 
 
-async def referral_weekly_summary_loop(application: Application):
-    await asyncio.sleep(10)
-    while True:
-        try:
-            async with async_session() as session:
-                since = datetime.utcnow() - timedelta(days=7)
-                res = await session.execute(
-                    select(Movimiento.telegram_id, func.sum(Movimiento.puntos))
-                    .where(Movimiento.detalle.like("%Bonus por referido%"))
-                    .where(Movimiento.created_at >= since)
-                    .group_by(Movimiento.telegram_id)
-                )
-                rows = res.all()
-                for chat_id, total in rows:
-                    if total and total > 0:
-                        try:
-                            await application.bot.send_message(
-                                chat_id=chat_id,
-                                text=f"📊 Resumen semanal: ganaste {total:.2f} puntos por referidos en los últimos 7 días.",
-                                reply_markup=back_to_menu_keyboard()
-                            )
+async def referral_weekly_summary(update_or_query, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update_or_query.effective_user.id if isinstance(
+        update_or_query, Update) else update_or_query.from_user.id
 
-                        except Exception as e:
-                            print("Aviso: no se pudo enviar resumen semanal:", e)
-        except Exception as e:
-            print("Error en referral_weekly_summary_loop:", e)
-        await asyncio.sleep(3600 * 24 * 7)  # cada semana
+    async with async_session() as session:
+        since = datetime.utcnow() - timedelta(days=7)
+        res = await session.execute(
+            select(Movimiento.telegram_id, func.sum(Movimiento.puntos))
+            .where(Movimiento.detalle.like("%Bonus por referido%"))
+            .where(Movimiento.created_at >= since)
+            .group_by(Movimiento.telegram_id)
+        )
+        rows = res.all()
+
+    if not rows:
+        texto = "⚠️ No hay puntos por referidos en los últimos 7 días."
+    else:
+        texto = "📊 Resumen semanal de referidos:\n"
+        for chat_id, total in rows:
+            if total and total > 0 and chat_id == user_id:
+                texto += f"- Ganaste {total:.2f} puntos por referidos.\n"
+
+    reply_markup = back_to_menu_keyboard()
+    if isinstance(update_or_query, Update):
+        await update_or_query.message.reply_text(texto, reply_markup=reply_markup)
+    else:
+        await update_or_query.edit_message_text(texto, reply_markup=reply_markup)
 
 # bot.py (Parte 2/5)
 
@@ -422,10 +422,10 @@ async def show_main_menu(update_or_query, context, message="🏠 Menú principal
         [InlineKeyboardButton("📈 Subir seguimiento",
                               callback_data="subir_seguimiento")],
         [InlineKeyboardButton("🎥 Subir video", callback_data="subir_video")],
-        [InlineKeyboardButton("👀 Ver seguimiento",
-                              callback_data="ver_seguimiento")],
         [InlineKeyboardButton("📡 Subir live", callback_data="subir_live")],
         [InlineKeyboardButton("📺 Ver video", callback_data="ver_video")],
+        [InlineKeyboardButton("👀 Ver seguimiento",
+                              callback_data="ver_seguimiento")],
         [InlineKeyboardButton("🔴 Ver live en vivo", callback_data="ver_live")],
         [InlineKeyboardButton("💰 Balance e historial",
                               callback_data="balance")],
@@ -434,6 +434,8 @@ async def show_main_menu(update_or_query, context, message="🏠 Menú principal
         [InlineKeyboardButton("📋 Comandos", callback_data="comandos")],
         [InlineKeyboardButton("🧾 Subir cupón", callback_data="subir_cupon")],
         [InlineKeyboardButton("💳 Cobrar cupón", callback_data="cobrar_cupon")],
+        [InlineKeyboardButton("📊 Resumen semanal referidos",
+                              callback_data="resumen_referidos")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     if isinstance(update_or_query, Update) and getattr(update_or_query, "message", None):
@@ -1140,6 +1142,21 @@ async def handle_live_view(query, context: ContextTypes.DEFAULT_TYPE, live_id: i
             puntos=PUNTOS_LIVE_SOLO_VER
         )
         session.add(inter)
+
+        # acreditar puntos al actor
+        res_actor = await session.execute(select(User).where(User.telegram_id == user_id))
+        actor = res_actor.scalars().first()
+        if actor:
+            actor.balance = (actor.balance or 0) + PUNTOS_LIVE_SOLO_VER
+            session.add(Movimiento(
+                telegram_id=user_id,
+                detalle="Apoyo live (solo ver)",
+                puntos=PUNTOS_LIVE_SOLO_VER
+            ))
+
+        await session.commit()   # 👈 faltaba el commit
+
+    await query.edit_message_text("✅ Tu apoyo de ver el live fue acreditado automáticamente.", reply_markup=back_to_menu_keyboard())
 
 
 async def handle_live_quiereme(query, context: ContextTypes.DEFAULT_TYPE, live_id: int):
@@ -2040,8 +2057,12 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         live_id = int(data.split("_")[-1])
         await handle_live_quiereme(query, context, live_id)
 
+    elif data == "resumen_referidos":
+    await referral_weekly_summary(query, context)
 
 # --- Handler de texto principal ---
+
+
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
@@ -2121,14 +2142,6 @@ loop = asyncio.get_event_loop()
 loop.run_until_complete(preflight())
 
 # ✅ Opción 1: definir on_startup antes de construir la aplicación
-
-
-async def on_startup(app: Application):
-    app.job_queue.run_repeating(lambda _: auto_approve_loop(app),
-                                interval=AUTO_APPROVE_INTERVAL_SECONDS, first=5)
-    app.job_queue.run_repeating(lambda _: referral_weekly_summary_loop(app),
-                                interval=3600*24*7, first=10)
-
 
 application = Application.builder().token(
     BOT_TOKEN).post_init(on_startup).build()
