@@ -1062,7 +1062,7 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
             text="⚠️ No hay lives disponibles por ahora.",
             reply_markup=back_to_menu_keyboard()
         )
-        return   # 👈 el return debe estar dentro del if
+        return
 
     live = rows[0]
 
@@ -1082,16 +1082,7 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         ])
     )
 
-    # Mensaje intermedio: aviso al minuto
-    context.job_queue.run_once(
-        lambda _: context.bot.send_message(
-            chat_id=chat_id,
-            text="⏱️ Te falta tiempo, espera a que pasen los 2 minutos completos."
-        ),
-        when=60
-    )
-
-    # Segundo mensaje: confirmación después de 2 minutos
+    # Confirmación después de 2 minutos
     context.job_queue.run_once(
         lambda _: context.bot.send_message(
             chat_id=chat_id,
@@ -1126,35 +1117,6 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def handle_live_view(query, context: ContextTypes.DEFAULT_TYPE, live_id: int):
-    user_id = query.from_user.id
-    async with async_session() as session:
-        res_live = await session.execute(select(Live).where(Live.id == live_id))
-        live = res_live.scalars().first()
-        if not live:
-            await query.edit_message_text("❌ Live no encontrado.", reply_markup=back_to_menu_keyboard())
-            return
-        if live.telegram_id == user_id:
-            await query.answer("No puedes apoyar tu propio live.", show_alert=True)
-            return
-
-        # Registrar interacción automática (solo ver)
-        expires = datetime.utcnow() + timedelta(days=AUTO_APPROVE_AFTER_DAYS)
-        inter = Interaccion(
-            tipo="live_view",
-            item_id=live.id,
-            actor_id=user_id,
-            owner_id=live.telegram_id,
-            status="pending",
-            puntos=PUNTOS_LIVE_SOLO_VER,
-            expires_at=expires
-        )
-        session.add(inter)
-        await session.commit()
-
-    await query.edit_message_text("🟡 Tu apoyo fue registrado y está pendiente de aprobación del dueño.", reply_markup=back_to_menu_keyboard())
-
-
 async def handle_live_quiereme(query, context: ContextTypes.DEFAULT_TYPE, live_id: int):
     user_id = query.from_user.id
     async with async_session() as session:
@@ -1167,18 +1129,20 @@ async def handle_live_quiereme(query, context: ContextTypes.DEFAULT_TYPE, live_i
             await query.answer("No puedes apoyar tu propio live.", show_alert=True)
             return
 
-        expires = datetime.utcnow() + timedelta(days=AUTO_APPROVE_AFTER_DAYS)
         inter = Interaccion(
             tipo="live_quiereme",
             item_id=live.id,
             actor_id=user_id,
             owner_id=live.telegram_id,
             status="pending",
-            puntos=PUNTOS_LIVE_SOLO_VER + PUNTOS_LIVE_QUIEREME_EXTRA,
-            expires_at=expires
+            puntos=PUNTOS_LIVE_SOLO_VER + PUNTOS_LIVE_QUIEREME_EXTRA
         )
         session.add(inter)
         await session.commit()
+
+        # obtener TikTok del actor
+        res_actor = await session.execute(select(User).where(User.telegram_id == user_id))
+        actor = res_actor.scalars().first()
 
         # Notificar al dueño para aprobar/rechazar
         await notify_user(
@@ -1188,8 +1152,9 @@ async def handle_live_quiereme(query, context: ContextTypes.DEFAULT_TYPE, live_i
                 f"📩 Nuevo apoyo a tu live:\n"
                 f"Item ID: {live.id}\n"
                 f"Actor: {user_id}\n"
+                f"Usuario TikTok: {actor.tiktok_user or 'no registrado'}\n"
                 f"Puntos: {PUNTOS_LIVE_SOLO_VER + PUNTOS_LIVE_QUIEREME_EXTRA}\n\n"
-                "¿Apruebas?"
+                "¿Apruebas que te dio el Quiéreme?"
             ),
             reply_markup=yes_no_keyboard(
                 callback_yes=f"approve_interaction_{inter.id}",
@@ -1198,8 +1163,6 @@ async def handle_live_quiereme(query, context: ContextTypes.DEFAULT_TYPE, live_i
         )
 
     await query.edit_message_text("🟡 Tu apoyo fue registrado y está pendiente de aprobación del dueño.", reply_markup=back_to_menu_keyboard())
-
-
 # --- Registrar interacción de seguimiento (notifica con TikTok del actor) ---
 
 
