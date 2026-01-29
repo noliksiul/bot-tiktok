@@ -2058,7 +2058,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await handle_live_quiereme(query, context, live_id)
 
     elif data == "resumen_referidos":
-    await referral_weekly_summary(query, context)
+        await referral_weekly_summary(query, context)
 
 # --- Handler de texto principal ---
 
