@@ -943,24 +943,24 @@ keyboard = [
 ]
 # Primer mensaje: solo botón para entrar al perfil
 text = (
-    "👀 Seguimiento disponible:\n"
-    f"🔗 {seg.link}\n"
-    f"🗓️ {seg.created_at}\n\n"
-    "Primero entra al perfil y sigue al usuario."
-)
-await context.bot.send_message(
-    chat_id=chat_id,
-    texto=texto,
-    reply_markup=InlineKeyboardMarkup([
+        "👀 Seguimiento disponible:\n"
+        f"🔗 {seg.link}\n"
+        f"🗓️ {seg.created_at}\n\n"
+        "Primero entra al perfil y sigue al usuario."
+    )
+        await context.bot.send_message(
+            chat_id=chat_id,
+        texto=texto,
+        reply_markup=InlineKeyboardMarkup([
         [InlineKeyboardButton("🔗 Ir al perfil", url=seg.link)]
     ])
 )
 
 # Segundo mensaje: botón de confirmación
-await context.bot.send_message(
-    chat_id=chat_id,
-    texto="✅ Cuando hayas seguido, confirma aquí:",
-    reply_markup=InlineKeyboardMarkup([
+    await context.bot.send_message(
+        chat_id=chat_id,
+        texto="✅ Cuando hayas seguido, confirma aquí:",
+        reply_markup=InlineKeyboardMarkup([
         [InlineKeyboardButton(
             "✅ Ya lo seguí", callback_data=f"seguimiento_done_{seg.id}")],
         [InlineKeyboardButton(
