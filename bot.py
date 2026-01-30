@@ -1983,7 +1983,12 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "ver_video":
         await show_videos(query, context)
-
+        await query.edit_message_reply_markup(
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
+            ])
+        )
     elif data == "balance":
         await show_balance(query, context)
 
