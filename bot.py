@@ -1077,35 +1077,35 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
 
     # Primer mensaje: botón para entrar al live
     await context.bot.send_message(
-    chat_id=chat_id,
-    text=texto,
-    reply_markup=InlineKeyboardMarkup([
-        [InlineKeyboardButton(
-            "🔗 Ir al live", callback_data=f"live_enter_{live.id}")]
-    ])
-)
+        chat_id=chat_id,
+        text=texto,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton(
+                "🔗 Ir al live", callback_data=f"live_enter_{live.id}")]
+        ])
+    )
     # Guardar hora de inicio del live
     context.user_data["live_start_time"] = datetime.utcnow()
     # Confirmación después de 2 minutos
     context.job_queue.run_once(
-    lambda _: (
-        context.user_data.__setitem__(
-            "live_start_time", datetime.utcnow()),  # 👈 guardar hora aquí
-        context.bot.send_message(
-            chat_id=chat_id,
-            text="⏱️ Ya pasaron los 2 minutos, confirma tu acción:",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(
-                    "👀 Ya vi el live", callback_data=f"live_view_{live.id}")],
-                [InlineKeyboardButton(
-                    "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{live.id}")],
-                [InlineKeyboardButton(
-                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
-            ])
-        )
-    ),
-    when=120
-)
+        lambda _: (
+            context.user_data.__setitem__(
+                "live_start_time", datetime.utcnow()),  # 👈 guardar hora aquí
+            context.bot.send_message(
+                chat_id=chat_id,
+                text="⏱️ Ya pasaron los 2 minutos, confirma tu acción:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton(
+                        "👀 Ya vi el live", callback_data=f"live_view_{live.id}")],
+                    [InlineKeyboardButton(
+                        "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{live.id}")],
+                    [InlineKeyboardButton(
+                        "🔙 Regresar al menú principal", callback_data="menu_principal")]
+                ])
+            )
+        ),
+        when=120
+    )
 
     # acreditar puntos al actor
 
@@ -2031,55 +2031,50 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Mostrar el link real del live
         await query.edit_message_text(
-        f"🔗 Abre este link para ver el live:\n{live.link}\n\n⏱️ Debes durar al menos 2 minutos antes de confirmar.",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("Abrir live en TikTok", url=live.link)],
-            [InlineKeyboardButton(
-                "🔙 Regresar al menú principal", callback_data="menu_principal")]
-        ])
-    )
-
-    elif data == "subir_cupon":
-        await query.edit_message_text(
-            "✍️ Envía el comando:\n/subir_cupon <puntos> <ganadores> <codigo>\n\nEjemplo:\n/subir_cupon 2.5 100 BIENVENIDO2026",
-            reply_markup=back_to_menu_keyboard()
+            f"🔗 Abre este link para ver el live:\n{live.link}\n\n⏱️ Debes durar al menos 2 minutos antes de confirmar.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("Abrir live en TikTok", url=live.link)],
+                [InlineKeyboardButton(
+                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
+            ])
         )
 
     elif data == "cobrar_cupon":
-            await query.edit_message_text(
+        await query.edit_message_text(
             "💳 Ingresa el código del cupón:",
             reply_markup=back_to_menu_keyboard()
         )
-        context.user_data["state"] = "cobrar_cupon"
 
-    # --- Callback principal (menú y acciones) ---
+    context.user_data["state"] = "cobrar_cupon"
+
+# --- Callback principal (menú y acciones) ---
     elif data == "menu_principal":
         await show_main_menu(query, context)
         return
 
-    # 👇 Bloques de Live ya corregidos
-
+# 👇 Bloques de Live ya corregidos
     elif data == "subir_live":
         await query.edit_message_text(
             "🔗 Envía el link de tu live de TikTok (costo: 3 puntos).",
             reply_markup=back_to_menu_keyboard()   # 👈 botón regresar al menú
         )
-        context.user_data["state"] = "live_link"
+    context.user_data["state"] = "live_link"
 
     elif data == "ver_live":
         await show_lives(query, context)
-            return   # 👈 aquí termina el flujo
+        return   # 👈 alineado correctamente
 
     elif data.startswith("live_view_"):
         live_id = int(data.split("_")[-1])
         await handle_live_view(query, context, live_id)
 
     elif data.startswith("live_quiereme_"):
-        live_id = int(data.split("_")[-1])
-        await handle_live_quiereme(query, context, live_id)
+    live_id = int(data.split("_")[-1])
+    await handle_live_quiereme(query, context, live_id)
 
     elif data == "resumen_referidos":
         await referral_weekly_summary(query, context)
+
 
 # --- Handler de texto principal ---
 
