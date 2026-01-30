@@ -2110,8 +2110,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 👇 Bloques de Referidos
     elif data == "resumen_referidos":
         await referral_weekly_summary(query, context)
-
-
 # --- Handler de texto principal ---
 
 
