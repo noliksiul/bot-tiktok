@@ -2040,16 +2040,16 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
    # --- Callback principal (menú y acciones) ---
-elif data == "menu_principal":
-    await show_main_menu(query, context)
-    return
+    elif data == "menu_principal":
+        await show_main_menu(query, context)
+        return
 
 # 👇 Bloques de Cupones
-elif data == "subir_cupon":
-    await query.edit_message_text(
-        "✍️ Envía el comando:\n/subir_cupon <puntos> <ganadores> <codigo>\n\nEjemplo:\n/subir_cupon 2.5 100 BIENVENIDO2026",
-        reply_markup=back_to_menu_keyboard()
-    )
+    elif data == "subir_cupon":
+        await query.edit_message_text(
+            "✍️ Envía el comando:\n/subir_cupon <puntos> <ganadores> <codigo>\n\nEjemplo:\n/subir_cupon 2.5 100 BIENVENIDO2026",
+            reply_markup=back_to_menu_keyboard()
+        )
 
 elif data == "cobrar_cupon":
     await query.edit_message_text(
