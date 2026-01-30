@@ -2040,7 +2040,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
    # --- Callback principal (menú y acciones) ---
-elif data == "menu_principal":
+    elif data == "menu_principal":
     await show_main_menu(query, context)
     return
 
