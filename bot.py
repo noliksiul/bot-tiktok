@@ -1917,7 +1917,6 @@ async def reject_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action_
 
 # bot.py (Parte 5/5)
 
-
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     try:
@@ -1933,8 +1932,8 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=back_to_menu_keyboard()
         )
         context.user_data["state"] = "seguimiento_link"
-# --- Callback principal (menú y acciones) ---
 
+    # --- Callback principal (menú y acciones) ---
     elif data == "subir_video":
         keyboard = [
             [InlineKeyboardButton(
@@ -1965,7 +1964,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "video_tipo_colaboracion": "Colaboración"
         }
         context.user_data["video_tipo"] = tipos.get(data, "Normal")
-        # ✅ aquí sí se activa el título
         context.user_data["state"] = "video_title"
         await query.edit_message_text(
             f"🎬 Tipo seleccionado: {context.user_data['video_tipo']}\n\nAhora envíame el título de tu video:",
@@ -2021,15 +2019,14 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("live_enter_"):
         live_id = int(data.split("_")[-1])
-        # Guardar hora de inicio al apretar el botón
         context.user_data["live_start_time"] = datetime.utcnow()
 
-    # Buscar el live en la base
-    async with async_session() as session:
-        res_live = await session.execute(select(Live).where(Live.id == live_id))
-        live = res_live.scalars().first()
+        # Buscar el live en la base
+        async with async_session() as session:
+            res_live = await session.execute(select(Live).where(Live.id == live_id))
+            live = res_live.scalars().first()
 
-    # Mostrar el link real del live
+        # Mostrar el link real del live
         await query.edit_message_text(
             f"🔗 Abre este link para ver el live:\n{live.link}\n\n⏱️ Debes durar al menos 2 minutos antes de confirmar.",
             reply_markup=InlineKeyboardMarkup([
@@ -2039,48 +2036,47 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ])
         )
 
-# --- Callback principal (menú y acciones) ---
     elif data == "menu_principal":
         await show_main_menu(query, context)
         return
 
-# 👇 Bloques de Cupones
+    # 👇 Bloques de Cupones
     elif data == "subir_cupon":
         await query.edit_message_text(
             "✍️ Envía el comando:\n/subir_cupon <puntos> <ganadores> <codigo>\n\nEjemplo:\n/subir_cupon 2.5 100 BIENVENIDO2026",
             reply_markup=back_to_menu_keyboard()
         )
 
-elif data == "cobrar_cupon":
-    await query.edit_message_text(
-        "💳 Ingresa el código del cupón:",
-        reply_markup=back_to_menu_keyboard()
-    )
-    context.user_data["state"] = "cobrar_cupon"
+    elif data == "cobrar_cupon":
+        await query.edit_message_text(
+            "💳 Ingresa el código del cupón:",
+            reply_markup=back_to_menu_keyboard()
+        )
+        context.user_data["state"] = "cobrar_cupon"
 
-# 👇 Bloques de Live
-elif data == "subir_live":
-    await query.edit_message_text(
-        "🔗 Envía el link de tu live de TikTok (costo: 3 puntos).",
-        reply_markup=back_to_menu_keyboard()   # 👈 botón regresar al menú
-    )
-    context.user_data["state"] = "live_link"
+    # 👇 Bloques de Live
+    elif data == "subir_live":
+        await query.edit_message_text(
+            "🔗 Envía el link de tu live de TikTok (costo: 3 puntos).",
+            reply_markup=back_to_menu_keyboard()
+        )
+        context.user_data["state"] = "live_link"
 
-elif data == "ver_live":
-    await show_lives(query, context)
-    return   # 👈 alineado correctamente
+    elif data == "ver_live":
+        await show_lives(query, context)
+        return
 
-elif data.startswith("live_view_"):
-    live_id = int(data.split("_")[-1])
-    await handle_live_view(query, context, live_id)
+    elif data.startswith("live_view_"):
+        live_id = int(data.split("_")[-1])
+        await handle_live_view(query, context, live_id)
 
-elif data.startswith("live_quiereme_"):
-    live_id = int(data.split("_")[-1])
-    await handle_live_quiereme(query, context, live_id)
+    elif data.startswith("live_quiereme_"):
+        live_id = int(data.split("_")[-1])
+        await handle_live_quiereme(query, context, live_id)
 
-# 👇 Bloques de Referidos
-elif data == "resumen_referidos":
-    await referral_weekly_summary(query, context)
+    # 👇 Bloques de Referidos
+    elif data == "resumen_referidos":
+        await referral_weekly_summary(query, context)
 
 
 # --- Handler de texto principal ---
