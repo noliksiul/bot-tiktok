@@ -1083,7 +1083,8 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🔗 Ir al live", url=live.link)]
         ])
     )
-
+    # Guardar hora de inicio del live
+    context.user_data["live_start_time"] = datetime.utcnow()
     # Confirmación después de 2 minutos
     context.job_queue.run_once(
         lambda _: context.bot.send_message(
@@ -1101,27 +1102,20 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         when=120
     )
 
-    # Tercer mensaje: confirmación después de 5 minutos
-    context.job_queue.run_once(
-        lambda _: context.bot.send_message(
-            chat_id=chat_id,
-            text="⏱️ Ya pasaron los 5 minutos, confirma tu acción:",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(
-                    "👀 Ya vi el live", callback_data=f"live_view_{live.id}")],
-                [InlineKeyboardButton(
-                    "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{live.id}")],
-                [InlineKeyboardButton(
-                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
-            ])
-        ),
-        when=LIVE_VIEW_MINUTES * 60
-    )
     # acreditar puntos al actor
 
 
 async def handle_live_view(query, context: ContextTypes.DEFAULT_TYPE, live_id: int):
     user_id = query.from_user.id
+
+    # Verificar si ya pasaron 2 minutos desde que se mostró el live
+    start_time = context.user_data.get("live_start_time")
+    if start_time:
+        elapsed = (datetime.utcnow() - start_time).total_seconds()
+        if elapsed < 120:   # menos de 2 minutos
+            await query.answer("⏱️ Aún no cumples los 2 minutos, regresa al live.", show_alert=True)
+            return
+
     async with async_session() as session:
         res_live = await session.execute(select(Live).where(Live.id == live_id))
         live = res_live.scalars().first()
@@ -1154,7 +1148,7 @@ async def handle_live_view(query, context: ContextTypes.DEFAULT_TYPE, live_id: i
                 puntos=PUNTOS_LIVE_SOLO_VER
             ))
 
-        await session.commit()   # 👈 faltaba el commit
+        await session.commit()
 
     await query.edit_message_text("✅ Tu apoyo de ver el live fue acreditado automáticamente.", reply_markup=back_to_menu_keyboard())
 
@@ -1615,7 +1609,9 @@ async def cobrar_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await session.commit()
 
     await update.message.reply_text(
-        f"✅ Se cobró cupón con éxito\n• Código: {codigo}\n• Puntos sumados: {cupon.puntos:.2f}"
+        f"✅ Se cobró cupón con éxito\n• Código: {codigo}\n• Puntos sumados: {cupon.puntos:.2f}",
+        reply_markup=back_to_menu_keyboard()   # 👈 aquí agregamos el botón
+
     )
 
 
