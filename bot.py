@@ -1012,7 +1012,11 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         chat_id=chat_id,
         text=texto,
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔗 Ir al video", url=vid.link)]
+            [InlineKeyboardButton("🔗 Ir al video", url=vid.link)],
+            [InlineKeyboardButton(
+                "🔙 Regresar al menú principal", callback_data="menu_principal")]
+
+
         ])
     )
 
@@ -1916,7 +1920,6 @@ async def reject_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action_
 
 
 # bot.py (Parte 5/5)
-
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     try:
@@ -1978,17 +1981,38 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         action_id = int(data.split("_")[-1])
         await handle_action_reject(query, context, action_id)
 
+    # 👇 Bloques de Seguimiento
     elif data == "ver_seguimiento":
         await show_seguimientos(query, context)
 
+    elif data == "seguimiento_opened":
+        context.user_data["seguimiento_opened"] = datetime.utcnow()
+        await query.answer("✅ Perfil abierto, espera 20 segundos antes de confirmar.")
+
+    elif data.startswith("seguimiento_done_"):
+        seg_id = int(data.split("_")[-1])
+        start_time = context.user_data.get("seguimiento_opened")
+        if start_time and (datetime.utcnow() - start_time).seconds >= 20:
+            await handle_seguimiento_done(query, context, seg_id)
+        else:
+            await query.answer("⚠️ Primero abre el perfil y espera 20 segundos.")
+
+    # 👇 Bloques de Video
     elif data == "ver_video":
         await show_videos(query, context)
-        await query.edit_message_reply_markup(
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(
-                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
-            ])
-        )
+
+    elif data == "video_opened":
+        context.user_data["video_opened"] = datetime.utcnow()
+        await query.answer("✅ Video abierto, espera 20 segundos antes de confirmar.")
+
+    elif data.startswith("video_support_done_"):
+        vid_id = int(data.split("_")[-1])
+        start_time = context.user_data.get("video_opened")
+        if start_time and (datetime.utcnow() - start_time).seconds >= 20:
+            await handle_video_support_done(query, context, vid_id)
+        else:
+            await query.answer("⚠️ Primero abre el video y espera 20 segundos.")
+
     elif data == "balance":
         await show_balance(query, context)
 
@@ -1997,14 +2021,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "comandos":
         await comandos(query, context)
-
-    elif data.startswith("seguimiento_done_"):
-        seg_id = int(data.split("_")[-1])
-        await handle_seguimiento_done(query, context, seg_id)
-
-    elif data.startswith("video_support_done_"):
-        vid_id = int(data.split("_")[-1])
-        await handle_video_support_done(query, context, vid_id)
 
     elif data.startswith("approve_interaction_"):
         inter_id = int(data.split("_")[-1])
@@ -2022,6 +2038,30 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         action_id = int(data.split("_")[-1])
         await reject_admin_action(query, context, action_id)
 
+    # 👇 Bloques de Live
+    elif data == "ver_live":
+        await show_lives(query, context)
+
+    elif data == "live_opened":
+        context.user_data["live_opened"] = datetime.utcnow()
+        await query.answer("✅ Live abierto, espera 2 minutos antes de confirmar.")
+
+    elif data.startswith("live_view_"):
+        live_id = int(data.split("_")[-1])
+        start_time = context.user_data.get("live_opened")
+        if start_time and (datetime.utcnow() - start_time).seconds >= 120:
+            await handle_live_view(query, context, live_id)
+        else:
+            await query.answer("⚠️ Primero abre el live y espera 2 minutos.")
+
+    elif data.startswith("live_quiereme_"):
+        live_id = int(data.split("_")[-1])
+        start_time = context.user_data.get("live_opened")
+        if start_time and (datetime.utcnow() - start_time).seconds >= 120:
+            await handle_live_quiereme(query, context, live_id)
+        else:
+            await query.answer("⚠️ Primero abre el live y espera 2 minutos.")
+
     elif data.startswith("live_enter_"):
         live_id = int(data.split("_")[-1])
         context.user_data["live_start_time"] = datetime.utcnow()
@@ -2035,7 +2075,8 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             f"🔗 Abre este link para ver el live:\n{live.link}\n\n⏱️ Debes durar al menos 2 minutos antes de confirmar.",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("Abrir live en TikTok", url=live.link)],
+                [InlineKeyboardButton(
+                    "Abrir live en TikTok", url=live.link, callback_data="live_opened")],
                 [InlineKeyboardButton(
                     "🔙 Regresar al menú principal", callback_data="menu_principal")]
             ])
@@ -2059,25 +2100,12 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         context.user_data["state"] = "cobrar_cupon"
 
-    # 👇 Bloques de Live
     elif data == "subir_live":
         await query.edit_message_text(
             "🔗 Envía el link de tu live de TikTok (costo: 3 puntos).",
             reply_markup=back_to_menu_keyboard()
         )
         context.user_data["state"] = "live_link"
-
-    elif data == "ver_live":
-        await show_lives(query, context)
-        return
-
-    elif data.startswith("live_view_"):
-        live_id = int(data.split("_")[-1])
-        await handle_live_view(query, context, live_id)
-
-    elif data.startswith("live_quiereme_"):
-        live_id = int(data.split("_")[-1])
-        await handle_live_quiereme(query, context, live_id)
 
     # 👇 Bloques de Referidos
     elif data == "resumen_referidos":
