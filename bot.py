@@ -1077,17 +1077,21 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
 
     # Primer mensaje: botón para entrar al live
     await context.bot.send_message(
-        chat_id=chat_id,
-        text=texto,
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔗 Ir al live", url=live.link)]
-        ])
-    )
+    chat_id=chat_id,
+    text=texto,
+    reply_markup=InlineKeyboardMarkup([
+        [InlineKeyboardButton(
+            "🔗 Ir al live", callback_data=f"live_enter_{live.id}")]
+    ])
+)
     # Guardar hora de inicio del live
     context.user_data["live_start_time"] = datetime.utcnow()
     # Confirmación después de 2 minutos
     context.job_queue.run_once(
-        lambda _: context.bot.send_message(
+    lambda _: (
+        context.user_data.__setitem__(
+            "live_start_time", datetime.utcnow()),  # 👈 guardar hora aquí
+        context.bot.send_message(
             chat_id=chat_id,
             text="⏱️ Ya pasaron los 2 minutos, confirma tu acción:",
             reply_markup=InlineKeyboardMarkup([
@@ -1098,9 +1102,10 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton(
                     "🔙 Regresar al menú principal", callback_data="menu_principal")]
             ])
-        ),
-        when=120
-    )
+        )
+    ),
+    when=120
+)
 
     # acreditar puntos al actor
 
@@ -2014,6 +2019,26 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         action_id = int(data.split("_")[-1])
         await reject_admin_action(query, context, action_id)
 
+    elif data.startswith("live_enter_"):
+        live_id = int(data.split("_")[-1])
+        # Guardar hora de inicio al apretar el botón
+        context.user_data["live_start_time"] = datetime.utcnow()
+
+    # Buscar el live en la base
+    async with async_session() as session:
+        res_live = await session.execute(select(Live).where(Live.id == live_id))
+        live = res_live.scalars().first()
+
+    # Mostrar el link real del live
+        await query.edit_message_text(
+        f"🔗 Abre este link para ver el live:\n{live.link}\n\n⏱️ Debes durar al menos 2 minutos antes de confirmar.",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("Abrir live en TikTok", url=live.link)],
+            [InlineKeyboardButton(
+                "🔙 Regresar al menú principal", callback_data="menu_principal")]
+        ])
+    )
+
     elif data == "subir_cupon":
         await query.edit_message_text(
             "✍️ Envía el comando:\n/subir_cupon <puntos> <ganadores> <codigo>\n\nEjemplo:\n/subir_cupon 2.5 100 BIENVENIDO2026",
@@ -2021,7 +2046,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif data == "cobrar_cupon":
-        await query.edit_message_text(
+            await query.edit_message_text(
             "💳 Ingresa el código del cupón:",
             reply_markup=back_to_menu_keyboard()
         )
@@ -2043,7 +2068,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "ver_live":
         await show_lives(query, context)
-        return   # 👈 aquí termina el flujo
+            return   # 👈 aquí termina el flujo
 
     elif data.startswith("live_view_"):
         live_id = int(data.split("_")[-1])
