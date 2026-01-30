@@ -2040,40 +2040,39 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif data == "cobrar_cupon":
-        await query.edit_message_text(
-            "💳 Ingresa el código del cupón:",
-            reply_markup=back_to_menu_keyboard()
-        )
-
+    await query.edit_message_text(
+        "💳 Ingresa el código del cupón:",
+        reply_markup=back_to_menu_keyboard()
+    )
     context.user_data["state"] = "cobrar_cupon"
 
 # --- Callback principal (menú y acciones) ---
     elif data == "menu_principal":
-        await show_main_menu(query, context)
-        return
+    await show_main_menu(query, context)
+    return
 
 # 👇 Bloques de Live ya corregidos
     elif data == "subir_live":
-        await query.edit_message_text(
-            "🔗 Envía el link de tu live de TikTok (costo: 3 puntos).",
-            reply_markup=back_to_menu_keyboard()   # 👈 botón regresar al menú
-        )
+    await query.edit_message_text(
+        "🔗 Envía el link de tu live de TikTok (costo: 3 puntos).",
+        reply_markup=back_to_menu_keyboard()   # 👈 botón regresar al menú
+    )
     context.user_data["state"] = "live_link"
 
     elif data == "ver_live":
-        await show_lives(query, context)
-        return   # 👈 alineado correctamente
+    await show_lives(query, context)
+    return   # 👈 alineado correctamente
 
     elif data.startswith("live_view_"):
-        live_id = int(data.split("_")[-1])
-        await handle_live_view(query, context, live_id)
+    live_id = int(data.split("_")[-1])
+    await handle_live_view(query, context, live_id)
 
     elif data.startswith("live_quiereme_"):
     live_id = int(data.split("_")[-1])
     await handle_live_quiereme(query, context, live_id)
 
     elif data == "resumen_referidos":
-        await referral_weekly_summary(query, context)
+    await referral_weekly_summary(query, context)
 
 
 # --- Handler de texto principal ---
