@@ -1920,7 +1920,7 @@ async def reject_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action_
 
 
 # bot.py (Parte 5/5)
-async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+aasync def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     try:
         await query.answer()
@@ -1985,9 +1985,22 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "ver_seguimiento":
         await show_seguimientos(query, context)
 
-    elif data == "seguimiento_opened":
+    elif data.startswith("seguimiento_opened_"):
+        seg_id = int(data.split("_")[-1])
         context.user_data["seguimiento_opened"] = datetime.utcnow()
-        await query.answer("✅ Perfil abierto, espera 20 segundos antes de confirmar.")
+        context.job_queue.run_once(
+            lambda _: context.bot.send_message(
+                chat_id=query.message.chat.id,
+                text="✅ Cuando hayas seguido, confirma aquí:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton(
+                        "✅ Ya lo seguí", callback_data=f"seguimiento_done_{seg_id}")],
+                    [InlineKeyboardButton(
+                        "🔙 Regresar al menú principal", callback_data="menu_principal")]
+                ])
+            ),
+            when=20
+        )
 
     elif data.startswith("seguimiento_done_"):
         seg_id = int(data.split("_")[-1])
@@ -2001,9 +2014,22 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "ver_video":
         await show_videos(query, context)
 
-    elif data == "video_opened":
+    elif data.startswith("video_opened_"):
+        vid_id = int(data.split("_")[-1])
         context.user_data["video_opened"] = datetime.utcnow()
-        await query.answer("✅ Video abierto, espera 20 segundos antes de confirmar.")
+        context.job_queue.run_once(
+            lambda _: context.bot.send_message(
+                chat_id=query.message.chat.id,
+                text="⭐ Cuando hayas dado like y compartido, confirma aquí:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton(
+                        "⭐ Ya di like y compartí", callback_data=f"video_support_done_{vid_id}")],
+                    [InlineKeyboardButton(
+                        "🔙 Regresar al menú principal", callback_data="menu_principal")]
+                ])
+            ),
+            when=20
+        )
 
     elif data.startswith("video_support_done_"):
         vid_id = int(data.split("_")[-1])
@@ -2013,38 +2039,28 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await query.answer("⚠️ Primero abre el video y espera 20 segundos.")
 
-    elif data == "balance":
-        await show_balance(query, context)
-
-    elif data == "mi_ref_link":
-        await show_my_ref_link(query, context)
-
-    elif data == "comandos":
-        await comandos(query, context)
-
-    elif data.startswith("approve_interaction_"):
-        inter_id = int(data.split("_")[-1])
-        await approve_interaction(query, context, inter_id)
-
-    elif data.startswith("reject_interaction_"):
-        inter_id = int(data.split("_")[-1])
-        await reject_interaction(query, context, inter_id)
-
-    elif data.startswith("approve_admin_action_"):
-        action_id = int(data.split("_")[-1])
-        await approve_admin_action(query, context, action_id)
-
-    elif data.startswith("reject_admin_action_"):
-        action_id = int(data.split("_")[-1])
-        await reject_admin_action(query, context, action_id)
-
     # 👇 Bloques de Live
     elif data == "ver_live":
         await show_lives(query, context)
 
-    elif data == "live_opened":
+    elif data.startswith("live_opened_"):
+        live_id = int(data.split("_")[-1])
         context.user_data["live_opened"] = datetime.utcnow()
-        await query.answer("✅ Live abierto, espera 2 minutos antes de confirmar.")
+        context.job_queue.run_once(
+            lambda _: context.bot.send_message(
+                chat_id=query.message.chat.id,
+                text="⏱️ Ya pasaron los 2 minutos, confirma tu acción:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton(
+                        "👀 Ya vi el live", callback_data=f"live_view_{live_id}")],
+                    [InlineKeyboardButton(
+                        "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{live_id}")],
+                    [InlineKeyboardButton(
+                        "🔙 Regresar al menú principal", callback_data="menu_principal")]
+                ])
+            ),
+            when=120
+        )
 
     elif data.startswith("live_view_"):
         live_id = int(data.split("_")[-1])
@@ -2061,26 +2077,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await handle_live_quiereme(query, context, live_id)
         else:
             await query.answer("⚠️ Primero abre el live y espera 2 minutos.")
-
-    elif data.startswith("live_enter_"):
-        live_id = int(data.split("_")[-1])
-        context.user_data["live_start_time"] = datetime.utcnow()
-
-        # Buscar el live en la base
-        async with async_session() as session:
-            res_live = await session.execute(select(Live).where(Live.id == live_id))
-            live = res_live.scalars().first()
-
-        # Mostrar el link real del live
-        await query.edit_message_text(
-            f"🔗 Abre este link para ver el live:\n{live.link}\n\n⏱️ Debes durar al menos 2 minutos antes de confirmar.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(
-                    "Abrir live en TikTok", url=live.link, callback_data="live_opened")],
-                [InlineKeyboardButton(
-                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
-            ])
-        )
 
     elif data == "menu_principal":
         await show_main_menu(query, context)
