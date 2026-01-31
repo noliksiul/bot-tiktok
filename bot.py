@@ -1920,7 +1920,7 @@ async def reject_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action_
 
 
 # bot.py (Parte 5/5)
-aasync def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     try:
         await query.answer()
