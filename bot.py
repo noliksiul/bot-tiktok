@@ -1988,7 +1988,15 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("seguimiento_opened_"):
         seg_id = int(data.split("_")[-1])
         context.user_data["seguimiento_opened"] = datetime.utcnow()
-        await query.answer("✅ Perfil abierto, espera 20 segundos antes de confirmar.")
+        await query.edit_message_text(
+            "✅ Perfil abierto, espera 20 segundos antes de confirmar.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "✅ Ya lo seguí", callback_data=f"seguimiento_done_{seg_id}")],
+                [InlineKeyboardButton(
+                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
+            ])
+        )
 
     elif data.startswith("seguimiento_done_"):
         seg_id = int(data.split("_")[-1])
@@ -2005,7 +2013,15 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("video_opened_"):
         vid_id = int(data.split("_")[-1])
         context.user_data["video_opened"] = datetime.utcnow()
-        await query.answer("✅ Video abierto, espera 20 segundos antes de confirmar.")
+        await query.edit_message_text(
+            "✅ Video abierto, espera 20 segundos antes de confirmar.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "⭐ Ya di like y compartí", callback_data=f"video_support_done_{vid_id}")],
+                [InlineKeyboardButton(
+                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
+            ])
+        )
 
     elif data.startswith("video_support_done_"):
         vid_id = int(data.split("_")[-1])
@@ -2022,7 +2038,17 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("live_opened_"):
         live_id = int(data.split("_")[-1])
         context.user_data["live_opened"] = datetime.utcnow()
-        await query.answer("✅ Live abierto, espera 2 minutos antes de confirmar.")
+        await query.edit_message_text(
+            "✅ Live abierto, espera 2 minutos antes de confirmar.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "👀 Ya vi el live", callback_data=f"live_view_{live_id}")],
+                [InlineKeyboardButton(
+                    "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{live_id}")],
+                [InlineKeyboardButton(
+                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
+            ])
+        )
 
     elif data.startswith("live_view_"):
         live_id = int(data.split("_")[-1])
