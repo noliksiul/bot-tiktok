@@ -1988,19 +1988,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("seguimiento_opened_"):
         seg_id = int(data.split("_")[-1])
         context.user_data["seguimiento_opened"] = datetime.utcnow()
-        context.job_queue.run_once(
-            lambda _: context.bot.send_message(
-                chat_id=query.message.chat.id,
-                text="✅ Cuando hayas seguido, confirma aquí:",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton(
-                        "✅ Ya lo seguí", callback_data=f"seguimiento_done_{seg_id}")],
-                    [InlineKeyboardButton(
-                        "🔙 Regresar al menú principal", callback_data="menu_principal")]
-                ])
-            ),
-            when=20
-        )
+        await query.answer("✅ Perfil abierto, espera 20 segundos antes de confirmar.")
 
     elif data.startswith("seguimiento_done_"):
         seg_id = int(data.split("_")[-1])
@@ -2017,19 +2005,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("video_opened_"):
         vid_id = int(data.split("_")[-1])
         context.user_data["video_opened"] = datetime.utcnow()
-        context.job_queue.run_once(
-            lambda _: context.bot.send_message(
-                chat_id=query.message.chat.id,
-                text="⭐ Cuando hayas dado like y compartido, confirma aquí:",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton(
-                        "⭐ Ya di like y compartí", callback_data=f"video_support_done_{vid_id}")],
-                    [InlineKeyboardButton(
-                        "🔙 Regresar al menú principal", callback_data="menu_principal")]
-                ])
-            ),
-            when=20
-        )
+        await query.answer("✅ Video abierto, espera 20 segundos antes de confirmar.")
 
     elif data.startswith("video_support_done_"):
         vid_id = int(data.split("_")[-1])
@@ -2046,21 +2022,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("live_opened_"):
         live_id = int(data.split("_")[-1])
         context.user_data["live_opened"] = datetime.utcnow()
-        context.job_queue.run_once(
-            lambda _: context.bot.send_message(
-                chat_id=query.message.chat.id,
-                text="⏱️ Ya pasaron los 2 minutos, confirma tu acción:",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton(
-                        "👀 Ya vi el live", callback_data=f"live_view_{live_id}")],
-                    [InlineKeyboardButton(
-                        "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{live_id}")],
-                    [InlineKeyboardButton(
-                        "🔙 Regresar al menú principal", callback_data="menu_principal")]
-                ])
-            ),
-            when=120
-        )
+        await query.answer("✅ Live abierto, espera 2 minutos antes de confirmar.")
 
     elif data.startswith("live_view_"):
         live_id = int(data.split("_")[-1])
