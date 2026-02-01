@@ -967,6 +967,7 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
 
 
 # --- Ver videos (no propios, solo una vez) ---
+# --- Ver videos (no propios, solo una vez) ---
 async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(update_or_query, Update):
         chat_id = update_or_query.effective_chat.id
@@ -1008,30 +1009,14 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         chat_id=chat_id,
         text=texto,
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🌐 Ir al video", url=vid.link)],
+            [InlineKeyboardButton(
+                "🌐 Ir al video", url=vid.link, callback_data=f"video_go_{vid.id}")],
             [InlineKeyboardButton(
                 "🔙 Regresar al menú principal", callback_data="menu_principal")]
         ])
     )
 
-    context.user_data["video_start_time"] = datetime.utcnow()
 
-    context.job_queue.run_once(
-        lambda _: context.bot.send_message(
-            chat_id=chat_id,
-            text="✅ Ya puedes confirmar tu apoyo:",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(
-                    "⭐ Ya di like y compartí", callback_data=f"video_support_done_{vid.id}")],
-                [InlineKeyboardButton(
-                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
-            ])
-        ),
-        when=20
-    )
-
-
-# --- Ver lives (no propios, solo una vez) ---
 # --- Ver lives (no propios, solo una vez) ---
 async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(update_or_query, Update):
@@ -1990,20 +1975,31 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("⚠️ Primero abre el perfil y espera 20 segundos.")
 
     # 👇 Bloques de Video
+        # 👇 Bloques de Video
     elif data == "ver_video":
         await show_videos(query, context)
 
-    elif data.startswith("video_opened_"):
+    # 👉 Este bloque se ejecuta cuando el usuario presiona "Ir al video"
+    elif data.startswith("video_go_"):
         vid_id = int(data.split("_")[-1])
         context.user_data["video_opened"] = datetime.utcnow()
-        await query.edit_message_text(
-            "✅ Video abierto, espera 20 segundos antes de confirmar.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(
-                    "⭐ Ya di like y compartí", callback_data=f"video_support_done_{vid_id}")],
-                [InlineKeyboardButton(
-                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
-            ])
+
+        # Aviso de espera
+        await query.edit_message_text("⏱️ Has abierto el video. Espera 20 segundos...")
+
+        # Programar confirmaciones después de 20 segundos
+        context.job_queue.run_once(
+            lambda _: context.bot.send_message(
+                chat_id=query.message.chat.id,
+                text="✅ Ya puedes confirmar tu apoyo:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton(
+                        "⭐ Ya di like y compartí", callback_data=f"video_support_done_{vid_id}")],
+                    [InlineKeyboardButton(
+                        "🔙 Regresar al menú principal", callback_data="menu_principal")]
+                ])
+            ),
+            when=20
         )
 
     elif data.startswith("video_support_done_"):
