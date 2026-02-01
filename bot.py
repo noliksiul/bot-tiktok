@@ -936,15 +936,33 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
         "si lo haces y te detecta el algoritmo puede ser baneo permanente."
     )
 
+    # Mostrar botones: abrir link y regresar
     await context.bot.send_message(
         chat_id=chat_id,
         text=texto,
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(
-                "🔗 Ir al perfil", callback_data=f"seguimiento_opened_{seg.id}")],
+            [InlineKeyboardButton("🌐 Ir al perfil", url=seg.link)],
             [InlineKeyboardButton(
                 "🔙 Regresar al menú principal", callback_data="menu_principal")]
         ])
+    )
+
+    # Guardar hora de inicio
+    context.user_data["seguimiento_start_time"] = datetime.utcnow()
+
+    # Mostrar confirmaciones después de 20 segundos
+    context.job_queue.run_once(
+        lambda _: context.bot.send_message(
+            chat_id=chat_id,
+            text="✅ Ya puedes confirmar tu apoyo:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "✅ Ya lo seguí", callback_data=f"seguimiento_done_{seg.id}")],
+                [InlineKeyboardButton(
+                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
+            ])
+        ),
+        when=20
     )
 
 
@@ -962,12 +980,6 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         res = await session.execute(
             select(Video)
             .where(Video.telegram_id != user_id)
-            .where(~Video.id.in_(
-                select(Interaccion.item_id).where(
-                    Interaccion.tipo == "video_support",
-                    Interaccion.actor_id == user_id
-                )
-            ))
             .order_by(Video.created_at.desc())
         )
         rows = res.scalars().all()
@@ -996,14 +1008,30 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         chat_id=chat_id,
         text=texto,
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(
-                "🔗 Ir al video", callback_data=f"video_opened_{vid.id}")],
+            [InlineKeyboardButton("🌐 Ir al video", url=vid.link)],
             [InlineKeyboardButton(
                 "🔙 Regresar al menú principal", callback_data="menu_principal")]
         ])
     )
 
+    context.user_data["video_start_time"] = datetime.utcnow()
 
+    context.job_queue.run_once(
+        lambda _: context.bot.send_message(
+            chat_id=chat_id,
+            text="✅ Ya puedes confirmar tu apoyo:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "⭐ Ya di like y compartí", callback_data=f"video_support_done_{vid.id}")],
+                [InlineKeyboardButton(
+                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
+            ])
+        ),
+        when=20
+    )
+
+
+# --- Ver lives (no propios, solo una vez) ---
 # --- Ver lives (no propios, solo una vez) ---
 async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(update_or_query, Update):
@@ -1043,11 +1071,28 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         chat_id=chat_id,
         text=texto,
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(
-                "🔗 Ir al live", callback_data=f"live_opened_{live.id}")],
+            [InlineKeyboardButton("🌐 Ir al live", url=live.link)],
             [InlineKeyboardButton(
                 "🔙 Regresar al menú principal", callback_data="menu_principal")]
         ])
+    )
+
+    context.user_data["live_start_time"] = datetime.utcnow()
+
+    context.job_queue.run_once(
+        lambda _: context.bot.send_message(
+            chat_id=chat_id,
+            text="✅ Ya puedes confirmar tu apoyo:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "👀 Ya vi el live", callback_data=f"live_view_{live.id}")],
+                [InlineKeyboardButton(
+                    "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{live.id}")],
+                [InlineKeyboardButton(
+                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
+            ])
+        ),
+        when=120
     )
     # acreditar puntos al actor
 
