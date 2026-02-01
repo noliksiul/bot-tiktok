@@ -899,9 +899,7 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # bot.py (Parte 3/5)
-
 # --- Ver seguimientos (no propios, solo una vez) ---
-
 async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(update_or_query, Update):
         chat_id = update_or_query.effective_chat.id
@@ -1051,7 +1049,6 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                 "🔙 Regresar al menú principal", callback_data="menu_principal")]
         ])
     )
-
     # acreditar puntos al actor
 
 
