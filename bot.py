@@ -1001,20 +1001,19 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         f"🔗 {vid.link}\n"
         f"🗓️ {vid.created_at}\n\n"
         "⚠️ Recuerda dar like y compartir. El dueño supervisará tu apoyo.\n\n"
-        "Primero entra al video y apóyalo."
+        "Presiona el botón para abrir el video y empezar el conteo."
     )
 
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text=texto,
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(
-                "🌐 Ir al video", callback_data=f"video_go_{vid.id}")],
-            [InlineKeyboardButton("🔙 Regresar al menú principal",
-                                  callback_data="menu_principal")]
-        ])
-
-    )
+await context.bot.send_message(
+    chat_id=chat_id,
+    text=texto,
+    reply_markup=InlineKeyboardMarkup([
+        [InlineKeyboardButton(
+            "🌐 Ir al video", callback_data=f"video_go_{vid.id}")],
+        [InlineKeyboardButton("🔙 Regresar al menú principal",
+                              callback_data="menu_principal")]
+    ])
+)
 
 
 # --- Ver lives (no propios, solo una vez) ---
@@ -1974,8 +1973,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await query.answer("⚠️ Primero abre el perfil y espera 20 segundos.")
 
-    # 👇 Bloques de Video
-        # 👇 Bloques de Video
        # 👇 Bloques de Video
     elif data == "ver_video":
         await show_videos(query, context)
@@ -1985,23 +1982,47 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         vid_id = int(data.split("_")[-1])
         context.user_data["video_opened"] = datetime.utcnow()
 
-        # Aviso de espera
-        await query.edit_message_text("⏱️ Has abierto el video. Espera 20 segundos...")
+    # Aviso flotante (no borra el mensaje original)
+    await query.answer("⏱️ Has abierto el video. Espera 20 segundos...")
 
-        # Programar confirmaciones después de 20 segundos
-        context.job_queue.run_once(
-            lambda _: context.bot.send_message(
-                chat_id=query.message.chat.id,
-                text="✅ Ya puedes confirmar tu apoyo:",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton(
-                        "⭐ Ya di like y compartí", callback_data=f"video_support_done_{vid_id}")],
-                    [InlineKeyboardButton(
-                        "🔙 Regresar al menú principal", callback_data="menu_principal")]
-                ])
-            ),
-            when=20
-        )
+    # Programar confirmaciones después de 20 segundos
+    context.job_queue.run_once(
+        lambda _: context.bot.send_message(
+            chat_id=query.message.chat.id,
+            text="✅ Ya puedes confirmar tu apoyo:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "⭐ Ya di like y compartí", callback_data=f"video_support_done_{vid_id}")],
+                [InlineKeyboardButton(
+                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
+            ])
+        ),
+        when=20
+    )
+
+elif data.startswith("video_support_done_"):
+    vid_id = int(data.split("_")[-1])
+    start_time = context.user_data.get("video_opened")
+    if start_time and (datetime.utcnow() - start_time).seconds >= 20:
+        await handle_video_support_done(query, context, vid_id)
+    else:
+        await query.answer("⚠️ Primero abre el video y espera 20 segundos.")
+
+    elif data.startswith("video_support_done_"):
+        vid_id = int(data.split("_")[-1])
+        start_time = context.user_data.get("video_opened")
+        if start_time and (datetime.utcnow() - start_time).seconds >= 20:
+            await handle_video_support_done(query, context, vid_id)
+        else:
+            await query.answer("⚠️ Primero abre el video y espera 20 segundos.")
+
+    elif data.startswith("video_support_done_"):
+        vid_id = int(data.split("_")[-1])
+        start_time = context.user_data.get("video_opened")
+        if start_time and (datetime.utcnow() - start_time).seconds >= 20:
+            await handle_video_support_done(query, context, vid_id)
+        else:
+            await query.answer("⚠️ Primero abre el video y espera 20 segundos.")
 
     elif data.startswith("video_support_done_"):
         vid_id = int(data.split("_")[-1])
