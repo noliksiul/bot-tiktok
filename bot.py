@@ -967,32 +967,9 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
 
 
 # --- Ver videos (no propios, solo una vez) ---
-async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
-    if isinstance(update_or_query, Update):
-        chat_id = update_or_query.effective_chat.id
-        user_id = update_or_query.effective_user.id
-    else:
-        query = update_or_query
-        chat_id = query.message.chat.id
-        user_id = query.from_user.id
-
-    async with async_session() as session:
-        res = await session.execute(
-            select(Video)
-            .where(Video.telegram_id != user_id)
-            .order_by(Video.created_at.desc())
-        )
-        rows = res.scalars().all()
-
-    if not rows:
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text="⚠️ No hay videos disponibles por ahora.",
-            reply_markup=back_to_menu_keyboard()
-        )
-        return
-
-    vid = rows[0]
+async def show_videos(query, context):
+    chat_id = query.message.chat.id
+    vid = obtener_video()  # tu lógica para traer el video
 
     texto = (
         f"📺 Video ({vid.tipo}):\n"
@@ -1004,58 +981,39 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         "Presiona el botón para abrir el video y empezar el conteo."
     )
 
-await context.bot.send_message(
-    chat_id=chat_id,
-    text=texto,
-    reply_markup=InlineKeyboardMarkup([
-        [InlineKeyboardButton(
-            "🌐 Ir al video", callback_data=f"video_go_{vid.id}")],
-        [InlineKeyboardButton("🔙 Regresar al menú principal",
-                              callback_data="menu_principal")]
-    ])
-)
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=texto,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton(
+                "🌐 Ir al video", callback_data=f"video_go_{vid.id}")],
+            [InlineKeyboardButton(
+                "🔙 Regresar al menú principal", callback_data="menu_principal")]
+        ])
+    )
 
 
 # --- Ver lives (no propios, solo una vez) ---
-async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
-    if isinstance(update_or_query, Update):
-        chat_id = update_or_query.effective_chat.id
-        user_id = update_or_query.effective_user.id
-    else:
-        query = update_or_query
-        chat_id = query.message.chat.id
-        user_id = query.from_user.id
-
-    async with async_session() as session:
-        res = await session.execute(
-            select(Live)
-            .where(Live.telegram_id != user_id)
-            .order_by(Live.created_at.desc())
-        )
-        rows = res.scalars().all()
-
-    if not rows:
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text="⚠️ No hay lives disponibles por ahora.",
-            reply_markup=back_to_menu_keyboard()
-        )
-        return
-
-    live = rows[0]
+async def show_videos(query, context):
+    chat_id = query.message.chat.id
+    vid = obtener_video()  # tu lógica para traer el video
 
     texto = (
-        f"🔴 Live disponible:\n"
-        f"🔗 {live.link}\n"
-        f"🗓️ {live.created_at}\n\n"
-        "⚠️ Debes durar al menos 2 minutos en el live antes de confirmar."
+        f"📺 Video ({vid.tipo}):\n"
+        f"📌 {vid.titulo}\n"
+        f"📝 {vid.descripcion}\n"
+        f"🔗 {vid.link}\n"
+        f"🗓️ {vid.created_at}\n\n"
+        "⚠️ Recuerda dar like y compartir. El dueño supervisará tu apoyo.\n\n"
+        "Presiona el botón para abrir el video y empezar el conteo."
     )
 
     await context.bot.send_message(
         chat_id=chat_id,
         text=texto,
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🌐 Ir al live", url=live.link)],
+            [InlineKeyboardButton(
+                "🌐 Ir al video", callback_data=f"video_go_{vid.id}")],
             [InlineKeyboardButton(
                 "🔙 Regresar al menú principal", callback_data="menu_principal")]
         ])
