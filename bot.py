@@ -1008,32 +1008,32 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         chat_id=chat_id,
         text=texto,
         reply_markup=InlineKeyboardMarkup([
-    [InlineKeyboardButton(
-        "🌐 Ir al video", callback_data=f"video_go_{vid.id}")],
-    [InlineKeyboardButton("🔙 Regresar al menú principal",
-                          callback_data="menu_principal")]
-])
+            [InlineKeyboardButton(
+                "🌐 Ir al video", callback_data=f"video_go_{vid.id}")],
+            [InlineKeyboardButton("🔙 Regresar al menú principal",
+                                  callback_data="menu_principal")]
+        ])
 
-
+    )
 
 
 # --- Ver lives (no propios, solo una vez) ---
 async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(update_or_query, Update):
-        chat_id=update_or_query.effective_chat.id
-        user_id=update_or_query.effective_user.id
+        chat_id = update_or_query.effective_chat.id
+        user_id = update_or_query.effective_user.id
     else:
-        query=update_or_query
-        chat_id=query.message.chat.id
-        user_id=query.from_user.id
+        query = update_or_query
+        chat_id = query.message.chat.id
+        user_id = query.from_user.id
 
     async with async_session() as session:
-        res=await session.execute(
+        res = await session.execute(
             select(Live)
             .where(Live.telegram_id != user_id)
             .order_by(Live.created_at.desc())
         )
-        rows=res.scalars().all()
+        rows = res.scalars().all()
 
     if not rows:
         await context.bot.send_message(
@@ -1043,9 +1043,9 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    live=rows[0]
+    live = rows[0]
 
-    texto=(
+    texto = (
         f"🔴 Live disponible:\n"
         f"🔗 {live.link}\n"
         f"🗓️ {live.created_at}\n\n"
@@ -1062,7 +1062,7 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         ])
     )
 
-    context.user_data["live_start_time"]=datetime.utcnow()
+    context.user_data["live_start_time"] = datetime.utcnow()
 
     context.job_queue.run_once(
         lambda _: context.bot.send_message(
@@ -1083,19 +1083,19 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_live_view(query, context: ContextTypes.DEFAULT_TYPE, live_id: int):
-    user_id=query.from_user.id
+    user_id = query.from_user.id
 
     # Verificar si ya pasaron 2 minutos desde que se mostró el live
-    start_time=context.user_data.get("live_start_time")
+    start_time = context.user_data.get("live_start_time")
     if start_time:
-        elapsed=(datetime.utcnow() - start_time).total_seconds()
+        elapsed = (datetime.utcnow() - start_time).total_seconds()
         if elapsed < 120:   # menos de 2 minutos
             await query.answer("⏱️ Aún no cumples los 2 minutos, regresa al live.", show_alert=True)
             return
 
     async with async_session() as session:
-        res_live=await session.execute(select(Live).where(Live.id == live_id))
-        live=res_live.scalars().first()
+        res_live = await session.execute(select(Live).where(Live.id == live_id))
+        live = res_live.scalars().first()
         if not live:
             await query.edit_message_text("❌ Live no encontrado.", reply_markup=back_to_menu_keyboard())
             return
@@ -1104,7 +1104,7 @@ async def handle_live_view(query, context: ContextTypes.DEFAULT_TYPE, live_id: i
             return
 
         # Registrar interacción automática (aprobada de inmediato)
-        inter=Interaccion(
+        inter = Interaccion(
             tipo="live_view",
             item_id=live.id,
             actor_id=user_id,
@@ -1115,10 +1115,10 @@ async def handle_live_view(query, context: ContextTypes.DEFAULT_TYPE, live_id: i
         session.add(inter)
 
         # acreditar puntos al actor
-        res_actor=await session.execute(select(User).where(User.telegram_id == user_id))
-        actor=res_actor.scalars().first()
+        res_actor = await session.execute(select(User).where(User.telegram_id == user_id))
+        actor = res_actor.scalars().first()
         if actor:
-            actor.balance=(actor.balance or 0) + PUNTOS_LIVE_SOLO_VER
+            actor.balance = (actor.balance or 0) + PUNTOS_LIVE_SOLO_VER
             session.add(Movimiento(
                 telegram_id=user_id,
                 detalle="Apoyo live (solo ver)",
@@ -1131,10 +1131,10 @@ async def handle_live_view(query, context: ContextTypes.DEFAULT_TYPE, live_id: i
 
 
 async def handle_live_quiereme(query, context: ContextTypes.DEFAULT_TYPE, live_id: int):
-    user_id=query.from_user.id
+    user_id = query.from_user.id
     async with async_session() as session:
-        res_live=await session.execute(select(Live).where(Live.id == live_id))
-        live=res_live.scalars().first()
+        res_live = await session.execute(select(Live).where(Live.id == live_id))
+        live = res_live.scalars().first()
         if not live:
             await query.edit_message_text("❌ Live no encontrado.", reply_markup=back_to_menu_keyboard())
             return
@@ -1142,7 +1142,7 @@ async def handle_live_quiereme(query, context: ContextTypes.DEFAULT_TYPE, live_i
             await query.answer("No puedes apoyar tu propio live.", show_alert=True)
             return
 
-        inter=Interaccion(
+        inter = Interaccion(
             tipo="live_quiereme",
             item_id=live.id,
             actor_id=user_id,
@@ -1154,8 +1154,8 @@ async def handle_live_quiereme(query, context: ContextTypes.DEFAULT_TYPE, live_i
         await session.commit()
 
         # obtener TikTok del actor
-        res_actor=await session.execute(select(User).where(User.telegram_id == user_id))
-        actor=res_actor.scalars().first()
+        res_actor = await session.execute(select(User).where(User.telegram_id == user_id))
+        actor = res_actor.scalars().first()
 
         # Notificar al dueño para aprobar/rechazar
         await notify_user(
@@ -1180,10 +1180,10 @@ async def handle_live_quiereme(query, context: ContextTypes.DEFAULT_TYPE, live_i
 
 
 async def handle_seguimiento_done(query, context: ContextTypes.DEFAULT_TYPE, seg_id: int):
-    user_id=query.from_user.id
+    user_id = query.from_user.id
     async with async_session() as session:
-        res_seg=await session.execute(select(Seguimiento).where(Seguimiento.id == seg_id))
-        seg=res_seg.scalars().first()
+        res_seg = await session.execute(select(Seguimiento).where(Seguimiento.id == seg_id))
+        seg = res_seg.scalars().first()
         if not seg:
             await query.edit_message_text("❌ Seguimiento no encontrado.", reply_markup=back_to_menu_keyboard())
             return
@@ -1191,8 +1191,8 @@ async def handle_seguimiento_done(query, context: ContextTypes.DEFAULT_TYPE, seg
             await query.answer("No puedes apoyar tu propio seguimiento.", show_alert=True)
             return
 
-        expires=datetime.utcnow() + timedelta(days=AUTO_APPROVE_AFTER_DAYS)
-        inter=Interaccion(
+        expires = datetime.utcnow() + timedelta(days=AUTO_APPROVE_AFTER_DAYS)
+        inter = Interaccion(
             tipo="seguimiento",
             item_id=seg.id,
             actor_id=user_id,
@@ -1205,8 +1205,8 @@ async def handle_seguimiento_done(query, context: ContextTypes.DEFAULT_TYPE, seg
         await session.commit()
 
         # obtener TikTok del actor
-        res_actor=await session.execute(select(User).where(User.telegram_id == user_id))
-        actor=res_actor.scalars().first()
+        res_actor = await session.execute(select(User).where(User.telegram_id == user_id))
+        actor = res_actor.scalars().first()
 
     await query.edit_message_text("🟡 Tu apoyo fue registrado y está pendiente de aprobación del dueño.", reply_markup=back_to_menu_keyboard())
     await notify_user(
@@ -1230,8 +1230,8 @@ async def handle_seguimiento_done(query, context: ContextTypes.DEFAULT_TYPE, seg
 
 async def approve_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_id: int):
     async with async_session() as session:
-        res=await session.execute(select(Interaccion).where(Interaccion.id == inter_id))
-        inter=res.scalars().first()
+        res = await session.execute(select(Interaccion).where(Interaccion.id == inter_id))
+        inter = res.scalars().first()
         if not inter:
             await query.edit_message_text("❌ Interacción no encontrada.", reply_markup=back_to_menu_keyboard())
             await show_main_menu(query, context)
@@ -1245,19 +1245,19 @@ async def approve_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_i
             await show_main_menu(query, context)
             return
 
-        inter.status="accepted"
-        res_actor=await session.execute(select(User).where(User.telegram_id == inter.actor_id))
-        actor=res_actor.scalars().first()
+        inter.status = "accepted"
+        res_actor = await session.execute(select(User).where(User.telegram_id == inter.actor_id))
+        actor = res_actor.scalars().first()
         if actor:
-            actor.balance=(actor.balance or 0) + (inter.puntos or 0)
-            mov=Movimiento(telegram_id=inter.actor_id,
+            actor.balance = (actor.balance or 0) + (inter.puntos or 0)
+            mov = Movimiento(telegram_id=inter.actor_id,
                              detalle=f"Apoyo {inter.tipo} aprobado", puntos=inter.puntos)
             session.add(mov)
             if actor.referrer_id:
-                res_ref=await session.execute(select(User).where(User.telegram_id == actor.referrer_id))
-                referrer=res_ref.scalars().first()
+                res_ref = await session.execute(select(User).where(User.telegram_id == actor.referrer_id))
+                referrer = res_ref.scalars().first()
                 if referrer:
-                    referrer.balance=(
+                    referrer.balance = (
                         referrer.balance or 0) + PUNTOS_REFERIDO_BONUS
                     session.add(Movimiento(
                         telegram_id=referrer.telegram_id,
@@ -1281,8 +1281,8 @@ async def approve_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_i
 
 async def reject_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_id: int):
     async with async_session() as session:
-        res=await session.execute(select(Interaccion).where(Interaccion.id == inter_id))
-        inter=res.scalars().first()
+        res = await session.execute(select(Interaccion).where(Interaccion.id == inter_id))
+        inter = res.scalars().first()
         if not inter:
             await query.edit_message_text("❌ Interacción no encontrada.", reply_markup=back_to_menu_keyboard())
             await show_main_menu(query, context)
@@ -1296,7 +1296,7 @@ async def reject_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_id
             await show_main_menu(query, context)
             return
 
-        inter.status="rejected"
+        inter.status = "rejected"
         await session.commit()
 
     await query.edit_message_text("❌ Interacción rechazada.", reply_markup=back_to_menu_keyboard())
@@ -1306,10 +1306,10 @@ async def reject_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_id
 
 # --- Registrar interacción de video (notifica con TikTok del actor) ---
 async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, vid_id: int):
-    user_id=query.from_user.id
+    user_id = query.from_user.id
     async with async_session() as session:
-        res_vid=await session.execute(select(Video).where(Video.id == vid_id))
-        vid=res_vid.scalars().first()
+        res_vid = await session.execute(select(Video).where(Video.id == vid_id))
+        vid = res_vid.scalars().first()
         if not vid:
             await query.edit_message_text("❌ Video no encontrado.", reply_markup=back_to_menu_keyboard())
             return
@@ -1317,8 +1317,8 @@ async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, v
             await query.answer("No puedes apoyar tu propio video.", show_alert=True)
             return
 
-        expires=datetime.utcnow() + timedelta(days=AUTO_APPROVE_AFTER_DAYS)
-        inter=Interaccion(
+        expires = datetime.utcnow() + timedelta(days=AUTO_APPROVE_AFTER_DAYS)
+        inter = Interaccion(
             tipo="video_support",
             item_id=vid.id,
             actor_id=user_id,
@@ -1331,8 +1331,8 @@ async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, v
         await session.commit()
 
         # obtener TikTok del actor
-        res_actor=await session.execute(select(User).where(User.telegram_id == user_id))
-        actor=res_actor.scalars().first()
+        res_actor = await session.execute(select(User).where(User.telegram_id == user_id))
+        actor = res_actor.scalars().first()
 
     await query.edit_message_text("🟡 Tu apoyo fue registrado y está pendiente de aprobación del dueño.", reply_markup=back_to_menu_keyboard())
     await notify_user(
@@ -1359,32 +1359,32 @@ async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, v
 
 async def show_balance(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(update_or_query, Update):
-        user_id=update_or_query.effective_user.id
-        is_update=True
+        user_id = update_or_query.effective_user.id
+        is_update = True
     else:
-        user_id=update_or_query.from_user.id
-        is_update=False
+        user_id = update_or_query.from_user.id
+        is_update = False
 
     async with async_session() as session:
-        res=await session.execute(select(User).where(User.telegram_id == user_id))
-        user=res.scalars().first()
-        balance=user.balance if user else 0
-        res=await session.execute(
+        res = await session.execute(select(User).where(User.telegram_id == user_id))
+        user = res.scalars().first()
+        balance = user.balance if user else 0
+        res = await session.execute(
             select(Movimiento)
             .where(Movimiento.telegram_id == user_id)
             .order_by(Movimiento.created_at.desc())
             .limit(10)
         )
-        movimientos=res.scalars().all()
+        movimientos = res.scalars().all()
 
-    texto=f"💰 Tu balance actual: {balance} puntos\n\n📜 Últimos movimientos:\n"
+    texto = f"💰 Tu balance actual: {balance} puntos\n\n📜 Últimos movimientos:\n"
     if movimientos:
         for m in movimientos:
             texto += f"- {m.detalle}: {m.puntos} puntos ({m.created_at})\n"
     else:
         texto += "⚠️ No tienes historial todavía."
 
-    reply_markup=back_to_menu_keyboard()
+    reply_markup = back_to_menu_keyboard()
     if is_update:
         await update_or_query.message.reply_text(texto, reply_markup=reply_markup)
     else:
@@ -1404,21 +1404,21 @@ async def add_subadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ No tienes permiso para usar este comando.")
         return
 
-    args=context.args
+    args = context.args
     if len(args) != 1:
         await update.message.reply_text("Uso: /add_subadmin <telegram_id>")
         return
 
     try:
-        sub_id=int(args[0])
+        sub_id = int(args[0])
     except:
         await update.message.reply_text("⚠️ <telegram_id> debe ser un número.")
         return
 
     async with async_session() as session:
         # ✅ Validar duplicados antes de insertar
-        res=await session.execute(select(SubAdmin).where(SubAdmin.telegram_id == sub_id))
-        exists=res.scalars().first()
+        res = await session.execute(select(SubAdmin).where(SubAdmin.telegram_id == sub_id))
+        exists = res.scalars().first()
         if exists:
             await update.message.reply_text("⚠️ Ya es subadmin.")
             return
@@ -1446,18 +1446,18 @@ async def remove_subadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("❌ No tienes permiso para usar este comando.")
         return
-    args=context.args
+    args = context.args
     if len(args) != 1:
         await update.message.reply_text("Uso: /remove_subadmin <telegram_id>")
         return
     try:
-        sub_id=int(args[0])
+        sub_id = int(args[0])
     except:
         await update.message.reply_text("⚠️ <telegram_id> debe ser un número.")
         return
     async with async_session() as session:
-        res=await session.execute(select(SubAdmin).where(SubAdmin.telegram_id == sub_id))
-        sub=res.scalars().first()
+        res = await session.execute(select(SubAdmin).where(SubAdmin.telegram_id == sub_id))
+        sub = res.scalars().first()
         if not sub:
             await update.message.reply_text("⚠️ No es subadmin.")
             return
@@ -1468,7 +1468,7 @@ async def remove_subadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def is_subadmin(user_id: int) -> bool:
     async with async_session() as session:
-        res=await session.execute(select(SubAdmin).where(SubAdmin.telegram_id == user_id))
+        res = await session.execute(select(SubAdmin).where(SubAdmin.telegram_id == user_id))
         return res.scalars().first() is not None
 # --- Listar usuarios (solo admin) ---
 
@@ -1479,14 +1479,14 @@ async def listar_usuarios(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     async with async_session() as session:
-        res=await session.execute(select(User))
-        usuarios=res.scalars().all()
+        res = await session.execute(select(User))
+        usuarios = res.scalars().all()
 
     if not usuarios:
         await update.message.reply_text("⚠️ No hay usuarios registrados.")
         return
 
-    texto="👥 Usuarios registrados:\n"
+    texto = "👥 Usuarios registrados:\n"
     for u in usuarios:
         if u.telegram_id == ADMIN_ID:
             texto += f"👑 Admin dueño: ID {u.telegram_id}, TikTok: {u.tiktok_user}, Balance: {u.balance}\n"
@@ -1501,34 +1501,34 @@ async def listar_usuarios(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- Gestión de Cupones ---
 # --- Gestión de Cupones  subir---
 async def subir_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid=update.effective_user.id
+    uid = update.effective_user.id
     # Solo admin o subadmin pueden crear
     if uid != ADMIN_ID and not await is_subadmin(uid):
         await update.message.reply_text("❌ No tienes permiso para crear cupones.")
         return
 
-    args=context.args
+    args = context.args
     if len(args) < 3:
         await update.message.reply_text("Uso: /subir_cupon <puntos> <ganadores> <codigo>")
         return
 
     try:
-        puntos=float(args[0])
-        ganadores=int(args[1])
-        codigo=args[2].strip()
+        puntos = float(args[0])
+        ganadores = int(args[1])
+        codigo = args[2].strip()
     except Exception:
         await update.message.reply_text("⚠️ Parámetros inválidos.")
         return
 
     async with async_session() as session:
         # Verificar si ya existe
-        res=await session.execute(select(Cupon).where(Cupon.codigo == codigo))
-        existe=res.scalars().first()
+        res = await session.execute(select(Cupon).where(Cupon.codigo == codigo))
+        existe = res.scalars().first()
         if existe:
             await update.message.reply_text("⚠️ Ese código ya existe.")
             return
 
-        cupon=Cupon(codigo=codigo, puntos=puntos,
+        cupon = Cupon(codigo=codigo, puntos=puntos,
                       ganadores=ganadores, creado_por=uid)
         session.add(cupon)
         await session.commit()
@@ -1541,17 +1541,17 @@ async def subir_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cobrar_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    args=context.args
+    args = context.args
     if len(args) < 1:
         await update.message.reply_text("Uso: /cobrar_cupon <codigo>")
         return
 
-    codigo=args[0].strip()
-    uid=update.effective_user.id
+    codigo = args[0].strip()
+    uid = update.effective_user.id
 
     async with async_session() as session:
-        res=await session.execute(select(Cupon).where(Cupon.codigo == codigo))
-        cupon=res.scalars().first()
+        res = await session.execute(select(Cupon).where(Cupon.codigo == codigo))
+        cupon = res.scalars().first()
         if not cupon:
             await update.message.reply_text("❌ Cupón no encontrado.")
             return
@@ -1561,24 +1561,24 @@ async def cobrar_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         # Verificar si ya lo cobró
-        res_claim=await session.execute(
+        res_claim = await session.execute(
             select(CuponClaim).where(CuponClaim.codigo ==
                                      codigo, CuponClaim.telegram_id == uid)
         )
-        ya_cobrado=res_claim.scalars().first()
+        ya_cobrado = res_claim.scalars().first()
         if ya_cobrado:
             await update.message.reply_text("⚠️ Ya cobraste este cupón.")
             return
 
         # Verificar usuario
-        res_u=await session.execute(select(User).where(User.telegram_id == uid))
-        user=res_u.scalars().first()
+        res_u = await session.execute(select(User).where(User.telegram_id == uid))
+        user = res_u.scalars().first()
         if not user:
             await update.message.reply_text("❌ No estás registrado. Usa /start primero.")
             return
 
         # Acreditar puntos
-        user.balance=(user.balance or 0) + (cupon.puntos or 0)
+        user.balance = (user.balance or 0) + (cupon.puntos or 0)
         session.add(Movimiento(telegram_id=uid,
                     detalle=f"Cobro cupón {codigo}", puntos=cupon.puntos))
         cupon.usados += 1
@@ -1597,9 +1597,9 @@ async def cobrar_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- Notificación al admin ---
 
 
-async def notify_admin(context, text: str, action_id: int=None):
+async def notify_admin(context, text: str, action_id: int = None):
     if action_id:
-        keyboard=[
+        keyboard = [
             [
                 InlineKeyboardButton(
                     "✅ Aprobar", callback_data=f"approve_action_{action_id}"),
@@ -1607,9 +1607,9 @@ async def notify_admin(context, text: str, action_id: int=None):
                     "❌ Rechazar", callback_data=f"reject_action_{action_id}")
             ]
         ]
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        reply_markup = InlineKeyboardMarkup(keyboard)
     else:
-        reply_markup=None
+        reply_markup = None
 
     try:
         await context.bot.send_message(
@@ -1622,16 +1622,16 @@ async def notify_admin(context, text: str, action_id: int=None):
 
 
 async def dar_puntos(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id=update.effective_user.id
-    args=context.args
+    user_id = update.effective_user.id
+    args = context.args
 
     if len(args) != 2:
         await update.message.reply_text("Uso: /dar_puntos <telegram_id> <cantidad>")
         return
 
     try:
-        target_id=int(args[0])
-        cantidad=int(args[1])
+        target_id = int(args[0])
+        cantidad = int(args[1])
     except:
         await update.message.reply_text("⚠️ Ambos parámetros deben ser números.")
         return
@@ -1639,10 +1639,10 @@ async def dar_puntos(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ✅ Si el dueño ejecuta, se aplica directo sin aprobación
     if user_id == ADMIN_ID:
         async with async_session() as session:
-            res_u=await session.execute(select(User).where(User.telegram_id == target_id))
-            u=res_u.scalars().first()
+            res_u = await session.execute(select(User).where(User.telegram_id == target_id))
+            u = res_u.scalars().first()
             if u:
-                u.balance=(u.balance or 0) + cantidad
+                u.balance = (u.balance or 0) + cantidad
                 session.add(Movimiento(
                     telegram_id=u.telegram_id,
                     detalle=f"🎁 Puntos otorgados por admin",
@@ -1665,9 +1665,9 @@ async def dar_puntos(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ✅ Si es subadmin, se crea acción pendiente de aprobación
     if await is_subadmin(user_id):
-        expires=datetime.utcnow() + timedelta(days=AUTO_APPROVE_AFTER_DAYS)
+        expires = datetime.utcnow() + timedelta(days=AUTO_APPROVE_AFTER_DAYS)
         async with async_session() as session:
-            action=AdminAction(
+            action = AdminAction(
                 tipo="dar_puntos",
                 target_id=target_id,
                 cantidad=cantidad,
@@ -1698,8 +1698,8 @@ async def dar_puntos(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_action_approve(query, context, action_id: int):
     async with async_session() as session:
-        res=await session.execute(select(AdminAction).where(AdminAction.id == action_id))
-        action=res.scalars().first()
+        res = await session.execute(select(AdminAction).where(AdminAction.id == action_id))
+        action = res.scalars().first()
         if not action:
             await query.edit_message_text("⚠️ Acción no encontrada.")
             return
@@ -1710,10 +1710,10 @@ async def handle_action_approve(query, context, action_id: int):
 
         # 👇 Aplicar la acción si es dar_puntos
         if action.tipo == "dar_puntos":
-            res_u=await session.execute(select(User).where(User.telegram_id == action.target_id))
-            u=res_u.scalars().first()
+            res_u = await session.execute(select(User).where(User.telegram_id == action.target_id))
+            u = res_u.scalars().first()
             if u:
-                u.balance=(u.balance or 0) + action.cantidad
+                u.balance = (u.balance or 0) + action.cantidad
                 session.add(Movimiento(
                     telegram_id=u.telegram_id,
                     detalle=f"🎁 Puntos otorgados por aprobación de admin",
@@ -1726,7 +1726,7 @@ async def handle_action_approve(query, context, action_id: int):
                     text=f"🎁 Tu acción fue aprobada. Recibiste {action.cantidad} puntos."
                 )
 
-        action.status="accepted"
+        action.status = "accepted"
         await session.commit()
 
     await query.edit_message_text("✅ Acción aprobada y aplicada.")
@@ -1734,8 +1734,8 @@ async def handle_action_approve(query, context, action_id: int):
 
 async def handle_action_reject(query, context, action_id: int):
     async with async_session() as session:
-        res=await session.execute(select(AdminAction).where(AdminAction.id == action_id))
-        action=res.scalars().first()
+        res = await session.execute(select(AdminAction).where(AdminAction.id == action_id))
+        action = res.scalars().first()
         if not action:
             await query.edit_message_text("⚠️ Acción no encontrada.")
             return
@@ -1744,34 +1744,34 @@ async def handle_action_reject(query, context, action_id: int):
             await query.edit_message_text(f"⚠️ Esta acción ya está en estado: {action.status}.")
             return
 
-        action.status="rejected"
+        action.status = "rejected"
         await session.commit()
         await session.refresh(action)   # 👈 obtener ID recién creado
         await query.edit_message_text("❌ Acción rechazada.")
 
 
 async def cambiar_tiktok_usuario(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id=update.effective_user.id
+    user_id = update.effective_user.id
     if not await is_subadmin(user_id) and user_id != ADMIN_ID:
         await update.message.reply_text("❌ No tienes permiso para proponer esta acción.")
         return
-    args=context.args
+    args = context.args
     if len(args) < 2:
         await update.message.reply_text("Uso: /cambiar_tiktok_usuario <telegram_id> <nuevo_alias_con_@>")
         return
     try:
-        target_id=int(args[0])
+        target_id = int(args[0])
     except:
         await update.message.reply_text("⚠️ <telegram_id> debe ser un número.")
         return
-    nuevo_alias=" ".join(args[1:]).strip()
+    nuevo_alias = " ".join(args[1:]).strip()
     if not nuevo_alias.startswith("@"):
         await update.message.reply_text("⚠️ El alias debe comenzar con @.")
         return
 
-    expires=datetime.utcnow() + timedelta(days=AUTO_APPROVE_AFTER_DAYS)
+    expires = datetime.utcnow() + timedelta(days=AUTO_APPROVE_AFTER_DAYS)
     async with async_session() as session:
-        action=AdminAction(
+        action = AdminAction(
             tipo="cambiar_tiktok",
             target_id=target_id,
             nuevo_alias=nuevo_alias,
@@ -1800,8 +1800,8 @@ async def approve_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action
 
     async with async_session() as session:
         # Buscar la acción en la base de datos
-        res=await session.execute(select(AdminAction).where(AdminAction.id == action_id))
-        action=res.scalars().first()
+        res = await session.execute(select(AdminAction).where(AdminAction.id == action_id))
+        action = res.scalars().first()
 
         # Si no existe la acción
         if not action:
@@ -1821,10 +1821,10 @@ async def approve_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action
 
         # Si la acción es dar puntos
         if action.tipo == "dar_puntos":
-            res_u=await session.execute(select(User).where(User.telegram_id == action.target_id))
-            u=res_u.scalars().first()
+            res_u = await session.execute(select(User).where(User.telegram_id == action.target_id))
+            u = res_u.scalars().first()
             if u:
-                u.balance=(u.balance or 0) + (action.cantidad or 0)
+                u.balance = (u.balance or 0) + (action.cantidad or 0)
                 session.add(Movimiento(
                     telegram_id=u.telegram_id,
                     detalle=f"Puntos otorgados por admin ({action.cantidad})",
@@ -1833,13 +1833,13 @@ async def approve_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action
 
         # Si la acción es cambiar el alias de TikTok
         elif action.tipo == "cambiar_tiktok":
-            res_u=await session.execute(select(User).where(User.telegram_id == action.target_id))
-            u=res_u.scalars().first()
+            res_u = await session.execute(select(User).where(User.telegram_id == action.target_id))
+            u = res_u.scalars().first()
             if u and action.nuevo_alias:
-                u.tiktok_user=action.nuevo_alias
+                u.tiktok_user = action.nuevo_alias
 
         # Actualizamos el estado a aceptado y guardamos
-        action.status="accepted"
+        action.status = "accepted"
         await session.commit()
 
     # Mensaje final con botón de regreso al menú principal
@@ -1857,8 +1857,8 @@ async def reject_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action_
 
     async with async_session() as session:
         # Buscar la acción en la base de datos
-        res=await session.execute(select(AdminAction).where(AdminAction.id == action_id))
-        action=res.scalars().first()
+        res = await session.execute(select(AdminAction).where(AdminAction.id == action_id))
+        action = res.scalars().first()
 
         # Si no existe la acción
         if not action:
@@ -1877,7 +1877,7 @@ async def reject_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action_
             return
 
         # Actualizamos el estado a rechazado y guardamos
-        action.status="rejected"
+        action.status = "rejected"
         await session.commit()
 
     # Mensaje final con botón de regreso al menú principal
@@ -1889,24 +1889,24 @@ async def reject_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action_
 
 # bot.py (Parte 5/5)
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query=update.callback_query
+    query = update.callback_query
     try:
         await query.answer()
     except:
         pass
 
-    data=query.data
+    data = query.data
 
     if data == "subir_seguimiento":
         await query.edit_message_text(
             "🔗 Envía tu link de perfil de TikTok para publicar tu seguimiento (costo: 3 puntos).",
             reply_markup=back_to_menu_keyboard()
         )
-        context.user_data["state"]="seguimiento_link"
+        context.user_data["state"] = "seguimiento_link"
 
     # --- Callback principal (menú y acciones) ---
     elif data == "subir_video":
-        keyboard=[
+        keyboard = [
             [InlineKeyboardButton(
                 "🎬 Normal", callback_data="video_tipo_normal")],
             [InlineKeyboardButton("🎤 Incentivo Live",
@@ -1924,29 +1924,29 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "📌 ¿Qué tipo de video quieres subir?",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-        context.user_data["state"]=None   # ✅ aquí solo debe ser None
+        context.user_data["state"] = None   # ✅ aquí solo debe ser None
 
     elif data.startswith("video_tipo_"):
-        tipos={
+        tipos = {
             "video_tipo_normal": "Normal",
             "video_tipo_live": "Incentivo Live",
             "video_tipo_evento": "Evento",
             "video_tipo_shop": "TikTok Shop",
             "video_tipo_colaboracion": "Colaboración"
         }
-        context.user_data["video_tipo"]=tipos.get(data, "Normal")
-        context.user_data["state"]="video_title"
+        context.user_data["video_tipo"] = tipos.get(data, "Normal")
+        context.user_data["state"] = "video_title"
         await query.edit_message_text(
             f"🎬 Tipo seleccionado: {context.user_data['video_tipo']}\n\nAhora envíame el título de tu video:",
             reply_markup=back_to_menu_keyboard()
         )
 
     elif data.startswith("approve_action_"):
-        action_id=int(data.split("_")[-1])
+        action_id = int(data.split("_")[-1])
         await handle_action_approve(query, context, action_id)
 
     elif data.startswith("reject_action_"):
-        action_id=int(data.split("_")[-1])
+        action_id = int(data.split("_")[-1])
         await handle_action_reject(query, context, action_id)
 
     # 👇 Bloques de Seguimiento
@@ -1954,8 +1954,8 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_seguimientos(query, context)
 
     elif data.startswith("seguimiento_opened_"):
-        seg_id=int(data.split("_")[-1])
-        context.user_data["seguimiento_opened"]=datetime.utcnow()
+        seg_id = int(data.split("_")[-1])
+        context.user_data["seguimiento_opened"] = datetime.utcnow()
         await query.edit_message_text(
             "✅ Perfil abierto, espera 20 segundos antes de confirmar.",
             reply_markup=InlineKeyboardMarkup([
@@ -1967,8 +1967,8 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif data.startswith("seguimiento_done_"):
-        seg_id=int(data.split("_")[-1])
-        start_time=context.user_data.get("seguimiento_opened")
+        seg_id = int(data.split("_")[-1])
+        start_time = context.user_data.get("seguimiento_opened")
         if start_time and (datetime.utcnow() - start_time).seconds >= 20:
             await handle_seguimiento_done(query, context, seg_id)
         else:
@@ -1982,8 +1982,8 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 👉 Este bloque se ejecuta cuando el usuario presiona "Ir al video"
     elif data.startswith("video_go_"):
-        vid_id=int(data.split("_")[-1])
-        context.user_data["video_opened"]=datetime.utcnow()
+        vid_id = int(data.split("_")[-1])
+        context.user_data["video_opened"] = datetime.utcnow()
 
         # Aviso de espera
         await query.edit_message_text("⏱️ Has abierto el video. Espera 20 segundos...")
@@ -2004,8 +2004,8 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif data.startswith("video_support_done_"):
-        vid_id=int(data.split("_")[-1])
-        start_time=context.user_data.get("video_opened")
+        vid_id = int(data.split("_")[-1])
+        start_time = context.user_data.get("video_opened")
         if start_time and (datetime.utcnow() - start_time).seconds >= 20:
             await handle_video_support_done(query, context, vid_id)
         else:
@@ -2015,8 +2015,8 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_lives(query, context)
 
     elif data.startswith("live_opened_"):
-        live_id=int(data.split("_")[-1])
-        context.user_data["live_opened"]=datetime.utcnow()
+        live_id = int(data.split("_")[-1])
+        context.user_data["live_opened"] = datetime.utcnow()
         await query.edit_message_text(
             "✅ Live abierto, espera 2 minutos antes de confirmar.",
             reply_markup=InlineKeyboardMarkup([
@@ -2030,16 +2030,16 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif data.startswith("live_view_"):
-        live_id=int(data.split("_")[-1])
-        start_time=context.user_data.get("live_opened")
+        live_id = int(data.split("_")[-1])
+        start_time = context.user_data.get("live_opened")
         if start_time and (datetime.utcnow() - start_time).seconds >= 120:
             await handle_live_view(query, context, live_id)
         else:
             await query.answer("⚠️ Primero abre el live y espera 2 minutos.")
 
     elif data.startswith("live_quiereme_"):
-        live_id=int(data.split("_")[-1])
-        start_time=context.user_data.get("live_opened")
+        live_id = int(data.split("_")[-1])
+        start_time = context.user_data.get("live_opened")
         if start_time and (datetime.utcnow() - start_time).seconds >= 120:
             await handle_live_quiereme(query, context, live_id)
         else:
@@ -2061,14 +2061,14 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "💳 Ingresa el código del cupón:",
             reply_markup=back_to_menu_keyboard()
         )
-        context.user_data["state"]="cobrar_cupon"
+        context.user_data["state"] = "cobrar_cupon"
 
     elif data == "subir_live":
         await query.edit_message_text(
             "🔗 Envía el link de tu live de TikTok (costo: 3 puntos).",
             reply_markup=back_to_menu_keyboard()
         )
-        context.user_data["state"]="live_link"
+        context.user_data["state"] = "live_link"
 
     # 👇 Bloques de Referidos
     elif data == "resumen_referidos":
@@ -2079,7 +2079,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
-    state=context.user_data.get("state")
+    state = context.user_data.get("state")
     if state == "tiktok_user":
         await save_tiktok(update, context)
     elif state == "cambiar_tiktok":
@@ -2095,9 +2095,9 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif state == "video_link":
         await save_video_link(update, context)
     elif state == "cobrar_cupon":
-        context.args=[update.message.text.strip()]
+        context.args = [update.message.text.strip()]
         await cobrar_cupon(update, context)
-        context.user_data["state"]=None
+        context.user_data["state"] = None
 
     else:
         await update.message.reply_text(
@@ -2108,7 +2108,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Comando: lista de comandos ---
 async def comandos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
-    texto=(
+    texto = (
         "📋 Lista de comandos disponibles:\n\n"
         "• /start - Iniciar el bot y registrarte\n"
         "• /balance - Ver tu balance de puntos\n"
@@ -2143,15 +2143,15 @@ async def cmd_my_ref_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_my_ref_link(update, context)
 
 # --- Main ---
-BOT_TOKEN=os.getenv("BOT_TOKEN", "")
-RENDER_EXTERNAL_HOSTNAME=os.getenv("RENDER_EXTERNAL_HOSTNAME", "localhost")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+RENDER_EXTERNAL_HOSTNAME = os.getenv("RENDER_EXTERNAL_HOSTNAME", "localhost")
 
 
 async def preflight():
     await init_db()
     await migrate_db()
 
-loop=asyncio.get_event_loop()
+loop = asyncio.get_event_loop()
 loop.run_until_complete(preflight())
 
 # --- Función de inicio para job_queue ---
@@ -2164,7 +2164,7 @@ async def on_startup(app: Application):
 
 # ✅ Opción 1: definir on_startup antes de construir la aplicación
 
-application=Application.builder().token(
+application = Application.builder().token(
     BOT_TOKEN).post_init(on_startup).build()
 
 application.add_handler(CommandHandler("start", start))
@@ -2187,17 +2187,17 @@ application.add_handler(MessageHandler(
     filters.TEXT & ~filters.COMMAND, text_handler))
 application.add_handler(CallbackQueryHandler(menu_handler))
 
-flask_app=Flask(__name__)
+flask_app = Flask(__name__)
 
 
-@ flask_app.route("/")
+@flask_app.route("/")
 def home():
     return "Bot activo y saludable!", 200
 
 
-@ flask_app.route(f"/{BOT_TOKEN}", methods=["POST"])
+@flask_app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook():
-    update=Update.de_json(request.get_json(force=True), application.bot)
+    update = Update.de_json(request.get_json(force=True), application.bot)
     application.update_queue.put(update)
     return "ok", 200
 
