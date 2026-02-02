@@ -969,7 +969,11 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
 # --- Ver videos (no propios, solo una vez) ---
 async def show_videos(query, context):
     chat_id = query.message.chat.id
-    vid = obtener_video()  # tu lógica para traer el video
+
+    # Aquí obtienes el video desde tu lista o base de datos
+    # Por ejemplo, si tienes una lista de videos en context.user_data:
+    # <-- ajusta según tu lógica real
+    vid = context.user_data.get("video_actual")
 
     texto = (
         f"📺 Video ({vid.tipo}):\n"
@@ -994,9 +998,21 @@ async def show_videos(query, context):
 
 
 # --- Ver lives (no propios, solo una vez) ---
+
 async def show_videos(query, context):
     chat_id = query.message.chat.id
-    vid = obtener_video()  # tu lógica para traer el video
+
+    # Aquí debes traer el video real de tu base de datos o lista
+    # Ejemplo: si tienes una lista en context.user_data
+    vid = context.user_data.get("video_actual")  # <-- ajusta según tu lógica
+
+    if not vid:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="❌ No hay videos disponibles en este momento.",
+            reply_markup=back_to_menu_keyboard()
+        )
+        return
 
     texto = (
         f"📺 Video ({vid.tipo}):\n"
