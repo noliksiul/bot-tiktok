@@ -967,13 +967,26 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
 
 
 # --- Ver videos (no propios, solo una vez) ---
+
 async def show_videos(query, context):
     chat_id = query.message.chat.id
+    user_id = query.from_user.id
 
-    # Aquí obtienes el video desde tu lista o base de datos
-    # Por ejemplo, si tienes una lista de videos en context.user_data:
-    # <-- ajusta según tu lógica real
-    vid = context.user_data.get("video_actual")
+    async with async_session() as session:
+        res = await session.execute(
+            select(Video)
+            .where(Video.telegram_id != user_id)   # no mostrar videos propios
+            .order_by(Video.created_at.desc())
+        )
+        vid = res.scalars().first()
+
+    if not vid:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="❌ No hay videos disponibles en este momento.",
+            reply_markup=back_to_menu_keyboard()
+        )
+        return
 
     texto = (
         f"📺 Video ({vid.tipo}):\n"
@@ -996,8 +1009,8 @@ async def show_videos(query, context):
         ])
     )
 
-
 # --- Ver lives (no propios, solo una vez) ---
+
 
 async def show_videos(query, context):
     chat_id = query.message.chat.id
@@ -1976,11 +1989,11 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("video_support_done_"):
         vid_id = int(data.split("_")[-1])
-        start_time = context.user_data.get("video_opened")
-        if start_time and (datetime.utcnow() - start_time).seconds >= 20:
-            await handle_video_support_done(query, context, vid_id)
-        else:
-            await query.answer("⚠️ Primero abre el video y espera 20 segundos.")
+    start_time = context.user_data.get("video_opened")
+    if start_time and (datetime.utcnow() - start_time).seconds >= 20:
+        await handle_video_support_done(query, context, vid_id)
+    else:
+        await query.answer("⚠️ Primero abre el video y espera 20 segundos.")
 
     # 👇 Bloques de Live
     elif data == "ver_live":
