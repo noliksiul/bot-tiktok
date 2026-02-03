@@ -968,9 +968,14 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
 
 # --- Ver videos (no propios, solo una vez) ---
 
-async def show_videos(query, context):
-    chat_id = query.message.chat.id
-    user_id = query.from_user.id
+async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
+    if isinstance(update_or_query, Update):
+        chat_id = update_or_query.effective_chat.id
+        user_id = update_or_query.effective_user.id
+    else:
+        query = update_or_query
+        chat_id = query.message.chat.id
+        user_id = query.from_user.id
 
     async with async_session() as session:
         res = await session.execute(
@@ -978,15 +983,17 @@ async def show_videos(query, context):
             .where(Video.telegram_id != user_id)   # no mostrar videos propios
             .order_by(Video.created_at.desc())
         )
-        vid = res.scalars().first()
+        rows = res.scalars().all()
 
-    if not vid:
+    if not rows:
         await context.bot.send_message(
             chat_id=chat_id,
-            text="❌ No hay videos disponibles en este momento.",
+            text="⚠️ No hay videos disponibles por ahora.",
             reply_markup=back_to_menu_keyboard()
         )
         return
+
+    vid = rows[0]  # tomar el más reciente
 
     texto = (
         f"📺 Video ({vid.tipo}):\n"
