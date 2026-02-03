@@ -1989,9 +1989,9 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("video_support_done_"):
         vid_id = int(data.split("_")[-1])
-    start_time = context.user_data.get("video_opened")
-    if start_time and (datetime.utcnow() - start_time).seconds >= 20:
-        await handle_video_support_done(query, context, vid_id)
+        start_time = context.user_data.get("video_opened")
+        if start_time and (datetime.utcnow() - start_time).seconds >= 20:
+            await handle_video_support_done(query, context, vid_id)
     else:
         await query.answer("⚠️ Primero abre el video y espera 20 segundos.")
 
