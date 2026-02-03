@@ -1872,8 +1872,9 @@ async def reject_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action_
         reply_markup=back_to_menu_keyboard()
     )
 
-
 # bot.py (Parte 5/5)
+
+
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     try:
@@ -1992,8 +1993,8 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         start_time = context.user_data.get("video_opened")
         if start_time and (datetime.utcnow() - start_time).seconds >= 20:
             await handle_video_support_done(query, context, vid_id)
-    else:
-        await query.answer("⚠️ Primero abre el video y espera 20 segundos.")
+        else:
+            await query.answer("⚠️ Primero abre el video y espera 20 segundos.")
 
     # 👇 Bloques de Live
     elif data == "ver_live":
@@ -2058,6 +2059,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 👇 Bloques de Referidos
     elif data == "resumen_referidos":
         await referral_weekly_summary(query, context)
+
 # --- Handler de texto principal ---
 
 
