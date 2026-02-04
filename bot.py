@@ -899,6 +899,7 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # bot.py (Parte 3/5)
+
 # --- Ver seguimientos (no propios, solo una vez) ---
 async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(update_or_query, Update):
@@ -965,10 +966,78 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
         when=20
     )
 
-
 # --- Ver videos (no propios, solo una vez) ---
 
+
+async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
+    if isinstance(update_or_query, Update):
+        chat_id = update_or_query.effective_chat.id
+        user_id = update_or_query.effective_user.id
+    else:
+        query = update_or_query
+        chat_id = query.message.chat.id
+        user_id = query.from_user.id
+
+    async with async_session() as session:
+        res = await session.execute(
+            select(Video)
+            .where(Video.telegram_id != user_id)   # no mostrar videos propios
+            .order_by(Video.created_at.desc())
+        )
+        rows = res.scalars().all()
+
+    if not rows:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="⚠️ No hay videos disponibles por ahora.",
+            reply_markup=back_to_menu_keyboard()
+        )
+        return
+
+    vid = rows[0]  # tomar el más reciente
+
+    texto = (
+        f"📺 Video ({vid.tipo}):\n"
+        f"📌 {vid.titulo}\n"
+        f"📝 {vid.descripcion}\n"
+        f"🔗 {vid.link}\n"
+        f"🗓️ {vid.created_at}\n\n"
+        "⚠️ Recuerda dar like y compartir. El dueño supervisará tu apoyo.\n\n"
+        "Primero entra al video y apóyalo."
+    )
+
+    # Mostrar botones: abrir link y regresar
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=texto,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🌐 Ir al video", url=vid.link)],
+            [InlineKeyboardButton(
+                "🔙 Regresar al menú principal", callback_data="menu_principal")]
+        ])
+    )
+
+    # Guardar hora de inicio
+    context.user_data["video_start_time"] = datetime.utcnow()
+
+    # Mostrar confirmaciones después de 20 segundos
+    context.job_queue.run_once(
+        lambda _: context.bot.send_message(
+            chat_id=chat_id,
+            text="✅ Ya puedes confirmar tu apoyo:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "⭐ Ya di like y compartí", callback_data=f"video_support_done_{vid.id}")],
+                [InlineKeyboardButton(
+                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
+            ])
+        ),
+        when=20
+    )
+
 # --- Ver lives (no propios, solo una vez) ---
+
+
 async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(update_or_query, Update):
         chat_id = update_or_query.effective_chat.id
@@ -1934,10 +2003,10 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "ver_video":
         await show_videos(query, context)
 
-    # 👉 Este bloque se ejecuta cuando el usuario presiona "Ir al video"
+    # 👉 Este bloque se ejecuta cuando el usuario presiona "Confirmar apoyo"
     elif data.startswith("video_go_"):
         vid_id = int(data.split("_")[-1])
-        context.user_data["video_opened"] = datetime.utcnow()
+        context.user_data["video_start_time"] = datetime.utcnow()
 
         await query.answer("⏱️ Has abierto el video. Espera 20 segundos...")
 
@@ -1965,7 +2034,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("video_support_done_"):
         vid_id = int(data.split("_")[-1])
-        start_time = context.user_data.get("video_opened")
+        start_time = context.user_data.get("video_start_time")
         if start_time and (datetime.utcnow() - start_time).seconds >= 20:
             await handle_video_support_done(query, context, vid_id)
         else:
@@ -2034,6 +2103,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 👇 Bloques de Referidos
     elif data == "resumen_referidos":
         await referral_weekly_summary(query, context)
+
 # --- Handler de texto principal ---
 
 
