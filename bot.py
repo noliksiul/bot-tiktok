@@ -1009,8 +1009,10 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         chat_id=chat_id,
         text=texto,
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(
-                "🌐 Ir al video", callback_data=f"video_go_{vid.id}")],
+            # 👈 aquí va el link real
+            [InlineKeyboardButton("🌐 Ir al video", url=vid.link)],
+            [InlineKeyboardButton("▶️ Confirmar apoyo",
+                                  callback_data=f"video_go_{vid.id}")],
             [InlineKeyboardButton(
                 "🔙 Regresar al menú principal", callback_data="menu_principal")]
         ])
@@ -1990,7 +1992,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         vid_id = int(data.split("_")[-1])
         context.user_data["video_opened"] = datetime.utcnow()
 
-        # Aviso flotante (no borra el mensaje original)
         await query.answer("⏱️ Has abierto el video. Espera 20 segundos...")
 
         # Programar confirmaciones después de 20 segundos
