@@ -968,69 +968,8 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
 
 # --- Ver videos (no propios, solo una vez) ---
 
-async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
-    if isinstance(update_or_query, Update):
-        chat_id = update_or_query.effective_chat.id
-        user_id = update_or_query.effective_user.id
-    else:
-        query = update_or_query
-        chat_id = query.message.chat.id
-        user_id = query.from_user.id
-
-    async with async_session() as session:
-        res = await session.execute(
-            select(Video)
-            .where(Video.telegram_id != user_id)   # no mostrar videos propios
-            .order_by(Video.created_at.desc())
-        )
-        rows = res.scalars().all()
-
-    if not rows:
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text="⚠️ No hay videos disponibles por ahora.",
-            reply_markup=back_to_menu_keyboard()
-        )
-        return
-
-    vid = rows[0]  # tomar el más reciente
-
-    texto = (
-        f"📺 Video ({vid.tipo}):\n"
-        f"📌 {vid.titulo}\n"
-        f"📝 {vid.descripcion}\n"
-        f"🔗 {vid.link}\n"
-        f"🗓️ {vid.created_at}\n\n"
-        "⚠️ Recuerda dar like y compartir. El dueño supervisará tu apoyo.\n\n"
-        "Presiona el botón para abrir el video y empezar el conteo."
-    )
-
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text=(
-            f"📺 Video ({vid.tipo}):\n"
-            f"📌 {vid.titulo}\n"
-            f"📝 {vid.descripcion}\n"
-            f"🔗 {vid.link}\n"
-            f"🗓️ {vid.created_at}\n\n"
-            "⚠️ Recuerda dar like y compartir. El dueño supervisará tu apoyo.\n\n"
-            "Presiona el botón para abrir el video y empezar el conteo."
-        ),
-        reply_markup=InlineKeyboardMarkup([
-            # 👈 este abre TikTok
-            [InlineKeyboardButton("🌐 Ir al video", url=vid.link)],
-            [InlineKeyboardButton("▶️ Confirmar apoyo",
-                                  callback_data=f"video_go_{vid.id}")],
-            [InlineKeyboardButton(
-                "🔙 Regresar al menú principal", callback_data="menu_principal")]
-        ])
-    )
-
 # --- Ver lives (no propios, solo una vez) ---
-
-
-# --- Ver videos (no propios, solo una vez) ---
-async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
+async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(update_or_query, Update):
         chat_id = update_or_query.effective_chat.id
         user_id = update_or_query.effective_user.id
@@ -1041,49 +980,49 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
 
     async with async_session() as session:
         res = await session.execute(
-            select(Video)
-            .where(Video.telegram_id != user_id)   # no mostrar videos propios
-            .order_by(Video.created_at.desc())
+            select(Live)
+            .where(Live.telegram_id != user_id)   # no mostrar lives propios
+            .order_by(Live.created_at.desc())
         )
         rows = res.scalars().all()
 
     if not rows:
         await context.bot.send_message(
             chat_id=chat_id,
-            text="⚠️ No hay videos disponibles por ahora.",
+            text="⚠️ No hay lives disponibles por ahora.",
             reply_markup=back_to_menu_keyboard()
         )
         return
 
-    vid = rows[0]  # tomar el más reciente
+    live = rows[0]  # tomar el más reciente
 
     texto = (
-        f"📺 Video ({vid.tipo}):\n"
-        f"📌 {vid.titulo}\n"
-        f"📝 {vid.descripcion}\n"
-        f"🔗 {vid.link}\n"
-        f"🗓️ {vid.created_at}\n\n"
-        "⚠️ Recuerda dar like y compartir. El dueño supervisará tu apoyo.\n\n"
-        "Presiona el botón para abrir el video y empezar el conteo."
+        f"🎤 Live:\n"
+        f"📌 {live.titulo}\n"
+        f"🔗 {live.link}\n"
+        f"🗓️ {live.created_at}\n\n"
+        "⚠️ Recuerda ver el live y dar Quiéreme si aplica.\n\n"
+        "Presiona el botón para abrir el live y empezar el conteo."
     )
 
     await context.bot.send_message(
         chat_id=chat_id,
         text=texto,
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(
-                "🌐 Ir al video", callback_data=f"video_go_{vid.id}")],
+            [InlineKeyboardButton("🌐 Ir al live", url=live.link)],
+            [InlineKeyboardButton("▶️ Confirmar live",
+                                  callback_data=f"live_opened_{live.id}")],
             [InlineKeyboardButton(
                 "🔙 Regresar al menú principal", callback_data="menu_principal")]
         ])
     )
 
+    # Aquí sí se espera 2 minutos (120 segundos)
     context.user_data["live_start_time"] = datetime.utcnow()
-
     context.job_queue.run_once(
         lambda _: context.bot.send_message(
             chat_id=chat_id,
-            text="✅ Ya puedes confirmar tu apoyo:",
+            text="✅ Ya puedes confirmar tu apoyo en el live:",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton(
                     "👀 Ya vi el live", callback_data=f"live_view_{live.id}")],
