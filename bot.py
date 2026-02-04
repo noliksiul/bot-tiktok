@@ -1007,14 +1007,20 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_message(
         chat_id=chat_id,
-        text=texto,
+        text=(
+            f"📺 Video ({vid.tipo}):\n"
+            f"📌 {vid.titulo}\n"
+            f"📝 {vid.descripcion}\n"
+            f"🔗 {vid.link}\n"
+            f"🗓️ {vid.created_at}\n\n"
+            "⚠️ Recuerda dar like y compartir. El dueño supervisará tu apoyo.\n\n"
+            "Presiona el botón para abrir el video y empezar el conteo."
+        ),
         reply_markup=InlineKeyboardMarkup([
-            # 👈 aquí va el link real
-            [InlineKeyboardButton("🌐 Ir al video", url=vid.link)],
-            [InlineKeyboardButton("▶️ Confirmar apoyo",
+            [InlineKeyboardButton("🌐 Ir al video", url=vid.link,
                                   callback_data=f"video_go_{vid.id}")],
-            [InlineKeyboardButton(
-                "🔙 Regresar al menú principal", callback_data="menu_principal")]
+            [InlineKeyboardButton("🔙 Regresar al menú principal",
+                                  callback_data="menu_principal")]
         ])
     )
 
@@ -1994,7 +2000,13 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await query.answer("⏱️ Has abierto el video. Espera 20 segundos...")
 
-        # Programar confirmaciones después de 20 segundos
+        # Cancelar confirmaciones previas
+        job_name = f"video_confirm_{vid_id}_{query.from_user.id}"
+        old_jobs = context.job_queue.get_jobs_by_name(job_name)
+        for job in old_jobs:
+            job.schedule_removal()
+
+        # Programar confirmación única
         context.job_queue.run_once(
             lambda _: context.bot.send_message(
                 chat_id=query.message.chat.id,
@@ -2006,7 +2018,8 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         "🔙 Regresar al menú principal", callback_data="menu_principal")]
                 ])
             ),
-            when=20
+            when=20,
+            name=job_name
         )
 
     elif data.startswith("video_support_done_"):
@@ -2080,7 +2093,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 👇 Bloques de Referidos
     elif data == "resumen_referidos":
         await referral_weekly_summary(query, context)
-
 # --- Handler de texto principal ---
 
 
