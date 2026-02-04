@@ -1017,9 +1017,12 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
             "Presiona el botón para abrir el video y empezar el conteo."
         ),
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🌐 Ir al video", url=vid.link)]
-            [InlineKeyboardButton("🔙 Regresar al menú principal",
-                                  callback_data="menu_principal")]
+            # 👈 este abre TikTok
+            [InlineKeyboardButton("🌐 Ir al video", url=vid.link)],
+            [InlineKeyboardButton("▶️ Confirmar apoyo",
+                                  callback_data=f"video_go_{vid.id}")],
+            [InlineKeyboardButton(
+                "🔙 Regresar al menú principal", callback_data="menu_principal")]
         ])
     )
 
