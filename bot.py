@@ -1999,6 +1999,19 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "ver_video":
         await show_videos(query, context)
 
+    elif data.startswith("video_opened_"):
+        vid_id = int(data.split("_")[-1])
+        context.user_data["video_opened"] = datetime.utcnow()
+        await query.edit_message_text(
+            "✅ Video abierto, espera 20 segundos antes de confirmar.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "⭐ Ya di like y compartí", callback_data=f"video_support_done_{vid_id}")],
+                [InlineKeyboardButton(
+                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
+            ])
+        )
+
     elif data.startswith("video_support_done_"):
         vid_id = int(data.split("_")[-1])
         start_time = context.user_data.get("video_opened")   # ✅ correcto
