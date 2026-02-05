@@ -1021,6 +1021,8 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
 
     # Guardar hora de inicio
     context.user_data["video_start_time"] = datetime.utcnow()
+    print("DEBUG show_videos: video_start_time guardado",
+          context.user_data["video_start_time"])
 
     # Mostrar confirmaciones después de 20 segundos
     context.job_queue.run_once(
