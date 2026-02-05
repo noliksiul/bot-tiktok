@@ -995,8 +995,7 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         chat_id=chat_id,
         text=texto,
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(
-                "🌐 Ir al video", callback_data=f"video_opened_{vid.id}")],
+            [InlineKeyboardButton("🌐 Ir al video", url=vid.link)],
             [InlineKeyboardButton(
                 "🔙 Regresar al menú principal", callback_data="menu_principal")]
         ])
