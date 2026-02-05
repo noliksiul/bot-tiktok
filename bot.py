@@ -1942,7 +1942,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
 
     data = query.data
-    print("Callback recibido:", data)   # 👈 Depuración: ver qué callback llega
+    print("Callback recibido:", data)   # 👈 Depuración
 
     if data == "subir_seguimiento":
         await query.edit_message_text(
@@ -1987,7 +1987,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🎬 Tipo seleccionado: {context.user_data['video_tipo']}\n\nAhora envíame el título de tu video:",
             reply_markup=back_to_menu_keyboard()
         )
-        return   # 👈 agregado para cortar el flujo aquí
+        return
 
     # 👇 Bloques de Seguimiento
     elif data == "ver_seguimiento":
@@ -1995,7 +1995,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("seguimiento_opened_"):
         seg_id = int(data.split("_")[-1])
-        # ✅ corregido
         context.user_data["seguimiento_opened"] = datetime.utcnow()
         await query.edit_message_text(
             "✅ Perfil abierto, espera 20 segundos antes de confirmar.",
@@ -2009,7 +2008,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("seguimiento_done_"):
         seg_id = int(data.split("_")[-1])
-        start_time = context.user_data.get("seguimiento_opened")   # ✅ coincide
+        start_time = context.user_data.get("seguimiento_opened")
         if start_time and (datetime.utcnow() - start_time).seconds >= 20:
             await handle_seguimiento_done(query, context, seg_id)
         else:
@@ -2019,36 +2018,10 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "ver_video":
         await show_videos(query, context)
 
-    elif data.startswith("video_go_"):
-        vid_id = int(data.split("_")[-1])
-        # ✅ correcto
-        context.user_data["video_start_time"] = datetime.utcnow()
-
-        await query.answer("⏱️ Has abierto el video. Espera 20 segundos...")
-
-        job_name = f"video_confirm_{vid_id}_{query.from_user.id}"
-        old_jobs = context.job_queue.get_jobs_by_name(job_name)
-        for job in old_jobs:
-            job.schedule_removal()
-
-        context.job_queue.run_once(
-            lambda _: context.bot.send_message(
-                chat_id=query.message.chat.id,
-                text="✅ Ya puedes confirmar tu apoyo:",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton(
-                        "⭐ Ya di like y compartí", callback_data=f"video_support_done_{vid_id}")],
-                    [InlineKeyboardButton(
-                        "🔙 Regresar al menú principal", callback_data="menu_principal")]
-                ])
-            ),
-            when=20,
-            name=job_name
-        )
-
     elif data.startswith("video_support_done_"):
         vid_id = int(data.split("_")[-1])
-        start_time = context.user_data.get("video_start_time")   # ✅ coincide
+        start_time = context.user_data.get("video_start_time")
+        print("DEBUG video_support_done:", start_time, datetime.utcnow())
         if start_time and (datetime.utcnow() - start_time).seconds >= 20:
             await handle_video_support_done(query, context, vid_id)
         else:
@@ -2060,7 +2033,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("live_opened_"):
         live_id = int(data.split("_")[-1])
-        context.user_data["live_opened"] = datetime.utcnow()   # ✅ corregido
+        context.user_data["live_opened"] = datetime.utcnow()
         await query.edit_message_text(
             "✅ Live abierto, espera 2 minutos antes de confirmar.",
             reply_markup=InlineKeyboardMarkup([
