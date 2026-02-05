@@ -1981,25 +1981,26 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 👇 Bloques de Video
     elif data == "ver_video":
         await show_videos(query, context)
-elif data.startswith("video_opened_"):
-    vid_id = int(data.split("_")[-1])
-    context.user_data["video_opened"] = datetime.utcnow()
-    await query.edit_message_text("⏱️ Espera 20 segundos...")
 
-    # Mostrar botón después de 20 segundos
-    context.job_queue.run_once(
-        lambda _: context.bot.send_message(
-            chat_id=query.message.chat.id,
-            text="✅ Ya puedes confirmar tu apoyo:",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(
-                    "⭐ Ya di like y compartí", callback_data=f"video_support_done_{vid_id}")],
-                [InlineKeyboardButton(
-                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
-            ])
-        ),
-        when=20
-    )
+    elif data.startswith("video_opened_"):
+        vid_id = int(data.split("_")[-1])
+        context.user_data["video_opened"] = datetime.utcnow()
+        await query.edit_message_text("⏱️ Espera 20 segundos...")
+
+        # Mostrar botón después de 20 segundos
+        context.job_queue.run_once(
+            lambda _: context.bot.send_message(
+                chat_id=query.message.chat.id,
+                text="✅ Ya puedes confirmar tu apoyo:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton(
+                        "⭐ Ya di like y compartí", callback_data=f"video_support_done_{vid_id}")],
+                    [InlineKeyboardButton(
+                        "🔙 Regresar al menú principal", callback_data="menu_principal")]
+                ])
+            ),
+            when=20
+        )
 
     elif data.startswith("video_support_done_"):
         vid_id = int(data.split("_")[-1])
