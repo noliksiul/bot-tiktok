@@ -522,7 +522,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("👥 Ir al grupo", url=GROUP_URL)],
         # link del canal de ofertas
         [InlineKeyboardButton("🛍️ Ir al canal ofertas",
-                              url="https://t.me/+...")]
+                              url="https://t.me/ofertasimperdiblestiktokshop")]
     ])
     await update.message.reply_text(
         "📢 Recuerda seguir nuestros canales para no perderte amistades, promociones y códigos para el bot.",
@@ -2198,7 +2198,7 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 👉 Lógica especial para TikTok Shop
     if context.user_data.get("video_tipo") == "TikTok Shop":
         await context.bot.send_message(
-            chat_id=https: // t.me/ofertasimperdiblestiktokshop,   # canal de ofertas
+            chat_id=-1003664738296,   # canal de ofertas
             text="📢 No te pierdas esta oferta imperdible de TikTok Shop",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🛍️ Entra y compra", url=link)]
