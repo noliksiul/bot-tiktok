@@ -1329,6 +1329,7 @@ async def reject_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_id
 
 
 # --- Registrar interacción de video (notifica con TikTok del actor) ---
+
 async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, vid_id: int):
     user_id = query.from_user.id
     async with async_session() as session:
@@ -1339,6 +1340,19 @@ async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, v
             return
         if vid.telegram_id == user_id:
             await query.answer("No puedes apoyar tu propio video.", show_alert=True)
+            return
+
+        # ✅ Verificar si ya existe interacción
+        res_inter = await session.execute(
+            select(Interaccion).where(
+                Interaccion.tipo == "video_support",
+                Interaccion.item_id == vid.id,
+                Interaccion.actor_id == user_id
+            )
+        )
+        inter_existente = res_inter.scalars().first()
+        if inter_existente:
+            await query.answer("⚠️ Ya registraste apoyo en este video.", show_alert=True)
             return
 
         expires = datetime.utcnow() + timedelta(days=AUTO_APPROVE_AFTER_DAYS)
