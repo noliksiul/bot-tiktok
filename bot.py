@@ -952,7 +952,11 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
     )
 
     # Guardar hora de inicio
-    context.user_data["seguimiento_opened"] = datetime.utcnow()
+
+    # 👈 usa video_opened para ser consistente
+    context.user_data["video_opened"] = datetime.utcnow()
+    print("DEBUG show_videos: video_opened guardado",
+          context.user_data["video_opened"])
 
     # Mostrar confirmaciones después de 20 segundos
     context.job_queue.run_once(
@@ -2022,7 +2026,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("video_support_done_"):
         vid_id = int(data.split("_")[-1])
-        start_time = context.user_data.get("video_opened")
+        start_time = context.user_data.get("video_opened")   # 👈 corregido
         print("DEBUG video_support_done:", start_time, datetime.utcnow())
         if start_time and (datetime.utcnow() - start_time).seconds >= 20:
             await handle_video_support_done(query, context, vid_id)
