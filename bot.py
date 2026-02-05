@@ -949,7 +949,7 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
     )
 
     # Guardar hora de inicio
-    context.user_data["seguimiento_start_time"] = datetime.utcnow()
+    context.user_data["seguimiento_opened"] = datetime.utcnow()
 
     # Mostrar confirmaciones después de 20 segundos
     context.job_queue.run_once(
@@ -1086,7 +1086,7 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     )
 
     # Aquí sí se espera 2 minutos (120 segundos)
-    context.user_data["live_start_time"] = datetime.utcnow()
+    context.user_data["live_opened"] = datetime.utcnow()
     context.job_queue.run_once(
         lambda _: context.bot.send_message(
             chat_id=chat_id,
