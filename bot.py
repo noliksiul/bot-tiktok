@@ -1976,12 +1976,13 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "video_tipo_shop": "TikTok Shop",
             "video_tipo_colaboracion": "Colaboración"
         }
-        context.user_data["video_tipo"] = tipos.get(data, "Normal")
-        context.user_data["state"] = "video_title"
-        await query.edit_message_text(
-            f"🎬 Tipo seleccionado: {context.user_data['video_tipo']}\n\nAhora envíame el título de tu video:",
-            reply_markup=back_to_menu_keyboard()
-        )
+    context.user_data["video_tipo"] = tipos.get(data, "Normal")
+    context.user_data["state"] = "video_title"
+    await query.edit_message_text(
+        f"🎬 Tipo seleccionado: {context.user_data['video_tipo']}\n\nAhora envíame el título de tu video:",
+        reply_markup=back_to_menu_keyboard()
+    )
+    return   # 👈 agregado para cortar el flujo aquí
 
     # 👇 Bloques de Seguimiento
     elif data == "ver_seguimiento":
@@ -2131,7 +2132,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "resumen_referidos":
         await referral_weekly_summary(query, context)
 
-# --- Handler de texto principal ---
 
 # --- Handler de texto principal ---
 
@@ -2199,7 +2199,11 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get("video_tipo") == "TikTok Shop":
         await context.bot.send_message(
             chat_id=-1003664738296,   # canal de ofertas
-            text="📢 No te pierdas esta oferta imperdible de TikTok Shop",
+            text=f"📢 No te pierdas esta oferta imperdible de TikTok Shop\n\n"
+                 f"📌 {context.user_data.get('video_title')}\n"
+                 f"📝 {context.user_data.get('video_desc')}\n"
+                 # 👈 incluir el link en el texto para que Telegram genere la preview
+                 f"{link}",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🛍️ Entra y compra", url=link)]
             ])
@@ -2208,7 +2212,10 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Publicar en canal normal sin botones
         await context.bot.send_message(
             chat_id=CHANNEL_ID,
-            text=f"🎬 Nuevo video subido:\n\n📌 {context.user_data.get('video_title')}\n📝 {context.user_data.get('video_desc')}\n🔗 {link}"
+            text=f"🎬 Nuevo video subido:\n\n"
+                 f"📌 {context.user_data.get('video_title')}\n"
+                 f"📝 {context.user_data.get('video_desc')}\n"
+                 f"{link}"
         )
 
     await update.message.reply_text(
