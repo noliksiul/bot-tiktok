@@ -1335,6 +1335,7 @@ async def reject_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_id
 async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, vid_id: int):
     user_id = query.from_user.id
     async with async_session() as session:
+        # Buscar el video
         res_vid = await session.execute(select(Video).where(Video.id == vid_id))
         vid = res_vid.scalars().first()
         if not vid:
@@ -1357,6 +1358,7 @@ async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, v
             await query.answer("⚠️ Ya registraste apoyo en este video.", show_alert=True)
             return
 
+        # Crear nueva interacción
         expires = datetime.utcnow() + timedelta(days=AUTO_APPROVE_AFTER_DAYS)
         inter = Interaccion(
             tipo="video_support",
@@ -1374,24 +1376,27 @@ async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, v
         res_actor = await session.execute(select(User).where(User.telegram_id == user_id))
         actor = res_actor.scalars().first()
 
-    await query.edit_message_text("🟡 Tu apoyo fue registrado y está pendiente de aprobación del dueño.", reply_markup=back_to_menu_keyboard())
-    await notify_user(
-        context,
-        chat_id=vid.telegram_id,
-        text=(
-            f"📩 Nuevo apoyo a tu video:\n"
-            f"Item ID: {vid.id}\n"
-            f"Actor: {user_id}\n"
-            f"Usuario TikTok: {actor.tiktok_user or 'no registrado'}\n"
-            f"Puntos: {PUNTOS_APOYO_VIDEO}\n\n"
-            "¿Apruebas?"
-        ),
-        reply_markup=yes_no_keyboard(
-            callback_yes=f"approve_interaction_{inter.id}",
-            callback_no=f"reject_interaction_{inter.id}"
+        # 👇 mover aquí la notificación y respuesta, dentro del bloque
+        await query.edit_message_text(
+            "🟡 Tu apoyo fue registrado y está pendiente de aprobación del dueño.",
+            reply_markup=back_to_menu_keyboard()
         )
-    )
-
+        await notify_user(
+            context,
+            chat_id=vid.telegram_id,
+            text=(
+                f"📩 Nuevo apoyo a tu video:\n"
+                f"Item ID: {vid.id}\n"
+                f"Actor: {user_id}\n"
+                f"Usuario TikTok: {actor.tiktok_user or 'no registrado'}\n"
+                f"Puntos: {PUNTOS_APOYO_VIDEO}\n\n"
+                "¿Apruebas?"
+            ),
+            reply_markup=yes_no_keyboard(
+                callback_yes=f"approve_interaction_{inter.id}",
+                callback_no=f"reject_interaction_{inter.id}"
+            )
+        )
 # bot.py (Parte 4/5)
 
 # --- Balance e historial ---
