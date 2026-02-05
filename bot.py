@@ -1020,7 +1020,7 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     )
 
     # Guardar hora de inicio
-    context.user_data["video_start_time"] = datetime.utcnow()
+    context.user_data["video_opened"] = datetime.utcnow()
     print("DEBUG show_videos: video_start_time guardado",
           context.user_data["video_start_time"])
 
@@ -2022,7 +2022,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("video_support_done_"):
         vid_id = int(data.split("_")[-1])
-        start_time = context.user_data.get("video_start_time")
+        start_time = context.user_data.get("video_opened")
         print("DEBUG video_support_done:", start_time, datetime.utcnow())
         if start_time and (datetime.utcnow() - start_time).seconds >= 20:
             await handle_video_support_done(query, context, vid_id)
