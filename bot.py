@@ -2020,6 +2020,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 👉 Este bloque se ejecuta cuando el usuario presiona "Confirmar apoyo"
     elif data.startswith("video_go_"):
         vid_id = int(data.split("_")[-1])
+        # ✅ nombre correcto
         context.user_data["video_start_time"] = datetime.utcnow()
 
         await query.answer("⏱️ Has abierto el video. Espera 20 segundos...")
