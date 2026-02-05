@@ -2089,6 +2089,16 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         inter_id = int(data.split("_")[-1])
         await reject_interaction(query, context, inter_id)
 
+    # 👇 Bloques de Balance, Comandos y Mi link
+    elif data == "balance":
+        await show_balance(query, context)
+
+    elif data == "comandos":
+        await comandos(query, context)
+
+    elif data == "mi_ref_link":
+        await show_my_ref_link(query, context)
+
     elif data == "menu_principal":
         await show_main_menu(query, context)
         return
