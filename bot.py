@@ -1934,6 +1934,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
 
     data = query.data
+    print("Callback recibido:", data)   # 👈 Depuración: ver qué callback llega
 
     if data == "subir_seguimiento":
         await query.edit_message_text(
@@ -1962,7 +1963,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "📌 ¿Qué tipo de video quieres subir?",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-        context.user_data["state"] = None   # ✅ aquí solo debe ser None
+        context.user_data["state"] = None
 
     elif data.startswith("video_tipo_"):
         tipos = {
@@ -2016,21 +2017,17 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "ver_video":
         await show_videos(query, context)
 
-    # 👉 Este bloque se ejecuta cuando el usuario presiona "Confirmar apoyo"
     elif data.startswith("video_go_"):
         vid_id = int(data.split("_")[-1])
-        # ✅ nombre correcto
         context.user_data["video_start_time"] = datetime.utcnow()
 
         await query.answer("⏱️ Has abierto el video. Espera 20 segundos...")
 
-        # Cancelar confirmaciones previas
         job_name = f"video_confirm_{vid_id}_{query.from_user.id}"
         old_jobs = context.job_queue.get_jobs_by_name(job_name)
         for job in old_jobs:
             job.schedule_removal()
 
-        # Programar confirmación única
         context.job_queue.run_once(
             lambda _: context.bot.send_message(
                 chat_id=query.message.chat.id,
