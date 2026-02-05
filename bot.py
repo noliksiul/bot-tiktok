@@ -1976,13 +1976,13 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "video_tipo_shop": "TikTok Shop",
             "video_tipo_colaboracion": "Colaboración"
         }
-    context.user_data["video_tipo"] = tipos.get(data, "Normal")
-    context.user_data["state"] = "video_title"
-    await query.edit_message_text(
-        f"🎬 Tipo seleccionado: {context.user_data['video_tipo']}\n\nAhora envíame el título de tu video:",
-        reply_markup=back_to_menu_keyboard()
-    )
-    return   # 👈 agregado para cortar el flujo aquí
+        context.user_data["video_tipo"] = tipos.get(data, "Normal")
+        context.user_data["state"] = "video_title"
+        await query.edit_message_text(
+            f"🎬 Tipo seleccionado: {context.user_data['video_tipo']}\n\nAhora envíame el título de tu video:",
+            reply_markup=back_to_menu_keyboard()
+        )
+        return   # 👈 agregado para cortar el flujo aquí
 
     # 👇 Bloques de Seguimiento
     elif data == "ver_seguimiento":
@@ -2131,40 +2131,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 👇 Bloques de Referidos
     elif data == "resumen_referidos":
         await referral_weekly_summary(query, context)
-
-
-# --- Handler de texto principal ---
-
-
-async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.text:
-        return
-    state = context.user_data.get("state")
-
-    if state == "tiktok_user":
-        await save_tiktok(update, context)
-    elif state == "cambiar_tiktok":
-        await save_new_tiktok(update, context)
-    elif state == "seguimiento_link":
-        await save_seguimiento(update, context)
-    elif state == "live_link":   # 👈 CORREGIDO, sin espacio extra
-        await save_live_link(update, context)
-    elif state == "video_title":
-        await save_video_title(update, context)
-    elif state == "video_desc":
-        await save_video_desc(update, context)
-    elif state == "video_link":
-        # 👈 aquí se aplica la lógica especial
-        await save_video_link(update, context)
-    elif state == "cobrar_cupon":
-        context.args = [update.message.text.strip()]
-        await cobrar_cupon(update, context)
-        context.user_data["state"] = None
-    else:
-        await update.message.reply_text(
-            "⚠️ Usa el menú para interactuar con el bot.\n\nSi es tu primera vez, escribe /start.",
-            reply_markup=back_to_menu_keyboard()
-        )
 
 # --- Guardar video con lógica especial TikTok Shop ---
 
