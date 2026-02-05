@@ -1980,20 +1980,13 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=back_to_menu_keyboard()
         )
 
-    elif data.startswith("approve_action_"):
-        action_id = int(data.split("_")[-1])
-        await handle_action_approve(query, context, action_id)
-
-    elif data.startswith("reject_action_"):
-        action_id = int(data.split("_")[-1])
-        await handle_action_reject(query, context, action_id)
-
     # 👇 Bloques de Seguimiento
     elif data == "ver_seguimiento":
         await show_seguimientos(query, context)
 
     elif data.startswith("seguimiento_opened_"):
         seg_id = int(data.split("_")[-1])
+        # ✅ corregido
         context.user_data["seguimiento_opened"] = datetime.utcnow()
         await query.edit_message_text(
             "✅ Perfil abierto, espera 20 segundos antes de confirmar.",
@@ -2007,7 +2000,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("seguimiento_done_"):
         seg_id = int(data.split("_")[-1])
-        start_time = context.user_data.get("seguimiento_opened")
+        start_time = context.user_data.get("seguimiento_opened")   # ✅ coincide
         if start_time and (datetime.utcnow() - start_time).seconds >= 20:
             await handle_seguimiento_done(query, context, seg_id)
         else:
@@ -2019,6 +2012,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("video_go_"):
         vid_id = int(data.split("_")[-1])
+        # ✅ correcto
         context.user_data["video_start_time"] = datetime.utcnow()
 
         await query.answer("⏱️ Has abierto el video. Espera 20 segundos...")
@@ -2045,7 +2039,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("video_support_done_"):
         vid_id = int(data.split("_")[-1])
-        start_time = context.user_data.get("video_start_time")
+        start_time = context.user_data.get("video_start_time")   # ✅ coincide
         if start_time and (datetime.utcnow() - start_time).seconds >= 20:
             await handle_video_support_done(query, context, vid_id)
         else:
@@ -2057,7 +2051,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("live_opened_"):
         live_id = int(data.split("_")[-1])
-        context.user_data["live_opened"] = datetime.utcnow()
+        context.user_data["live_opened"] = datetime.utcnow()   # ✅ corregido
         await query.edit_message_text(
             "✅ Live abierto, espera 2 minutos antes de confirmar.",
             reply_markup=InlineKeyboardMarkup([
@@ -2072,7 +2066,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("live_view_"):
         live_id = int(data.split("_")[-1])
-        start_time = context.user_data.get("live_opened")
+        start_time = context.user_data.get("live_opened")   # ✅ coincide
         if start_time and (datetime.utcnow() - start_time).seconds >= 120:
             await handle_live_view(query, context, live_id)
         else:
@@ -2080,11 +2074,20 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("live_quiereme_"):
         live_id = int(data.split("_")[-1])
-        start_time = context.user_data.get("live_opened")
+        start_time = context.user_data.get("live_opened")   # ✅ coincide
         if start_time and (datetime.utcnow() - start_time).seconds >= 120:
             await handle_live_quiereme(query, context, live_id)
         else:
             await query.answer("⚠️ Primero abre el live y espera 2 minutos.")
+
+    # 👇 Bloques de Interacciones (Aceptar/Rechazar)
+    elif data.startswith("approve_interaction_"):
+        inter_id = int(data.split("_")[-1])
+        await approve_interaction(query, context, inter_id)
+
+    elif data.startswith("reject_interaction_"):
+        inter_id = int(data.split("_")[-1])
+        await reject_interaction(query, context, inter_id)
 
     elif data == "menu_principal":
         await show_main_menu(query, context)
