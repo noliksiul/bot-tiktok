@@ -2198,7 +2198,7 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 👉 Lógica especial para TikTok Shop
     if context.user_data.get("video_tipo") == "TikTok Shop":
         await context.bot.send_message(
-            chat_id=-1003664738296,   # canal de ofertas
+            chat_id=https: // t.me/ofertasimperdiblestiktokshop,   # canal de ofertas
             text="📢 No te pierdas esta oferta imperdible de TikTok Shop",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🛍️ Entra y compra", url=link)]
