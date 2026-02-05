@@ -519,10 +519,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Botones de canal/grupo
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("📢 Ir al canal", url=CHANNEL_URL)],
-        [InlineKeyboardButton("👥 Ir al grupo", url=GROUP_URL)]
+        [InlineKeyboardButton("👥 Ir al grupo", url=GROUP_URL)],
+        # link del canal de ofertas
+        [InlineKeyboardButton("🛍️ Ir al canal ofertas",
+                              url="https://t.me/+...")]
     ])
     await update.message.reply_text(
-        "📢 Recuerda seguir nuestro canal y grupo para no perderte amistades, promociones y códigos para el bot.",
+        "📢 Recuerda seguir nuestros canales para no perderte amistades, promociones y códigos para el bot.",
         reply_markup=keyboard
     )
 
@@ -2130,11 +2133,14 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Handler de texto principal ---
 
+# --- Handler de texto principal ---
+
 
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
     state = context.user_data.get("state")
+
     if state == "tiktok_user":
         await save_tiktok(update, context)
     elif state == "cambiar_tiktok":
@@ -2148,17 +2154,69 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif state == "video_desc":
         await save_video_desc(update, context)
     elif state == "video_link":
+        # 👈 aquí se aplica la lógica especial
         await save_video_link(update, context)
     elif state == "cobrar_cupon":
         context.args = [update.message.text.strip()]
         await cobrar_cupon(update, context)
         context.user_data["state"] = None
-
     else:
         await update.message.reply_text(
             "⚠️ Usa el menú para interactuar con el bot.\n\nSi es tu primera vez, escribe /start.",
             reply_markup=back_to_menu_keyboard()
         )
+
+# --- Guardar video con lógica especial TikTok Shop ---
+
+
+async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    link = update.message.text.strip()
+    user_id = update.effective_user.id
+
+    async with async_session() as session:
+        res = await session.execute(select(User).where(User.telegram_id == user_id))
+        user = res.scalars().first()
+        if not user:
+            await update.message.reply_text(
+                "❌ No estás registrado. Usa /start primero.",
+                reply_markup=back_to_menu_keyboard()
+            )
+            context.user_data["state"] = None
+            return
+
+        # Crear el video en DB
+        video = Video(
+            telegram_id=user_id,
+            tipo=context.user_data.get("video_tipo"),
+            titulo=context.user_data.get("video_title"),
+            descripcion=context.user_data.get("video_desc"),
+            link=link
+        )
+        session.add(video)
+        await session.commit()
+
+    # 👉 Lógica especial para TikTok Shop
+    if context.user_data.get("video_tipo") == "TikTok Shop":
+        await context.bot.send_message(
+            chat_id=-1003664738296,   # canal de ofertas
+            text="📢 No te pierdas esta oferta imperdible de TikTok Shop",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🛍️ Entra y compra", url=link)]
+            ])
+        )
+    else:
+        # Publicar en canal normal sin botones
+        await context.bot.send_message(
+            chat_id=CHANNEL_ID,
+            text=f"🎬 Nuevo video subido:\n\n📌 {context.user_data.get('video_title')}\n📝 {context.user_data.get('video_desc')}\n🔗 {link}"
+        )
+
+    await update.message.reply_text(
+        "✅ Video guardado con éxito.",
+        reply_markup=back_to_menu_keyboard()
+    )
+    context.user_data["state"] = None
+    await show_main_menu(update, context)
 
 
 # --- Comando: lista de comandos ---
@@ -2191,11 +2249,12 @@ async def comandos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         await update_or_query.message.reply_text(texto, reply_markup=back_to_menu_keyboard())
     else:
         await update_or_query.edit_message_text(texto, reply_markup=back_to_menu_keyboard())
+
+
 # --- Comando: mi link de referido ---
-
-
 async def cmd_my_ref_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_my_ref_link(update, context)
+
 
 # --- Main ---
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
@@ -2209,16 +2268,15 @@ async def preflight():
 loop = asyncio.get_event_loop()
 loop.run_until_complete(preflight())
 
+
 # --- Función de inicio para job_queue ---
-
-
 async def on_startup(app: Application):
     # Solo dejamos la tarea de auto-aprobación
     app.job_queue.run_repeating(lambda _: auto_approve_loop(app),
                                 interval=AUTO_APPROVE_INTERVAL_SECONDS, first=5)
 
-# ✅ Opción 1: definir on_startup antes de construir la aplicación
 
+# ✅ Opción 1: definir on_startup antes de construir la aplicación
 application = Application.builder().token(
     BOT_TOKEN).post_init(on_startup).build()
 
@@ -2236,7 +2294,6 @@ application.add_handler(CommandHandler("subir_cupon", subir_cupon))
 application.add_handler(CommandHandler("cobrar_cupon", cobrar_cupon))
 application.add_handler(CommandHandler("mi_ref_link", cmd_my_ref_link))
 application.add_handler(CommandHandler("comandos", comandos))
-
 
 application.add_handler(MessageHandler(
     filters.TEXT & ~filters.COMMAND, text_handler))
