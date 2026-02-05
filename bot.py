@@ -1006,7 +1006,6 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         "Primero entra al video y apóyalo."
     )
 
-    # Mostrar botones: abrir link y regresar
     await context.bot.send_message(
         chat_id=chat_id,
         text=texto,
