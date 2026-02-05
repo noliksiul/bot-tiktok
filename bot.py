@@ -2220,7 +2220,7 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=back_to_menu_keyboard()
     )
     context.user_data["state"] = None
-    await show_main_menu(update, context)
+    # await show_main_menu(update, context)
 
 
 # --- Comando: lista de comandos ---
