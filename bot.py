@@ -951,29 +951,7 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
         ])
     )
 
-    # Guardar hora de inicio
-
-    # 👈 usa video_opened para ser consistente
-    context.user_data["video_opened"] = datetime.utcnow()
-    print("DEBUG show_videos: video_opened guardado",
-          context.user_data["video_opened"])
-
-    # Mostrar confirmaciones después de 20 segundos
-    context.job_queue.run_once(
-        lambda _: context.bot.send_message(
-            chat_id=chat_id,
-            text="✅ Ya puedes confirmar tu apoyo:",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(
-                    "✅ Ya lo seguí", callback_data=f"seguimiento_done_{seg.id}")],
-                [InlineKeyboardButton(
-                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
-            ])
-        ),
-        when=20
-    )
-
-# --- Ver videos (no propios, solo una vez) ---
+   # --- Ver videos (no propios, solo una vez) ---
 
 
 async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
@@ -1023,26 +1001,23 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         ])
     )
 
-    # Guardar hora de inicio con nombre consistente
+    # Guardar hora de inicio
+    # 👈 usa video_opened para ser consistente
     context.user_data["video_opened"] = datetime.utcnow()
     print("DEBUG show_videos: video_opened guardado",
           context.user_data["video_opened"])
 
-    # Mostrar confirmaciones después de 20 segundos
-    context.job_queue.run_once(
-        lambda _: context.bot.send_message(
-            chat_id=chat_id,
-            text="✅ Ya puedes confirmar tu apoyo:",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(
-                    "⭐ Ya di like y compartí", callback_data=f"video_support_done_{vid.id}")],
-                [InlineKeyboardButton(
-                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
-            ])
-        ),
-        when=20
+    # ✅ Mostrar botones directamente en el mismo mensaje
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text="✅ Abre el video y espera 20 segundos antes de confirmar:",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("⭐ Ya di like y compartí",
+                                  callback_data=f"video_support_done_{vid.id}")],
+            [InlineKeyboardButton(
+                "🔙 Regresar al menú principal", callback_data="menu_principal")]
+        ])
     )
-
 # --- Ver lives (no propios, solo una vez) ---
 
 
@@ -2026,7 +2001,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("video_support_done_"):
         vid_id = int(data.split("_")[-1])
-        start_time = context.user_data.get("video_opened")   # 👈 corregido
+        start_time = context.user_data.get("video_opened")   # ✅ correcto
         print("DEBUG video_support_done:", start_time, datetime.utcnow())
         if start_time and (datetime.utcnow() - start_time).seconds >= 20:
             await handle_video_support_done(query, context, vid_id)
