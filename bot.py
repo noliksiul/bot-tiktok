@@ -995,7 +995,8 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         chat_id=chat_id,
         text=texto,
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🌐 Ir al video", url=vid.link)],
+            [InlineKeyboardButton(
+                "🌐 Ir al video", callback_data=f"video_opened_{vid.id}")],
             [InlineKeyboardButton(
                 "🔙 Regresar al menú principal", callback_data="menu_principal")]
         ])
@@ -1959,6 +1960,8 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("seguimiento_opened_"):
         seg_id = int(data.split("_")[-1])
         context.user_data["seguimiento_opened"] = datetime.utcnow()
+        print(
+            f"DEBUG seguimiento_opened: seg_id={seg_id}, hora={context.user_data['seguimiento_opened']}")
         await query.edit_message_text(
             "✅ Perfil abierto, espera 20 segundos antes de confirmar.",
             reply_markup=InlineKeyboardMarkup([
@@ -1972,31 +1975,40 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("seguimiento_done_"):
         seg_id = int(data.split("_")[-1])
         start_time = context.user_data.get("seguimiento_opened")
+        print(
+            f"DEBUG seguimiento_done: seg_id={seg_id}, start_time={start_time}, ahora={datetime.utcnow()}")
         if start_time and (datetime.utcnow() - start_time).seconds >= 20:
             await handle_seguimiento_done(query, context, seg_id)
         else:
             await query.answer("⚠️ Primero abre el perfil y espera 20 segundos.")
 
-    # 👇 Bloques de Video
+    # 👇 Bloques de Video (igual que seguimiento, con prints)
     elif data == "ver_video":
+        print("DEBUG ver_video: mostrando lista de videos")
         await show_videos(query, context)
 
     elif data.startswith("video_opened_"):
         vid_id = int(data.split("_")[-1])
         context.user_data["video_opened"] = datetime.utcnow()
+        print(
+            f"DEBUG video_opened: vid_id={vid_id}, hora={context.user_data['video_opened']}")
         await query.edit_message_text("⏱️ Espera 20 segundos...")
 
         # Mostrar botón después de 20 segundos
         context.job_queue.run_once(
-            lambda _: context.bot.send_message(
-                chat_id=query.message.chat.id,
-                text="✅ Ya puedes confirmar tu apoyo:",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton(
-                        "⭐ Ya di like y compartí", callback_data=f"video_support_done_{vid_id}")],
-                    [InlineKeyboardButton(
-                        "🔙 Regresar al menú principal", callback_data="menu_principal")]
-                ])
+            lambda _: (
+                print(
+                    f"DEBUG job_queue: mostrando botón de confirmación para vid_id={vid_id}"),
+                context.bot.send_message(
+                    chat_id=query.message.chat.id,
+                    text="✅ Ya puedes confirmar tu apoyo:",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton(
+                            "⭐ Ya di like y compartí", callback_data=f"video_support_done_{vid_id}")],
+                        [InlineKeyboardButton(
+                            "🔙 Regresar al menú principal", callback_data="menu_principal")]
+                    ])
+                )
             ),
             when=20
         )
@@ -2004,10 +2016,15 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("video_support_done_"):
         vid_id = int(data.split("_")[-1])
         start_time = context.user_data.get("video_opened")   # ✅ correcto
-        print("DEBUG video_support_done:", start_time, datetime.utcnow())
+        print(
+            f"DEBUG video_support_done: vid_id={vid_id}, start_time={start_time}, ahora={datetime.utcnow()}")
         if start_time and (datetime.utcnow() - start_time).seconds >= 20:
+            print(
+                f"DEBUG video_support_done: ✅ confirmado apoyo en video {vid_id}")
             await handle_video_support_done(query, context, vid_id)
         else:
+            print(
+                f"DEBUG video_support_done: ❌ demasiado pronto, aún no pasaron 20 segundos")
             await query.answer("⚠️ Primero abre el video y espera 20 segundos.")
 
     # 👇 Bloques de Live
@@ -2092,6 +2109,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 👇 Bloques de Referidos
     elif data == "resumen_referidos":
         await referral_weekly_summary(query, context)
+
         # --- Handler de texto principal ---
 
 
