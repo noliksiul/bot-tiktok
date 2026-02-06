@@ -1898,6 +1898,26 @@ async def reject_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action_
 # bot.py (Parte 5/5)
 
 
+# 👇 Función auxiliar para mostrar el botón de confirmación después de 20 segundos
+async def send_video_confirmation(context: ContextTypes.DEFAULT_TYPE):
+    job = context.job
+    vid_id = job.data["vid_id"]
+    chat_id = job.data["chat_id"]
+
+    print(
+        f"DEBUG job_queue: mostrando botón de confirmación para vid_id={vid_id}")
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text="✅ Ya puedes confirmar tu apoyo:",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("⭐ Ya di like y compartí",
+                                  callback_data=f"video_support_done_{vid_id}")],
+            [InlineKeyboardButton(
+                "🔙 Regresar al menú principal", callback_data="menu_principal")]
+        ])
+    )
+
+
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     try:
@@ -1982,7 +2002,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await query.answer("⚠️ Primero abre el perfil y espera 20 segundos.")
 
-    # 👇 Bloques de Video (igual que seguimiento, con prints)
+    # 👇 Bloques de Video (corregido)
     elif data == "ver_video":
         print("DEBUG ver_video: mostrando lista de videos")
         await show_videos(query, context)
@@ -1992,25 +2012,18 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["video_opened"] = datetime.utcnow()
         print(
             f"DEBUG video_opened: vid_id={vid_id}, hora={context.user_data['video_opened']}")
-        await query.edit_message_text("⏱️ Espera 20 segundos...")
 
-        # Mostrar botón después de 20 segundos
+        # Enviar mensaje de espera sin borrar el original
+        await context.bot.send_message(
+            chat_id=query.message.chat.id,
+            text="⏱️ Espera 20 segundos antes de confirmar..."
+        )
+
+        # Programar el botón de confirmación correctamente
         context.job_queue.run_once(
-            lambda _: (
-                print(
-                    f"DEBUG job_queue: mostrando botón de confirmación para vid_id={vid_id}"),
-                context.bot.send_message(
-                    chat_id=query.message.chat.id,
-                    text="✅ Ya puedes confirmar tu apoyo:",
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton(
-                            "⭐ Ya di like y compartí", callback_data=f"video_support_done_{vid_id}")],
-                        [InlineKeyboardButton(
-                            "🔙 Regresar al menú principal", callback_data="menu_principal")]
-                    ])
-                )
-            ),
-            when=20
+            send_video_confirmation,
+            when=20,
+            data={"vid_id": vid_id, "chat_id": query.message.chat.id}
         )
 
     elif data.startswith("video_support_done_"):
@@ -2107,6 +2120,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["state"] = "live_link"
 
     # 👇 Bloques de Referidos
+
     elif data == "resumen_referidos":
         await referral_weekly_summary(query, context)
 
