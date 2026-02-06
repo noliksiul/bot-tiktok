@@ -1,4 +1,4 @@
-# bot.py (Parte 1/5)l
+# bot.py (Parte 1/5)
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import os
@@ -519,13 +519,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Botones de canal/grupo
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("📢 Ir al canal", url=CHANNEL_URL)],
-        [InlineKeyboardButton("👥 Ir al grupo", url=GROUP_URL)],
-        # link del canal de ofertas
-        [InlineKeyboardButton("🛍️ Ir al canal ofertas",
-                              url="https://t.me/ofertasimperdiblestiktokshop")]
+        [InlineKeyboardButton("👥 Ir al grupo", url=GROUP_URL)]
     ])
     await update.message.reply_text(
-        "📢 Recuerda seguir nuestros canales para no perderte amistades, promociones y códigos para el bot.",
+        "📢 Recuerda seguir nuestro canal y grupo para no perderte amistades, promociones y códigos para el bot.",
         reply_markup=keyboard
     )
 
@@ -900,10 +897,11 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print("Aviso: no se pudo publicar en el canal:", e)
 
-
 # bot.py (Parte 3/5)
 
 # --- Ver seguimientos (no propios, solo una vez) ---
+
+
 async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(update_or_query, Update):
         chat_id = update_or_query.effective_chat.id
@@ -935,23 +933,35 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
         "👀 Seguimiento disponible:\n"
         f"🔗 {seg.link}\n"
         f"🗓️ {seg.created_at}\n\n"
-        "Primero entra al perfil y sigue al usuario.\n"
-        "Recuerda no dejar de seguir inmediatamente después de ganar los puntos, "
-        "si lo haces y te detecta el algoritmo puede ser baneo permanente."
+        "Primero entra al perfil y sigue al usuario."
+        "Recuerda no dejar de seguir inmediatamente despues de ganar los puntos,si lo hacen y te detecta algorimo puede ser baneo permanente."
     )
 
-    # Mostrar botones: abrir link y regresar
+# Primer mensaje: solo botón para entrar al perfil
     await context.bot.send_message(
         chat_id=chat_id,
         text=texto,
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🌐 Ir al perfil", url=seg.link)],
-            [InlineKeyboardButton(
-                "🔙 Regresar al menú principal", callback_data="menu_principal")]
+            [InlineKeyboardButton("🔗 Ir al perfil", url=seg.link)]
         ])
     )
 
-   # --- Ver videos (no propios, solo una vez) ---
+    # Mensaje de confirmación diferido (ejemplo: después de 30 segundos)
+    context.job_queue.run_once(
+        lambda _: context.bot.send_message(
+            chat_id=chat_id,
+            text="✅ Cuando hayas seguido, confirma aquí:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "✅ Ya lo seguí", callback_data=f"seguimiento_done_{seg.id}")],
+                [InlineKeyboardButton(
+                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
+            ])
+        ),
+        when=20   # segundos de espera antes de mostrar confirmación
+    )
+
+# --- Ver videos (no propios, solo una vez) ---
 
 
 async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
@@ -966,7 +976,13 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     async with async_session() as session:
         res = await session.execute(
             select(Video)
-            .where(Video.telegram_id != user_id)   # no mostrar videos propios
+            .where(Video.telegram_id != user_id)
+            .where(~Video.id.in_(
+                select(Interaccion.item_id).where(
+                    Interaccion.tipo == "video_support",
+                    Interaccion.actor_id == user_id
+                )
+            ))
             .order_by(Video.created_at.desc())
         )
         rows = res.scalars().all()
@@ -979,7 +995,7 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    vid = rows[0]  # tomar el más reciente
+    vid = rows[0]
 
     texto = (
         f"📺 Video ({vid.tipo}):\n"
@@ -991,16 +1007,41 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         "Primero entra al video y apóyalo."
     )
 
+    # Primer mensaje: botón para entrar al video
     await context.bot.send_message(
         chat_id=chat_id,
         text=texto,
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(
-                "🌐 Ir al video", callback_data=f"video_opened_{vid.id}")],
+            [InlineKeyboardButton("🔗 Ir al video", url=vid.link)],
             [InlineKeyboardButton(
                 "🔙 Regresar al menú principal", callback_data="menu_principal")]
+
+
         ])
     )
+
+    # Segundo mensaje: confirmación (una sola vez, no duplicado)
+    texto_confirmacion = (
+        "⭐ Cuando hayas dado like y compartido, confirma aquí:\n\n"
+        "⚠️ Si apoyas y luego dejas de seguir o quitas el like/compartida, serás candidato a baneo permanente.\n"
+        "El apoyo es mutuo y el algoritmo del bot detecta y banea a quienes dejan de seguir.\n\n"
+        "❓ Dudas o ayuda: pídelas en el grupo de Telegram."
+    )
+
+    context.job_queue.run_once(
+        lambda _: context.bot.send_message(
+            chat_id=chat_id,
+            text=texto_confirmacion,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "⭐ Ya di like y compartí", callback_data=f"video_support_done_{vid.id}")],
+                [InlineKeyboardButton(
+                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
+            ])
+        ),
+        when=20   # segundos de espera antes de mostrar confirmación
+    )
+
 # --- Ver lives (no propios, solo una vez) ---
 
 
@@ -1016,7 +1057,7 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     async with async_session() as session:
         res = await session.execute(
             select(Live)
-            .where(Live.telegram_id != user_id)   # no mostrar lives propios
+            .where(Live.telegram_id != user_id)
             .order_by(Live.created_at.desc())
         )
         rows = res.scalars().all()
@@ -1029,46 +1070,47 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    live = rows[0]  # tomar el más reciente
+    live = rows[0]
 
     texto = (
-        f"🎤 Live:\n"
-        f"📌 {live.titulo}\n"
+        f"🔴 Live disponible:\n"
         f"🔗 {live.link}\n"
         f"🗓️ {live.created_at}\n\n"
-        "⚠️ Recuerda ver el live y dar Quiéreme si aplica.\n\n"
-        "Presiona el botón para abrir el live y empezar el conteo."
+        "⚠️ Debes durar al menos 2 minutos en el live antes de confirmar."
     )
 
+    # Primer mensaje: botón para entrar al live
     await context.bot.send_message(
         chat_id=chat_id,
         text=texto,
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🌐 Ir al live", url=live.link)],
-            [InlineKeyboardButton("▶️ Confirmar live",
-                                  callback_data=f"live_opened_{live.id}")],
             [InlineKeyboardButton(
-                "🔙 Regresar al menú principal", callback_data="menu_principal")]
+                "🔗 Ir al live", callback_data=f"live_enter_{live.id}")]
         ])
     )
-
-    # Aquí sí se espera 2 minutos (120 segundos)
-    context.user_data["live_opened"] = datetime.utcnow()
+    # Guardar hora de inicio del live
+    context.user_data["live_start_time"] = datetime.utcnow()
+    # Confirmación después de 2 minutos
     context.job_queue.run_once(
-        lambda _: context.bot.send_message(
-            chat_id=chat_id,
-            text="✅ Ya puedes confirmar tu apoyo en el live:",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(
-                    "👀 Ya vi el live", callback_data=f"live_view_{live.id}")],
-                [InlineKeyboardButton(
-                    "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{live.id}")],
-                [InlineKeyboardButton(
-                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
-            ])
+        lambda _: (
+            context.user_data.__setitem__(
+                "live_start_time", datetime.utcnow()),  # 👈 guardar hora aquí
+            context.bot.send_message(
+                chat_id=chat_id,
+                text="⏱️ Ya pasaron los 2 minutos, confirma tu acción:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton(
+                        "👀 Ya vi el live", callback_data=f"live_view_{live.id}")],
+                    [InlineKeyboardButton(
+                        "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{live.id}")],
+                    [InlineKeyboardButton(
+                        "🔙 Regresar al menú principal", callback_data="menu_principal")]
+                ])
+            )
         ),
         when=120
     )
+
     # acreditar puntos al actor
 
 
@@ -1295,11 +1337,9 @@ async def reject_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_id
 
 
 # --- Registrar interacción de video (notifica con TikTok del actor) ---
-
 async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, vid_id: int):
     user_id = query.from_user.id
     async with async_session() as session:
-        # Buscar el video
         res_vid = await session.execute(select(Video).where(Video.id == vid_id))
         vid = res_vid.scalars().first()
         if not vid:
@@ -1309,20 +1349,6 @@ async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, v
             await query.answer("No puedes apoyar tu propio video.", show_alert=True)
             return
 
-        # ✅ Verificar si ya existe interacción
-        res_inter = await session.execute(
-            select(Interaccion).where(
-                Interaccion.tipo == "video_support",
-                Interaccion.item_id == vid.id,
-                Interaccion.actor_id == user_id
-            )
-        )
-        inter_existente = res_inter.scalars().first()
-        if inter_existente:
-            await query.answer("⚠️ Ya registraste apoyo en este video.", show_alert=True)
-            return
-
-        # Crear nueva interacción
         expires = datetime.utcnow() + timedelta(days=AUTO_APPROVE_AFTER_DAYS)
         inter = Interaccion(
             tipo="video_support",
@@ -1340,27 +1366,24 @@ async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, v
         res_actor = await session.execute(select(User).where(User.telegram_id == user_id))
         actor = res_actor.scalars().first()
 
-        # 👇 mover aquí la notificación y respuesta, dentro del bloque
-        await query.edit_message_text(
-            "🟡 Tu apoyo fue registrado y está pendiente de aprobación del dueño.",
-            reply_markup=back_to_menu_keyboard()
+    await query.edit_message_text("🟡 Tu apoyo fue registrado y está pendiente de aprobación del dueño.", reply_markup=back_to_menu_keyboard())
+    await notify_user(
+        context,
+        chat_id=vid.telegram_id,
+        text=(
+            f"📩 Nuevo apoyo a tu video:\n"
+            f"Item ID: {vid.id}\n"
+            f"Actor: {user_id}\n"
+            f"Usuario TikTok: {actor.tiktok_user or 'no registrado'}\n"
+            f"Puntos: {PUNTOS_APOYO_VIDEO}\n\n"
+            "¿Apruebas?"
+        ),
+        reply_markup=yes_no_keyboard(
+            callback_yes=f"approve_interaction_{inter.id}",
+            callback_no=f"reject_interaction_{inter.id}"
         )
-        await notify_user(
-            context,
-            chat_id=vid.telegram_id,
-            text=(
-                f"📩 Nuevo apoyo a tu video:\n"
-                f"Item ID: {vid.id}\n"
-                f"Actor: {user_id}\n"
-                f"Usuario TikTok: {actor.tiktok_user or 'no registrado'}\n"
-                f"Puntos: {PUNTOS_APOYO_VIDEO}\n\n"
-                "¿Apruebas?"
-            ),
-            reply_markup=yes_no_keyboard(
-                callback_yes=f"approve_interaction_{inter.id}",
-                callback_no=f"reject_interaction_{inter.id}"
-            )
-        )
+    )
+
 # bot.py (Parte 4/5)
 
 # --- Balance e historial ---
@@ -1894,28 +1917,7 @@ async def reject_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action_
         "❌ Acción administrativa rechazada.",
         reply_markup=back_to_menu_keyboard()
     )
-
 # bot.py (Parte 5/5)
-
-
-# 👇 Función auxiliar para mostrar el botón de confirmación después de 20 segundos
-async def send_video_confirmation(context: ContextTypes.DEFAULT_TYPE):
-    job = context.job
-    vid_id = job.data["vid_id"]
-    chat_id = job.data["chat_id"]
-
-    print(
-        f"DEBUG job_queue: mostrando botón de confirmación para vid_id={vid_id}")
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text="✅ Ya puedes confirmar tu apoyo:",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("⭐ Ya di like y compartí",
-                                  callback_data=f"video_support_done_{vid_id}")],
-            [InlineKeyboardButton(
-                "🔙 Regresar al menú principal", callback_data="menu_principal")]
-        ])
-    )
 
 
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1926,7 +1928,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
 
     data = query.data
-    print("Callback recibido:", data)   # 👈 Depuración
 
     if data == "subir_seguimiento":
         await query.edit_message_text(
@@ -1955,7 +1956,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "📌 ¿Qué tipo de video quieres subir?",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-        context.user_data["state"] = None
+        context.user_data["state"] = None   # ✅ aquí solo debe ser None
 
     elif data.startswith("video_tipo_"):
         tipos = {
@@ -1971,7 +1972,14 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🎬 Tipo seleccionado: {context.user_data['video_tipo']}\n\nAhora envíame el título de tu video:",
             reply_markup=back_to_menu_keyboard()
         )
-        return
+
+    elif data.startswith("approve_action_"):
+        action_id = int(data.split("_")[-1])
+        await handle_action_approve(query, context, action_id)
+
+    elif data.startswith("reject_action_"):
+        action_id = int(data.split("_")[-1])
+        await handle_action_reject(query, context, action_id)
 
     # 👇 Bloques de Seguimiento
     elif data == "ver_seguimiento":
@@ -1980,8 +1988,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("seguimiento_opened_"):
         seg_id = int(data.split("_")[-1])
         context.user_data["seguimiento_opened"] = datetime.utcnow()
-        print(
-            f"DEBUG seguimiento_opened: seg_id={seg_id}, hora={context.user_data['seguimiento_opened']}")
         await query.edit_message_text(
             "✅ Perfil abierto, espera 20 segundos antes de confirmar.",
             reply_markup=InlineKeyboardMarkup([
@@ -1995,49 +2001,34 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("seguimiento_done_"):
         seg_id = int(data.split("_")[-1])
         start_time = context.user_data.get("seguimiento_opened")
-        print(
-            f"DEBUG seguimiento_done: seg_id={seg_id}, start_time={start_time}, ahora={datetime.utcnow()}")
         if start_time and (datetime.utcnow() - start_time).seconds >= 20:
             await handle_seguimiento_done(query, context, seg_id)
         else:
             await query.answer("⚠️ Primero abre el perfil y espera 20 segundos.")
 
-    # 👇 Bloques de Video (corregido)
+    # 👇 Bloques de Video
     elif data == "ver_video":
-        print("DEBUG ver_video: mostrando lista de videos")
         await show_videos(query, context)
 
     elif data.startswith("video_opened_"):
         vid_id = int(data.split("_")[-1])
         context.user_data["video_opened"] = datetime.utcnow()
-        print(
-            f"DEBUG video_opened: vid_id={vid_id}, hora={context.user_data['video_opened']}")
-
-        # Enviar mensaje de espera sin borrar el original
-        await context.bot.send_message(
-            chat_id=query.message.chat.id,
-            text="⏱️ Espera 20 segundos antes de confirmar..."
-        )
-
-        # Programar el botón de confirmación correctamente
-        context.job_queue.run_once(
-            send_video_confirmation,
-            when=20,
-            data={"vid_id": vid_id, "chat_id": query.message.chat.id}
+        await query.edit_message_text(
+            "✅ Video abierto, espera 20 segundos antes de confirmar.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "⭐ Ya di like y compartí", callback_data=f"video_support_done_{vid_id}")],
+                [InlineKeyboardButton(
+                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
+            ])
         )
 
     elif data.startswith("video_support_done_"):
         vid_id = int(data.split("_")[-1])
-        start_time = context.user_data.get("video_opened")   # ✅ correcto
-        print(
-            f"DEBUG video_support_done: vid_id={vid_id}, start_time={start_time}, ahora={datetime.utcnow()}")
+        start_time = context.user_data.get("video_opened")
         if start_time and (datetime.utcnow() - start_time).seconds >= 20:
-            print(
-                f"DEBUG video_support_done: ✅ confirmado apoyo en video {vid_id}")
             await handle_video_support_done(query, context, vid_id)
         else:
-            print(
-                f"DEBUG video_support_done: ❌ demasiado pronto, aún no pasaron 20 segundos")
             await query.answer("⚠️ Primero abre el video y espera 20 segundos.")
 
     # 👇 Bloques de Live
@@ -2061,7 +2052,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("live_view_"):
         live_id = int(data.split("_")[-1])
-        start_time = context.user_data.get("live_opened")   # ✅ coincide
+        start_time = context.user_data.get("live_opened")
         if start_time and (datetime.utcnow() - start_time).seconds >= 120:
             await handle_live_view(query, context, live_id)
         else:
@@ -2069,30 +2060,11 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("live_quiereme_"):
         live_id = int(data.split("_")[-1])
-        start_time = context.user_data.get("live_opened")   # ✅ coincide
+        start_time = context.user_data.get("live_opened")
         if start_time and (datetime.utcnow() - start_time).seconds >= 120:
             await handle_live_quiereme(query, context, live_id)
         else:
             await query.answer("⚠️ Primero abre el live y espera 2 minutos.")
-
-    # 👇 Bloques de Interacciones (Aceptar/Rechazar)
-    elif data.startswith("approve_interaction_"):
-        inter_id = int(data.split("_")[-1])
-        await approve_interaction(query, context, inter_id)
-
-    elif data.startswith("reject_interaction_"):
-        inter_id = int(data.split("_")[-1])
-        await reject_interaction(query, context, inter_id)
-
-    # 👇 Bloques de Balance, Comandos y Mi link
-    elif data == "balance":
-        await show_balance(query, context)
-
-    elif data == "comandos":
-        await comandos(query, context)
-
-    elif data == "mi_ref_link":
-        await show_my_ref_link(query, context)
 
     elif data == "menu_principal":
         await show_main_menu(query, context)
@@ -2120,25 +2092,22 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["state"] = "live_link"
 
     # 👇 Bloques de Referidos
-
     elif data == "resumen_referidos":
         await referral_weekly_summary(query, context)
-
-        # --- Handler de texto principal ---
+# --- Handler de texto principal ---
 
 
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
     state = context.user_data.get("state")
-
     if state == "tiktok_user":
         await save_tiktok(update, context)
     elif state == "cambiar_tiktok":
         await save_new_tiktok(update, context)
     elif state == "seguimiento_link":
         await save_seguimiento(update, context)
-    elif state == "live_link":   # 👈 corregido
+    elif state == "live_link":   # 👈 CORREGIDO, sin espacio extra
         await save_live_link(update, context)
     elif state == "video_title":
         await save_video_title(update, context)
@@ -2150,70 +2119,12 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.args = [update.message.text.strip()]
         await cobrar_cupon(update, context)
         context.user_data["state"] = None
+
     else:
         await update.message.reply_text(
             "⚠️ Usa el menú para interactuar con el bot.\n\nSi es tu primera vez, escribe /start.",
             reply_markup=back_to_menu_keyboard()
         )
-
-# --- Guardar video con lógica especial TikTok Shop ---
-
-
-async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    link = update.message.text.strip()
-    user_id = update.effective_user.id
-
-    async with async_session() as session:
-        res = await session.execute(select(User).where(User.telegram_id == user_id))
-        user = res.scalars().first()
-        if not user:
-            await update.message.reply_text(
-                "❌ No estás registrado. Usa /start primero.",
-                reply_markup=back_to_menu_keyboard()
-            )
-            context.user_data["state"] = None
-            return
-
-        # Crear el video en DB
-        video = Video(
-            telegram_id=user_id,
-            tipo=context.user_data.get("video_tipo"),
-            titulo=context.user_data.get("video_title"),
-            descripcion=context.user_data.get("video_desc"),
-            link=link
-        )
-        session.add(video)
-        await session.commit()
-
-    # 👉 Lógica especial para TikTok Shop
-    if context.user_data.get("video_tipo") == "TikTok Shop":
-        await context.bot.send_message(
-            chat_id=-1003664738296,   # canal de ofertas
-            text=f"📢 No te pierdas esta oferta imperdible de TikTok Shop\n\n"
-                 f"📌 {context.user_data.get('video_title')}\n"
-                 f"📝 {context.user_data.get('video_desc')}\n"
-                 # 👈 incluir el link en el texto para que Telegram genere la preview
-                 f"{link}",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🛍️ Entra y compra", url=link)]
-            ])
-        )
-    else:
-        # Publicar en canal normal sin botones
-        await context.bot.send_message(
-            chat_id=CHANNEL_ID,
-            text=f"🎬 Nuevo video subido:\n\n"
-                 f"📌 {context.user_data.get('video_title')}\n"
-                 f"📝 {context.user_data.get('video_desc')}\n"
-                 f"{link}"
-        )
-
-    await update.message.reply_text(
-        "✅ Video guardado con éxito.",
-        reply_markup=back_to_menu_keyboard()
-    )
-    context.user_data["state"] = None
-    # await show_main_menu(update, context)
 
 
 # --- Comando: lista de comandos ---
@@ -2246,12 +2157,11 @@ async def comandos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         await update_or_query.message.reply_text(texto, reply_markup=back_to_menu_keyboard())
     else:
         await update_or_query.edit_message_text(texto, reply_markup=back_to_menu_keyboard())
-
-
 # --- Comando: mi link de referido ---
+
+
 async def cmd_my_ref_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_my_ref_link(update, context)
-
 
 # --- Main ---
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
@@ -2265,15 +2175,16 @@ async def preflight():
 loop = asyncio.get_event_loop()
 loop.run_until_complete(preflight())
 
-
 # --- Función de inicio para job_queue ---
+
+
 async def on_startup(app: Application):
     # Solo dejamos la tarea de auto-aprobación
     app.job_queue.run_repeating(lambda _: auto_approve_loop(app),
                                 interval=AUTO_APPROVE_INTERVAL_SECONDS, first=5)
 
-
 # ✅ Opción 1: definir on_startup antes de construir la aplicación
+
 application = Application.builder().token(
     BOT_TOKEN).post_init(on_startup).build()
 
@@ -2291,8 +2202,8 @@ application.add_handler(CommandHandler("subir_cupon", subir_cupon))
 application.add_handler(CommandHandler("cobrar_cupon", cobrar_cupon))
 application.add_handler(CommandHandler("mi_ref_link", cmd_my_ref_link))
 application.add_handler(CommandHandler("comandos", comandos))
-application.add_handler(MessageHandler(
-    filters.TEXT & ~filters.COMMAND, text_handler))
+
+
 application.add_handler(MessageHandler(
     filters.TEXT & ~filters.COMMAND, text_handler))
 application.add_handler(CallbackQueryHandler(menu_handler))
