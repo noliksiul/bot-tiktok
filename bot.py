@@ -17,7 +17,6 @@ from sqlalchemy import (
     UniqueConstraint, select, text, Float   # 👈 AGREGA Float
 )
 
-
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -45,11 +44,14 @@ PUNTOS_LIVE_SOLO_VER = 0.5
 PUNTOS_LIVE_QUIEREME_EXTRA = 1.5
 LIVE_VIEW_MINUTES = 5
 
-
 # --- Canal y grupo ---
-CHANNEL_ID = -1003468913370
+CHANNEL_ID = -1003468913370   # 👈 Canal principal de videos
 GROUP_URL = "https://t.me/+9sy0_CwwjnxlOTJh"
 CHANNEL_URL = "https://t.me/apoyotiktok002"
+
+# --- Canal de ofertas TikTok Shop ---
+CHANNEL_SHOP_ID = -1003664738296   # 👈 Canal secundario para ofertas TikTok Shop
+CHANNEL_SHOP_URL = "https://t.me/ofertasimperdiblestiktokshop"
 
 # --- Configuración administrador ---
 ADMIN_ID = 890166032
@@ -310,7 +312,8 @@ async def referral_weekly_summary_loop(application: Application):
                         try:
                             await application.bot.send_message(
                                 chat_id=chat_id,
-                                text=f"📊 Resumen semanal: ganaste {total} puntos por referidos en los últimos 7 días."
+                                text=f"📊 Resumen semanal: ganaste {total:.2f} puntos por referidos en los últimos 7 días.",
+                                reply_markup=back_to_menu_keyboard()   # ✅ botón regresar al menú principal
                             )
                         except Exception as e:
                             print("Aviso: no se pudo enviar resumen semanal:", e)
@@ -327,16 +330,20 @@ async def show_main_menu(update_or_query, context, message="🏠 Menú principal
         [InlineKeyboardButton("📈 Subir seguimiento",
                               callback_data="subir_seguimiento")],
         [InlineKeyboardButton("🎥 Subir video", callback_data="subir_video")],
+        [InlineKeyboardButton("📡 Subir live", callback_data="subir_live")],
         [InlineKeyboardButton("👀 Ver seguimiento",
                               callback_data="ver_seguimiento")],
         [InlineKeyboardButton("📺 Ver video", callback_data="ver_video")],
-        [InlineKeyboardButton("📡 Subir live", callback_data="subir_live")],
         [InlineKeyboardButton("🔴 Ver live en vivo", callback_data="ver_live")],
         [InlineKeyboardButton("💰 Balance e historial",
                               callback_data="balance")],
         [InlineKeyboardButton("🔗 Mi link de referido",
                               callback_data="mi_ref_link")],
-        [InlineKeyboardButton("📋 Comandos", callback_data="comandos")]
+        [InlineKeyboardButton("📊 Estadísticas de referidos",
+                              callback_data="resumen_referidos")],   # ✅ nuevo botón
+        [InlineKeyboardButton("📋 Comandos", callback_data="comandos")],
+        [InlineKeyboardButton("🧾 Subir cupón", callback_data="subir_cupon")],
+        [InlineKeyboardButton("💳 Cobrar cupón", callback_data="cobrar_cupon")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     if isinstance(update_or_query, Update) and getattr(update_or_query, "message", None):
@@ -384,6 +391,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     context,
                     chat_id=user.referrer_id,
                     text=f"🎉 Nuevo referido: {update.effective_user.id} (@{update.effective_user.username or 'sin_username'}) se registró con tu link."
+                    reply_markup=back_to_menu_keyboard()
                 )
 
     # Bienvenida sin saldo y sin botón extra
@@ -628,14 +636,21 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         res = await session.execute(select(User).where(User.telegram_id == user_id))
         user = res.scalars().first()
         if not user:
-            await update.message.reply_text("❌ No estás registrado. Usa /start primero.", reply_markup=back_to_menu_keyboard())
+            await update.message.reply_text(
+                "❌ No estás registrado. Usa /start primero.",
+                reply_markup=back_to_menu_keyboard()
+            )
             context.user_data["state"] = None
             return
         if (user.balance or 0) < 5:
-            await update.message.reply_text("⚠️ No tienes suficientes puntos para subir video (mínimo 5).", reply_markup=back_to_menu_keyboard())
+            await update.message.reply_text(
+                "⚠️ No tienes suficientes puntos para subir video (mínimo 5).",
+                reply_markup=back_to_menu_keyboard()
+            )
             context.user_data["state"] = None
             return
 
+        # ✅ Guardar video en DB
         vid = Video(
             telegram_id=user_id,
             tipo=tipo,
@@ -649,6 +664,7 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         session.add(mov)
         await session.commit()
 
+    # ✅ Mensaje de confirmación al usuario
     await update.message.reply_text(
         "✅ Tu video se subió con éxito.\n\n"
         "⚠️ No olvides aceptar o rechazar las solicitudes de apoyo. "
@@ -662,10 +678,33 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         alias = user.tiktok_user if user and user.tiktok_user else str(user_id)
-        await context.bot.send_message(
-            chat_id=CHANNEL_ID,
-            text=f"📢 Nuevo video ({tipo}) publicado por {alias}\n📌 {titulo}\n📝 {descripcion}\n🔗 {link}"
-        )
+
+        if tipo == "TikTok Shop":
+            # 📢 Publicar en canal principal
+            await context.bot.send_message(
+                chat_id=CHANNEL_ID,
+                text=f"📢 Nuevo video TikTok Shop publicado por {alias}\n"
+                     f"📌 {titulo}\n📝 {descripcion}\n🔗 {link}",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🛍️ Compra ahora", url=link)]
+                ])
+            )
+            # 📢 Publicar también en canal de ofertas
+            await context.bot.send_message(
+                chat_id=CHANNEL_SHOP_ID,
+                text=f"📢 Oferta imperdible de TikTok Shop\n"
+                     f"📌 {titulo}\n📝 {descripcion}\n🔗 {link}",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🛍️ Compra ahora", url=link)]
+                ])
+            )
+        else:
+            # 🎬 Publicar en canal normal
+            await context.bot.send_message(
+                chat_id=CHANNEL_ID,
+                text=f"📢 Nuevo video ({tipo}) publicado por {alias}\n"
+                     f"📌 {titulo}\n📝 {descripcion}\n🔗 {link}"
+            )
     except Exception as e:
         print("Aviso: no se pudo publicar en el canal:", e)
 
@@ -706,27 +745,33 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
         return
 
     seg = rows[0]
-    keyboard = [
-        [InlineKeyboardButton(
-            "🟡 Ya lo seguí ✅", callback_data=f"seguimiento_done_{seg.id}")],
-        [InlineKeyboardButton("🔙 Regresar al menú principal",
-                              callback_data="menu_principal")]
-    ]
-    texto = (
-        "👀 Seguimiento disponible:\n"
-        f"🔗 {seg.link}\n"
-        f"🗓️ {seg.created_at}\n\n"
-        "Pulsa el botón si ya seguiste."
-    )
+
+    # ✅ Mostrar primero el link con preview automática
     await context.bot.send_message(
         chat_id=chat_id,
-        text=texto,
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        text=f"👀 Seguimiento disponible:\n🔗 {seg.link}\n🗓️ {seg.created_at}",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🌐 Abrir perfil", url=seg.link)]
+        ])
     )
 
+    # ⏱️ Después de 20 segundos mostrar confirmación
+    context.job_queue.run_once(
+        lambda _: context.bot.send_message(
+            chat_id=chat_id,
+            text="✅ Ya puedes confirmar tu apoyo:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "🟡 Ya lo seguí ✅", callback_data=f"seguimiento_done_{seg.id}")],
+                [InlineKeyboardButton(
+                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
+            ])
+        ),
+        when=20
+    )
+
+
 # --- Ver videos (no propios, solo una vez) ---
-
-
 async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(update_or_query, Update):
         chat_id = update_or_query.effective_chat.id
@@ -759,31 +804,33 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         return
 
     vid = rows[0]
-    keyboard = [
-        [InlineKeyboardButton("🟡 Ya apoyé (like/compartir) ⭐",
-                              callback_data=f"video_support_done_{vid.id}")],
-        [InlineKeyboardButton("🔙 Regresar al menú principal",
-                              callback_data="menu_principal")]
-    ]
-    texto = (
-        f"📺 Video ({vid.tipo}):\n"
-        f"📌 {vid.titulo}\n"
-        f"📝 {vid.descripcion}\n"
-        f"🔗 {vid.link}\n"
-        f"🗓️ {vid.created_at}\n\n"
-        "⚠️ Si apoyas y luego dejas de seguir, serás candidato a baneo permanente.\n"
-        "El apoyo es mutuo y el algoritmo del bot detecta y banea a quienes dejan de seguir.\n\n"
-        "❓ Dudas o ayuda: pídelas en el grupo de Telegram.\n\n"
-        "Pulsa el botón si ya apoyaste."
-    )
+
+    # ✅ Mostrar primero el video con preview automática
     await context.bot.send_message(
         chat_id=chat_id,
-        text=texto,
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        text=f"📺 Video ({vid.tipo}):\n📌 {vid.titulo}\n📝 {vid.descripcion}\n🔗 {vid.link}\n🗓️ {vid.created_at}",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🌐 Abrir video", url=vid.link)]
+        ])
     )
+
+    # ⏱️ Después de 20 segundos mostrar confirmación
+    context.job_queue.run_once(
+        lambda _: context.bot.send_message(
+            chat_id=chat_id,
+            text="✅ Ya puedes confirmar tu apoyo:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "⭐ Ya apoyé (like/compartir)", callback_data=f"video_support_done_{vid.id}")],
+                [InlineKeyboardButton(
+                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
+            ])
+        ),
+        when=20
+    )
+
+
 # --- Ver lives (no propios, solo una vez) ---
-
-
 async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(update_or_query, Update):
         chat_id = update_or_query.effective_chat.id
@@ -810,27 +857,31 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         return
 
     live = rows[0]
-    keyboard = [
-        [InlineKeyboardButton("👀 Solo vi el live",
-                              callback_data=f"live_view_{live.id}")],
-        [InlineKeyboardButton("❤️ Vi el live y di Quiéreme",
-                              callback_data=f"live_quiereme_{live.id}")],
-        [InlineKeyboardButton("🔙 Regresar al menú principal",
-                              callback_data="menu_principal")]
-    ]
-    texto = (
-        f"🔴 Live disponible:\n"
-        f"🔗 {live.link}\n"
-        f"🗓️ {live.created_at}\n\n"
-        f"Recuerda durar {LIVE_VIEW_MINUTES} minutos en el live.\n"
-        "Puedes escoger solo una opción:\n"
-        f"• 👀 Solo vi el live → {PUNTOS_LIVE_SOLO_VER} puntos automáticos\n"
-        f"• ❤️ Vi el live y di 'Quiéreme' → {PUNTOS_LIVE_SOLO_VER} + {PUNTOS_LIVE_QUIEREME_EXTRA} puntos (requiere autorización del dueño)"
-    )
+
+    # ✅ Mostrar primero el live con preview automática
     await context.bot.send_message(
         chat_id=chat_id,
-        text=texto,
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        text=f"🔴 Live disponible:\n🔗 {live.link}\n🗓️ {live.created_at}\n\nRecuerda durar {LIVE_VIEW_MINUTES} minutos en el live.",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🌐 Abrir live", url=live.link)]
+        ])
+    )
+
+    # ⏱️ Después de 20 segundos mostrar confirmación
+    context.job_queue.run_once(
+        lambda _: context.bot.send_message(
+            chat_id=chat_id,
+            text="✅ Ya puedes confirmar tu apoyo en el live:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "👀 Solo vi el live", callback_data=f"live_view_{live.id}")],
+                [InlineKeyboardButton(
+                    "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{live.id}")],
+                [InlineKeyboardButton(
+                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
+            ])
+        ),
+        when=20
     )
 
 # --- Registrar interacción de seguimiento (notifica con TikTok del actor) ---
@@ -1381,7 +1432,7 @@ async def dar_puntos(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         target_id = int(args[0])
-        cantidad = int(args[1])
+        cantidad = float(args[1])   # ✅ corregido: usar float en lugar de int
     except:
         await update.message.reply_text("⚠️ Ambos parámetros deben ser números.")
         return
@@ -1395,7 +1446,7 @@ async def dar_puntos(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 u.balance = (u.balance or 0) + cantidad
                 session.add(Movimiento(
                     telegram_id=u.telegram_id,
-                    detalle=f"🎁 Puntos otorgados por admin",
+                    detalle="🎁 Puntos otorgados por admin",
                     puntos=cantidad
                 ))
                 await session.commit()
@@ -1424,21 +1475,22 @@ async def dar_puntos(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 subadmin_id=user_id,
                 status="pending",
                 expires_at=expires,
-                # 👈 aquí usamos note en lugar de detalle
+                # ✅ usar note para descripción
                 note=f"Dar {cantidad} puntos a {target_id}"
             )
             session.add(action)
             await session.commit()
-            # 👈 para obtener el ID recién creado
-            await session.refresh(action)
+            await session.refresh(action)   # ✅ refrescar para obtener el ID
+
         await update.message.reply_text(
             f"🟡 Acción propuesta: dar {cantidad} puntos a {target_id}. Queda pendiente de aprobación del admin."
         )
 
+        # ✅ Notificar al admin con botones de aprobación/rechazo
         await notify_admin(
             context,
             text=f"🟡 Acción pendiente: dar {cantidad} puntos a {target_id}.",
-            action_id=action.id   # 👈 ahora sí pasamos el ID
+            action_id=action.id
         )
 
     else:
