@@ -390,7 +390,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await notify_user(
                     context,
                     chat_id=user.referrer_id,
-                    text=f"🎉 Nuevo referido: {update.effective_user.id} (@{update.effective_user.username or 'sin_username'}) se registró con tu link."
+                    text=f"🎉 Nuevo referido: {update.effective_user.id} (@{update.effective_user.username or 'sin_username'}) se registró con tu link.",
                     reply_markup=back_to_menu_keyboard()
                 )
 
