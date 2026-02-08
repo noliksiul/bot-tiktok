@@ -407,10 +407,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Botones de canal/grupo
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("📢 Ir al canal", url=CHANNEL_URL)],
-        [InlineKeyboardButton("👥 Ir al grupo", url=GROUP_URL)]
+        [InlineKeyboardButton("👥 Ir al grupo", url=GROUP_URL)],
+        [InlineKeyboardButton(
+            "🛍️ Ir a ofertas TikTokShop", url=CHANNEL_SHOP_URL)]
+
     ])
     await update.message.reply_text(
-        "📢 Recuerda seguir nuestro canal y grupo para no perderte amistades, promociones y códigos para el bot.",
+        "📢 Recuerda seguir nuestros canale y grupo para no perderte amistades, promociones y códigos para el bot.",
         reply_markup=keyboard
     )
 
@@ -1692,6 +1695,8 @@ async def reject_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action_
 # bot.py (Parte 5/5)
 
 
+# --- Callback principal (menú y acciones) ---
+
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     try:
@@ -1707,7 +1712,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=back_to_menu_keyboard()
         )
         context.user_data["state"] = "seguimiento_link"
-# --- Callback principal (menú y acciones) ---
 
     elif data == "subir_video":
         keyboard = [
@@ -1728,7 +1732,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "📌 ¿Qué tipo de video quieres subir?",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-        context.user_data["state"] = None   # ✅ aquí solo debe ser None
+        context.user_data["state"] = None
 
     elif data.startswith("video_tipo_"):
         tipos = {
@@ -1739,7 +1743,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "video_tipo_colaboracion": "Colaboración"
         }
         context.user_data["video_tipo"] = tipos.get(data, "Normal")
-        # ✅ aquí sí se activa el título
         context.user_data["state"] = "video_title"
         await query.edit_message_text(
             f"🎬 Tipo seleccionado: {context.user_data['video_tipo']}\n\nAhora envíame el título de tu video:",
@@ -1765,6 +1768,9 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "mi_ref_link":
         await show_my_ref_link(query, context)
+
+    elif data == "resumen_referidos":   # ✅ nuevo bloque para estadísticas de referidos
+        await referral_weekly_summary(query, context)
 
     elif data == "comandos":
         await comandos(query, context)
@@ -1793,23 +1799,27 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         action_id = int(data.split("_")[-1])
         await reject_admin_action(query, context, action_id)
 
-    # --- Callback principal (menú y acciones) ---
+    elif data == "cobrar_cupon":   # ✅ nuevo bloque para cobrar cupón
+        await query.edit_message_text(
+            "💳 Ingresa el código del cupón que quieres cobrar:",
+            reply_markup=back_to_menu_keyboard()
+        )
+        context.user_data["state"] = "cobrar_cupon"
+
     elif data == "menu_principal":
         await show_main_menu(query, context)
         return
 
-    # 👇 Bloques de Live ya corregidos
-
     elif data == "subir_live":
         await query.edit_message_text(
             "🔗 Envía el link de tu live de TikTok (costo: 3 puntos).",
-            reply_markup=back_to_menu_keyboard()   # 👈 botón regresar al menú
+            reply_markup=back_to_menu_keyboard()
         )
         context.user_data["state"] = "live_link"
 
     elif data == "ver_live":
         await show_lives(query, context)
-        return   # 👈 aquí termina el flujo
+        return
 
     elif data.startswith("live_view_"):
         live_id = int(data.split("_")[-1])
@@ -1831,7 +1841,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await save_new_tiktok(update, context)
     elif state == "seguimiento_link":
         await save_seguimiento(update, context)
-    elif state == "live_link":   # 👈 CORREGIDO, sin espacio extra
+    elif state == "live_link":
         await save_live_link(update, context)
     elif state == "video_title":
         await save_video_title(update, context)
@@ -1839,14 +1849,17 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await save_video_desc(update, context)
     elif state == "video_link":
         await save_video_link(update, context)
+    elif state == "cobrar_cupon":   # ✅ nuevo estado para cobrar cupón
+        await cobrar_cupon(update, context)
     else:
         await update.message.reply_text(
             "⚠️ Usa el menú para interactuar con el bot.\n\nSi es tu primera vez, escribe /start.",
             reply_markup=back_to_menu_keyboard()
         )
 
-
 # --- Comando: lista de comandos ---
+
+
 async def comandos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     texto = (
         "📋 Lista de comandos disponibles:\n\n"
