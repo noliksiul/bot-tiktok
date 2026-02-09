@@ -293,6 +293,8 @@ async def auto_approve_loop(application: Application):
 
 # --- Resumen semanal de referidos ---
 
+# --- Resumen semanal de referidos ---
+
 
 async def referral_weekly_summary_loop(application: Application):
     await asyncio.sleep(10)
@@ -319,7 +321,7 @@ async def referral_weekly_summary_loop(application: Application):
                             print("Aviso: no se pudo enviar resumen semanal:", e)
         except Exception as e:
             print("Error en referral_weekly_summary_loop:", e)
-        await asyncio.sleep(3600 * 24 * 7)  # cada semana
+        await asyncio.sleep(3600 * 24 * 7)  # ✅ cada semana
 # bot.py (Parte 2/5)
 
 # --- Menú principal ---
@@ -1786,6 +1788,15 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_lives(query, context)
         return
 
+    # ✅ Confirmaciones de apoyo
+    elif data.startswith("seguimiento_done_"):
+        seg_id = int(data.split("_")[-1])
+        await handle_seguimiento_done(query, context, seg_id)
+
+    elif data.startswith("video_support_done_"):
+        vid_id = int(data.split("_")[-1])
+        await handle_video_support_done(query, context, vid_id)
+
     elif data.startswith("live_view_"):
         live_id = int(data.split("_")[-1])
         await handle_live_view(query, context, live_id)
@@ -1796,7 +1807,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # --- Handler de texto principal ---
-
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
@@ -1822,7 +1832,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "⚠️ Usa el menú para interactuar con el bot.\n\nSi es tu primera vez, escribe /start.",
             reply_markup=back_to_menu_keyboard()
         )
-
 # --- Comando: lista de comandos ---
 
 
