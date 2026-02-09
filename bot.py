@@ -464,6 +464,42 @@ async def show_my_ref_link(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         await update_or_query.message.reply_text(texto, reply_markup=reply_markup)
     else:
         await update_or_query.edit_message_text(texto, reply_markup=reply_markup)
+        # --- Mostrar resumen de referidos (interactivo desde menú) ---
+
+
+async def referral_weekly_summary(update_or_query, context: ContextTypes.DEFAULT_TYPE):
+    if isinstance(update_or_query, Update):
+        user_id = update_or_query.effective_user.id
+        is_update = True
+    else:
+        user_id = update_or_query.from_user.id
+        is_update = False
+
+    async with async_session() as session:
+        since = datetime.utcnow() - timedelta(days=7)
+        res = await session.execute(
+            select(Movimiento.telegram_id, func.sum(Movimiento.puntos))
+            .where(Movimiento.detalle.like("%Bonus por referido%"))
+            .where(Movimiento.created_at >= since)
+            .group_by(Movimiento.telegram_id)
+        )
+        rows = res.all()
+
+    texto = "📊 Resumen semanal de referidos:\n"
+    encontrado = False
+    for chat_id, total in rows:
+        if chat_id == user_id and total and total > 0:
+            texto += f"- Ganaste {total:.2f} puntos por referidos en los últimos 7 días.\n"
+            encontrado = True
+
+    if not encontrado:
+        texto = "⚠️ No ganaste puntos por referidos en los últimos 7 días."
+
+    reply_markup = back_to_menu_keyboard()
+    if is_update:
+        await update_or_query.message.reply_text(texto, reply_markup=reply_markup)
+    else:
+        await update_or_query.edit_message_text(texto, reply_markup=reply_markup)
 
 # --- Guardar usuario TikTok ---
 
@@ -562,9 +598,8 @@ async def save_seguimiento(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print("Aviso: no se pudo publicar en el canal:", e)
 
+
 # --- Subir live ---
-
-
 async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     link = update.message.text.strip()
@@ -585,16 +620,21 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         session.add(live)
         await session.commit()
 
-    # ✅ Publicar en el canal
+    # ✅ Publicar en el canal con botones
     try:
         await context.bot.send_message(
             chat_id=CHANNEL_ID,
-            text=f"🔴 Nuevo live publicado por {u.tiktok_user}\n\n{link}\n\n¡Apóyalo para ganar puntos!"
+            text=f"🔴 Nuevo live publicado por {u.tiktok_user}\n\n{link}\n\n¡Apóyalo para ganar puntos!",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🌐 Abrir live", url=link)],
+                [InlineKeyboardButton(
+                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
+            ])
         )
     except Exception as e:
         print("No se pudo publicar en el canal:", e)
 
-    # ✅ Notificar a todos los usuarios (excepto el que subió)
+    # ✅ Notificar a todos los usuarios (excepto el que subió) con botones
     async with async_session() as session:
         res = await session.execute(select(User.telegram_id).where(User.telegram_id != user_id))
         todos = res.scalars().all()
@@ -606,14 +646,18 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         f"📢 Hey! El usuario {u.tiktok_user} está en LIVE 🔴\n\n"
                         f"👉 Solo por entrar puedes ganar puntos.\n"
                         f"💖 Si le das 'Quiéreme' podrás ganar puntos extra (pendiente de validación)."
-                    )
+                    ),
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🌐 Abrir live", url=link)],
+                        [InlineKeyboardButton(
+                            "🔙 Regresar al menú principal", callback_data="menu_principal")]
+                    ])
                 )
             except Exception as e:
                 print(f"No se pudo notificar a {uid}: {e}")
 
     await update.message.reply_text("✅ Live registrado y notificado a la comunidad.", reply_markup=back_to_menu_keyboard())
     context.user_data["state"] = None
-
 
 # --- Subir video: flujo por pasos ---
 
@@ -833,9 +877,9 @@ async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         ),
         when=20
     )
-
-
 # --- Ver lives (no propios, solo una vez) ---
+
+
 async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(update_or_query, Update):
         chat_id = update_or_query.effective_chat.id
@@ -863,12 +907,14 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
 
     live = rows[0]
 
-    # ✅ Mostrar primero el live con preview automática
+    # ✅ Mostrar primero el live con preview automática y botón regresar
     await context.bot.send_message(
         chat_id=chat_id,
         text=f"🔴 Live disponible:\n🔗 {live.link}\n🗓️ {live.created_at}\n\nRecuerda durar {LIVE_VIEW_MINUTES} minutos en el live.",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🌐 Abrir live", url=live.link)]
+            [InlineKeyboardButton("🌐 Abrir live", url=live.link)],
+            [InlineKeyboardButton(
+                "🔙 Regresar al menú principal", callback_data="menu_principal")]  # ✅ agregado
         ])
     )
 
@@ -889,9 +935,8 @@ async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         when=20
     )
 
+
 # --- Registrar interacción de seguimiento (notifica con TikTok del actor) ---
-
-
 async def handle_seguimiento_done(query, context: ContextTypes.DEFAULT_TYPE, seg_id: int):
     user_id = query.from_user.id
     async with async_session() as session:
