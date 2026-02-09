@@ -1696,7 +1696,6 @@ async def reject_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action_
 
 
 # --- Callback principal (menú y acciones) ---
-
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     try:
@@ -1749,14 +1748,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=back_to_menu_keyboard()
         )
 
-    elif data.startswith("approve_action_"):
-        action_id = int(data.split("_")[-1])
-        await handle_action_approve(query, context, action_id)
-
-    elif data.startswith("reject_action_"):
-        action_id = int(data.split("_")[-1])
-        await handle_action_reject(query, context, action_id)
-
     elif data == "ver_seguimiento":
         await show_seguimientos(query, context)
 
@@ -1769,37 +1760,13 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "mi_ref_link":
         await show_my_ref_link(query, context)
 
-    elif data == "resumen_referidos":   # ✅ nuevo bloque para estadísticas de referidos
+    elif data == "resumen_referidos":   # ✅ ahora sí funciona el botón de referidos
         await referral_weekly_summary(query, context)
 
     elif data == "comandos":
         await comandos(query, context)
 
-    elif data.startswith("seguimiento_done_"):
-        seg_id = int(data.split("_")[-1])
-        await handle_seguimiento_done(query, context, seg_id)
-
-    elif data.startswith("video_support_done_"):
-        vid_id = int(data.split("_")[-1])
-        await handle_video_support_done(query, context, vid_id)
-
-    elif data.startswith("approve_interaction_"):
-        inter_id = int(data.split("_")[-1])
-        await approve_interaction(query, context, inter_id)
-
-    elif data.startswith("reject_interaction_"):
-        inter_id = int(data.split("_")[-1])
-        await reject_interaction(query, context, inter_id)
-
-    elif data.startswith("approve_admin_action_"):
-        action_id = int(data.split("_")[-1])
-        await approve_admin_action(query, context, action_id)
-
-    elif data.startswith("reject_admin_action_"):
-        action_id = int(data.split("_")[-1])
-        await reject_admin_action(query, context, action_id)
-
-    elif data == "cobrar_cupon":   # ✅ nuevo bloque para cobrar cupón
+    elif data == "cobrar_cupon":   # ✅ ahora sí funciona el botón de cobrar cupón
         await query.edit_message_text(
             "💳 Ingresa el código del cupón que quieres cobrar:",
             reply_markup=back_to_menu_keyboard()
