@@ -1695,6 +1695,7 @@ async def reject_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action_
 
 
 # bot.py (Parte 5/5)
+
 # --- Callback principal (menú y acciones) ---
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1804,6 +1805,15 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("live_quiereme_"):
         live_id = int(data.split("_")[-1])
         await handle_live_quiereme(query, context, live_id)
+
+    # ✅ Aprobaciones/Rechazos de dueños
+    elif data.startswith("approve_interaction_"):
+        inter_id = int(data.split("_")[-1])
+        await approve_interaction(query, context, inter_id)
+
+    elif data.startswith("reject_interaction_"):
+        inter_id = int(data.split("_")[-1])
+        await reject_interaction(query, context, inter_id)
 
 
 # --- Handler de texto principal ---
