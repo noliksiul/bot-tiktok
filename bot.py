@@ -1693,8 +1693,6 @@ async def reject_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action_
 
 
 # bot.py (Parte 5/5)
-
-
 # --- Callback principal (menú y acciones) ---
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1760,13 +1758,13 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "mi_ref_link":
         await show_my_ref_link(query, context)
 
-    elif data == "resumen_referidos":   # ✅ ahora sí funciona el botón de referidos
+    elif data == "resumen_referidos":   # ✅ botón de estadísticas de referidos
         await referral_weekly_summary(query, context)
 
     elif data == "comandos":
         await comandos(query, context)
 
-    elif data == "cobrar_cupon":   # ✅ ahora sí funciona el botón de cobrar cupón
+    elif data == "cobrar_cupon":   # ✅ botón de cobrar cupón
         await query.edit_message_text(
             "💳 Ingresa el código del cupón que quieres cobrar:",
             reply_markup=back_to_menu_keyboard()
@@ -1798,6 +1796,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # --- Handler de texto principal ---
+
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
