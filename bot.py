@@ -162,6 +162,20 @@ class Live(Base):
     puntos = Column(Integer, default=0)   # 👈 nuevo campo
     created_at = Column(TIMESTAMP, server_default=func.now())
 
+    # --- Tabla de cupones ---
+
+
+class Coupon(Base):
+    __tablename__ = "coupons"
+    id = Column(Integer, primary_key=True)
+    code = Column(Text, unique=True)
+    total_points = Column(Integer)
+    winners_limit = Column(Integer)
+    created_by = Column(BigInteger)
+    active = Column(Integer, default=1)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+
 # --- Inicialización DB ---
 
 
@@ -1859,8 +1873,57 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         inter_id = int(data.split("_")[-1])
         await reject_interaction(query, context, inter_id)
 
+    # ✅ Aprobaciones/Rechazos de acciones de subadmin (Paso 2)
+    elif data.startswith("approve_action_"):
+        action_id = int(data.split("_")[-1])
+        await approve_action(query, context, action_id)
+
+    elif data.startswith("reject_action_"):
+        action_id = int(data.split("_")[-1])
+        await reject_admin_action(query, context, action_id)
+# --- Acciones administrativas propuestas por subadmin ---
+
+
+async def reject_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action_id: int):
+    # Verificamos que solo el ADMIN_ID pueda rechazar
+    if query.from_user.id != ADMIN_ID:
+        await query.answer("❌ Solo el admin puede rechazar.", show_alert=True)
+        return
+
+    async with async_session() as session:
+        # Buscar la acción en la base de datos
+        res = await session.execute(select(AdminAction).where(AdminAction.id == action_id))
+        action = res.scalars().first()
+
+        # Si no existe la acción
+        if not action:
+            await query.edit_message_text(
+                "❌ Acción no encontrada.",
+                reply_markup=back_to_menu_keyboard()
+            )
+            return
+
+        # Si la acción ya no está pendiente
+        if action.status != "pending":
+            await query.edit_message_text(
+                f"⚠️ Acción ya está en estado: {action.status}.",
+                reply_markup=back_to_menu_keyboard()
+            )
+            return
+
+        # Actualizamos el estado a rechazado y guardamos
+        action.status = "rejected"
+        await session.commit()
+
+    # Mensaje final con botón de regreso al menú principal
+    await query.edit_message_text(
+        "❌ Acción administrativa rechazada.",
+        reply_markup=back_to_menu_keyboard()
+    )
 
 # --- Handler de texto principal ---
+
+
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
