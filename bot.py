@@ -1819,15 +1819,6 @@ async def approve_action(query, context: ContextTypes.DEFAULT_TYPE, action_id: i
             text=f"🎁 Recibiste {action.cantidad} puntos (aprobado por admin).",
             reply_markup=back_to_menu_keyboard()
         )
-
-    # Si la acción fue dar puntos, notificar también al usuario que recibió los puntos
-    if action.tipo == "dar_puntos":
-        await notify_user(
-            context,
-            chat_id=action.target_id,
-            text=f"🎁 Recibiste {action.cantidad} puntos (aprobado por admin).",
-            reply_markup=back_to_menu_keyboard()
-        )
 # bot.py (Parte 5/5)
 
 
