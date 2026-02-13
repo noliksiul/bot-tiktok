@@ -982,7 +982,7 @@ async def handle_seguimiento_done(query, context: ContextTypes.DEFAULT_TYPE, seg
             callback_no=f"reject_interaction_{inter.id}"
         )
     )
-# --- Aprobar interacción ---
+
 
 # --- Aprobar interacción ---
 
@@ -1906,7 +1906,6 @@ async def approve_action(query, context: ContextTypes.DEFAULT_TYPE, action_id: i
 
 # --- Callback principal (menú y acciones) ---
 
-
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     try:
@@ -2000,13 +1999,13 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "mi_ref_link":
         await show_my_ref_link(query, context)
 
-    elif data == "resumen_referidos":   # ✅ botón de estadísticas de referidos
+    elif data == "resumen_referidos":
         await referral_weekly_summary(query, context)
 
     elif data == "comandos":
         await comandos(query, context)
 
-    elif data == "cobrar_cupon":   # ✅ botón de cobrar cupón
+    elif data == "cobrar_cupon":
         await query.edit_message_text(
             "💳 Ingresa el código del cupón que quieres cobrar:",
             reply_markup=back_to_menu_keyboard()
@@ -2017,21 +2016,18 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_main_menu(query, context)
         return
 
-    # ✅ Confirmaciones de apoyo unificadas
+    # ✅ Confirmaciones de apoyo unificadas (corregidas: ya no reabren contenido)
     elif data.startswith("confirm_seguimiento_"):
         seg_id = int(data.split("_")[-1])
         await handle_seguimiento_done(query, context, seg_id)
-        await show_contenido(query, context)
 
     elif data.startswith("confirm_video_"):
         vid_id = int(data.split("_")[-1])
         await handle_video_support_done(query, context, vid_id)
-        await show_contenido(query, context)
 
     elif data.startswith("confirm_live_"):
         live_id = int(data.split("_")[-1])
         await handle_live_view(query, context, live_id)
-        await show_contenido(query, context)
 
     elif data.startswith("live_quiereme_"):
         live_id = int(data.split("_")[-1])
@@ -2046,7 +2042,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         inter_id = int(data.split("_")[-1])
         await reject_interaction(query, context, inter_id)
 
-    # ✅ Aprobaciones/Rechazos de acciones de subadmin (Paso 2)
+    # ✅ Aprobaciones/Rechazos de acciones de subadmin
     elif data.startswith("approve_action_"):
         action_id = int(data.split("_")[-1])
         await approve_action(query, context, action_id)
