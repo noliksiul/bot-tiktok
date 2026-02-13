@@ -804,15 +804,21 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         )
         seg = res_seg.scalars().first()
         if seg:
-            # Mostrar primero el link
+            # 👉 MENSAJE INICIAL
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"👀 Seguimiento disponible:\n🔗 {seg.link}\n🗓️ {seg.created_at}",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🌐 Abrir perfil", url=seg.link)]
+                    [
+                        InlineKeyboardButton("🌐 Abrir perfil", url=seg.link),
+                        InlineKeyboardButton(
+                            "➡️ Siguiente", callback_data="ver_contenido")
+                    ],
+                    [InlineKeyboardButton(
+                        "🔙 Menú principal", callback_data="menu_principal")]
                 ])
             )
-            # Después de 20 segundos mostrar confirmación
+            # 👉 Después de 20 segundos: Confirmar + Menú principal
             context.job_queue.run_once(
                 lambda _: context.bot.send_message(
                     chat_id=chat_id,
@@ -820,8 +826,6 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=InlineKeyboardMarkup([
                         [InlineKeyboardButton(
                             "🟡 Ya lo seguí ✅", callback_data=f"confirm_seguimiento_{seg.id}")],
-                        [InlineKeyboardButton(
-                            "➡️ Siguiente", callback_data="ver_contenido")],
                         [InlineKeyboardButton(
                             "🔙 Menú principal", callback_data="menu_principal")]
                     ])
@@ -838,24 +842,28 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         )
         vid = res_vid.scalars().first()
         if vid:
-            # Mostrar primero el video
+            # 👉 MENSAJE INICIAL
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"📺 Video ({vid.tipo}):\n📌 {vid.titulo}\n📝 {vid.descripcion}\n🔗 {vid.link}\n🗓️ {vid.created_at}",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🌐 Abrir video", url=vid.link)]
+                    [
+                        InlineKeyboardButton("🌐 Abrir video", url=vid.link),
+                        InlineKeyboardButton(
+                            "➡️ Siguiente", callback_data="ver_contenido")
+                    ],
+                    [InlineKeyboardButton(
+                        "🔙 Menú principal", callback_data="menu_principal")]
                 ])
             )
-            # Después de 20 segundos mostrar confirmación
+            # 👉 Después de 20 segundos: Confirmar + Menú principal
             context.job_queue.run_once(
                 lambda _: context.bot.send_message(
                     chat_id=chat_id,
                     text="✅ Ya puedes confirmar tu apoyo:",
                     reply_markup=InlineKeyboardMarkup([
                         [InlineKeyboardButton(
-                            "⭐ Ya di like y compartí", callback_data=f"confirm_video_{vid.id}")],  # 👈 corregido
-                        [InlineKeyboardButton(
-                            "➡️ Siguiente", callback_data="ver_contenido")],
+                            "⭐ Ya di like y compartí", callback_data=f"confirm_video_{vid.id}")],
                         [InlineKeyboardButton(
                             "🔙 Menú principal", callback_data="menu_principal")]
                     ])
@@ -872,17 +880,21 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         )
         live = res_live.scalars().first()
         if live:
-            # Mostrar primero el live
+            # 👉 MENSAJE INICIAL
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"🔴 Live disponible:\n🔗 {live.link}\n🗓️ {live.created_at}\n\nRecuerda durar {LIVE_VIEW_MINUTES} minutos en el live.",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🌐 Abrir live", url=live.link)],
+                    [
+                        InlineKeyboardButton("🌐 Abrir live", url=live.link),
+                        InlineKeyboardButton(
+                            "➡️ Siguiente", callback_data="ver_contenido")
+                    ],
                     [InlineKeyboardButton(
                         "🔙 Menú principal", callback_data="menu_principal")]
                 ])
             )
-            # Después de 20 segundos mostrar confirmación
+            # 👉 Después de 20 segundos: Confirmar + Menú principal
             context.job_queue.run_once(
                 lambda _: context.bot.send_message(
                     chat_id=chat_id,
@@ -892,8 +904,6 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                             "👀 Solo vi el live", callback_data=f"confirm_live_{live.id}")],
                         [InlineKeyboardButton(
                             "❤️ Vi el live y di Quiéreme", callback_data=f"confirm_live_{live.id}_quiereme")],
-                        [InlineKeyboardButton(
-                            "➡️ Siguiente", callback_data="ver_contenido")],
                         [InlineKeyboardButton(
                             "🔙 Menú principal", callback_data="menu_principal")]
                     ])
@@ -1289,19 +1299,31 @@ async def subir_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cobrar_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    args = context.args
-    if len(args) < 1:
-        await update.message.reply_text("Uso: /cobrar_cupon <codigo>", reply_markup=back_to_menu_keyboard())
+    # Si viene de comando, args existe
+    args = context.args if context.args else []
+
+    # Si viene del botón, el código está en el texto del mensaje
+    if not args and update.message and update.message.text:
+        code = update.message.text.strip()
+    elif len(args) >= 1:
+        code = args[0].strip()
+    else:
+        await update.message.reply_text(
+            "Uso: /cobrar_cupon <codigo> o escribe el código después de presionar el botón.",
+            reply_markup=back_to_menu_keyboard()
+        )
         return
 
-    code = args[0]
     user_id = update.effective_user.id
 
     async with async_session() as session:
         res = await session.execute(select(Coupon).where(Coupon.code == code, Coupon.active == 1))
         coupon = res.scalars().first()
         if not coupon:
-            await update.message.reply_text("❌ Cupón no válido o agotado.", reply_markup=back_to_menu_keyboard())
+            await update.message.reply_text(
+                "❌ Cupón no válido o agotado.",
+                reply_markup=back_to_menu_keyboard()
+            )
             return
 
         reward = coupon.total_points // coupon.winners_limit
@@ -1315,7 +1337,10 @@ async def cobrar_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(winners) >= coupon.winners_limit:
             coupon.active = 0
             await session.commit()
-            await update.message.reply_text("⚠️ Ya no hay recompensas disponibles para este cupón.", reply_markup=back_to_menu_keyboard())
+            await update.message.reply_text(
+                "⚠️ Ya no hay recompensas disponibles para este cupón.",
+                reply_markup=back_to_menu_keyboard()
+            )
             return
 
         # Acreditar puntos al usuario
@@ -1323,14 +1348,17 @@ async def cobrar_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = res_user.scalars().first()
         if user:
             user.balance = (user.balance or 0) + reward
-            mov = Movimiento(telegram_id=user_id,
-                             detalle=f"Cobro cupón {code}", puntos=reward)
+            mov = Movimiento(
+                telegram_id=user_id,
+                detalle=f"Cobro cupón {code}",
+                puntos=reward
+            )
             session.add(mov)
             await session.commit()
 
         await update.message.reply_text(
             f"✅ Cupón {code} cobrado. Recibiste {reward} puntos.",
-            reply_markup=back_to_menu_keyboard()   # 👈 AGREGADO
+            reply_markup=back_to_menu_keyboard()
         )
 # --- Gestión de Cupones ---
 
