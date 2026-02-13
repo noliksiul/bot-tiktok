@@ -1559,7 +1559,7 @@ async def handle_action_approve(query, context, action_id: int):
                 await notify_user(
                     context,
                     chat_id=u.telegram_id,
-                    text=f"🎁 Tu acción fue aprobada. Recibiste {action.cantidad} puntos."
+                    text=f"🎁 Tu acción fue aprobada. Recibiste {action.cantidad} puntos.",
                     reply_markup=back_to_menu_keyboard()   # 👈 AGREGADO
 
 
