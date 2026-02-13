@@ -347,18 +347,16 @@ async def show_main_menu(update_or_query, context, message="🏠 Menú principal
                               callback_data="subir_seguimiento")],
         [InlineKeyboardButton("🎥 Subir video", callback_data="subir_video")],
         [InlineKeyboardButton("📡 Subir live", callback_data="subir_live")],
-        [InlineKeyboardButton("👀 Ver seguimiento",
-                              callback_data="ver_seguimiento")],
-        [InlineKeyboardButton("📺 Ver video", callback_data="ver_video")],
-        [InlineKeyboardButton("🔴 Ver live en vivo", callback_data="ver_live")],
+        [InlineKeyboardButton(
+            "👀 Ver contenido", callback_data="ver_contenido")],
         [InlineKeyboardButton("💰 Balance e historial",
                               callback_data="balance")],
         [InlineKeyboardButton("🔗 Mi link de referido",
                               callback_data="mi_ref_link")],
         [InlineKeyboardButton("📊 Estadísticas de referidos",
-                              callback_data="resumen_referidos")],   # ✅ nuevo botón
+                              callback_data="resumen_referidos")],
         [InlineKeyboardButton("📋 Comandos", callback_data="comandos")],
-        [InlineKeyboardButton("🧾 Subir cupón", callback_data="subir_cupon")],
+        # ✅ mantenemos solo este
         [InlineKeyboardButton("💳 Cobrar cupón", callback_data="cobrar_cupon")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -785,11 +783,10 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print("Aviso: no se pudo publicar en el canal:", e)
 
 # bot.py (Parte 3/5)
+# --- Ver contenido unificado (seguimiento, video, live) ---
 
-# --- Ver seguimientos (no propios, solo una vez) ---
 
-
-async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
+async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(update_or_query, Update):
         chat_id = update_or_query.effective_chat.id
         user_id = update_or_query.effective_user.id
@@ -799,167 +796,116 @@ async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE)
         user_id = query.from_user.id
 
     async with async_session() as session:
-        res = await session.execute(
+        # Buscar seguimiento
+        res_seg = await session.execute(
             select(Seguimiento)
             .where(Seguimiento.telegram_id != user_id)
-            .where(~Seguimiento.id.in_(
-                select(Interaccion.item_id).where(
-                    Interaccion.tipo == "seguimiento",
-                    Interaccion.actor_id == user_id
-                )
-            ))
             .order_by(Seguimiento.created_at.desc())
         )
-        rows = res.scalars().all()
+        seg = res_seg.scalars().first()
+        if seg:
+            # Mostrar primero el link
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"👀 Seguimiento disponible:\n🔗 {seg.link}\n🗓️ {seg.created_at}",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🌐 Abrir perfil", url=seg.link)]
+                ])
+            )
+            # Después de 20 segundos mostrar confirmación
+            context.job_queue.run_once(
+                lambda _: context.bot.send_message(
+                    chat_id=chat_id,
+                    text="✅ Ya puedes confirmar tu apoyo:",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton(
+                            "🟡 Ya lo seguí ✅", callback_data=f"confirm_seguimiento_{seg.id}")],
+                        [InlineKeyboardButton(
+                            "➡️ Siguiente", callback_data="ver_contenido")],
+                        [InlineKeyboardButton(
+                            "🔙 Menú principal", callback_data="menu_principal")]
+                    ])
+                ),
+                when=20
+            )
+            return
 
-    if not rows:
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text="⚠️ No hay seguimientos disponibles por ahora.",
-            reply_markup=back_to_menu_keyboard()
-        )
-        return
-
-    seg = rows[0]
-
-    # ✅ Mostrar primero el link con preview automática
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text=f"👀 Seguimiento disponible:\n🔗 {seg.link}\n🗓️ {seg.created_at}",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🌐 Abrir perfil", url=seg.link)]
-        ])
-    )
-
-    # ⏱️ Después de 20 segundos mostrar confirmación
-    context.job_queue.run_once(
-        lambda _: context.bot.send_message(
-            chat_id=chat_id,
-            text="✅ Ya puedes confirmar tu apoyo:",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(
-                    "🟡 Ya lo seguí ✅", callback_data=f"seguimiento_done_{seg.id}")],
-                [InlineKeyboardButton(
-                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
-            ])
-        ),
-        when=20
-    )
-
-
-# --- Ver videos (no propios, solo una vez) ---
-async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
-    if isinstance(update_or_query, Update):
-        chat_id = update_or_query.effective_chat.id
-        user_id = update_or_query.effective_user.id
-    else:
-        query = update_or_query
-        chat_id = query.message.chat.id
-        user_id = query.from_user.id
-
-    async with async_session() as session:
-        res = await session.execute(
+        # Buscar video
+        res_vid = await session.execute(
             select(Video)
             .where(Video.telegram_id != user_id)
-            .where(~Video.id.in_(
-                select(Interaccion.item_id).where(
-                    Interaccion.tipo == "video_support",
-                    Interaccion.actor_id == user_id
-                )
-            ))
             .order_by(Video.created_at.desc())
         )
-        rows = res.scalars().all()
+        vid = res_vid.scalars().first()
+        if vid:
+            # Mostrar primero el video
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"📺 Video ({vid.tipo}):\n📌 {vid.titulo}\n📝 {vid.descripcion}\n🔗 {vid.link}\n🗓️ {vid.created_at}",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🌐 Abrir video", url=vid.link)]
+                ])
+            )
+            # Después de 20 segundos mostrar confirmación
+            context.job_queue.run_once(
+                lambda _: context.bot.send_message(
+                    chat_id=chat_id,
+                    text="✅ Ya puedes confirmar tu apoyo:",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton(
+                            "⭐ Ya di like y compartí", callback_data=f"confirm_video_{vid.id}")],  # 👈 corregido
+                        [InlineKeyboardButton(
+                            "➡️ Siguiente", callback_data="ver_contenido")],
+                        [InlineKeyboardButton(
+                            "🔙 Menú principal", callback_data="menu_principal")]
+                    ])
+                ),
+                when=20
+            )
+            return
 
-    if not rows:
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text="⚠️ No hay videos disponibles por ahora.",
-            reply_markup=back_to_menu_keyboard()
-        )
-        return
-
-    vid = rows[0]
-
-    # ✅ Mostrar primero el video con preview automática
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text=f"📺 Video ({vid.tipo}):\n📌 {vid.titulo}\n📝 {vid.descripcion}\n🔗 {vid.link}\n🗓️ {vid.created_at}",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🌐 Abrir video", url=vid.link)]
-        ])
-    )
-
-    # ⏱️ Después de 20 segundos mostrar confirmación
-    context.job_queue.run_once(
-        lambda _: context.bot.send_message(
-            chat_id=chat_id,
-            text="✅ Ya puedes confirmar tu apoyo:",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(
-                    "⭐ Ya apoyé (like/compartir)", callback_data=f"video_support_done_{vid.id}")],
-                [InlineKeyboardButton(
-                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
-            ])
-        ),
-        when=20
-    )
-# --- Ver lives (no propios, solo una vez) ---
-
-
-async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
-    if isinstance(update_or_query, Update):
-        chat_id = update_or_query.effective_chat.id
-        user_id = update_or_query.effective_user.id
-    else:
-        query = update_or_query
-        chat_id = query.message.chat.id
-        user_id = query.from_user.id
-
-    async with async_session() as session:
-        res = await session.execute(
+        # Buscar live
+        res_live = await session.execute(
             select(Live)
             .where(Live.telegram_id != user_id)
             .order_by(Live.created_at.desc())
         )
-        rows = res.scalars().all()
+        live = res_live.scalars().first()
+        if live:
+            # Mostrar primero el live
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"🔴 Live disponible:\n🔗 {live.link}\n🗓️ {live.created_at}\n\nRecuerda durar {LIVE_VIEW_MINUTES} minutos en el live.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🌐 Abrir live", url=live.link)],
+                    [InlineKeyboardButton(
+                        "🔙 Menú principal", callback_data="menu_principal")]
+                ])
+            )
+            # Después de 20 segundos mostrar confirmación
+            context.job_queue.run_once(
+                lambda _: context.bot.send_message(
+                    chat_id=chat_id,
+                    text="✅ Ya puedes confirmar tu apoyo en el live:",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton(
+                            "👀 Solo vi el live", callback_data=f"confirm_live_{live.id}")],
+                        [InlineKeyboardButton(
+                            "❤️ Vi el live y di Quiéreme", callback_data=f"confirm_live_{live.id}_quiereme")],
+                        [InlineKeyboardButton(
+                            "➡️ Siguiente", callback_data="ver_contenido")],
+                        [InlineKeyboardButton(
+                            "🔙 Menú principal", callback_data="menu_principal")]
+                    ])
+                ),
+                when=20
+            )
+            return
 
-    if not rows:
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text="⚠️ No hay lives disponibles por ahora.",
-            reply_markup=back_to_menu_keyboard()
-        )
-        return
-
-    live = rows[0]
-
-    # ✅ Mostrar primero el live con preview automática y botón regresar
     await context.bot.send_message(
         chat_id=chat_id,
-        text=f"🔴 Live disponible:\n🔗 {live.link}\n🗓️ {live.created_at}\n\nRecuerda durar {LIVE_VIEW_MINUTES} minutos en el live.",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🌐 Abrir live", url=live.link)],
-            [InlineKeyboardButton(
-                "🔙 Regresar al menú principal", callback_data="menu_principal")]  # ✅ agregado
-        ])
-    )
-
-    # ⏱️ Después de 20 segundos mostrar confirmación
-    context.job_queue.run_once(
-        lambda _: context.bot.send_message(
-            chat_id=chat_id,
-            text="✅ Ya puedes confirmar tu apoyo en el live:",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(
-                    "👀 Solo vi el live", callback_data=f"live_view_{live.id}")],
-                [InlineKeyboardButton(
-                    "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{live.id}")],
-                [InlineKeyboardButton(
-                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
-            ])
-        ),
-        when=20
+        text="⚠️ No hay contenido disponible por ahora.",
+        reply_markup=back_to_menu_keyboard()
     )
 
 
@@ -1345,17 +1291,22 @@ async def subir_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cobrar_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
     if len(args) < 1:
-        await update.message.reply_text("Uso: /cobrar_cupon <codigo>")
+        await update.message.reply_text("Uso: /cobrar_cupon <codigo>", reply_markup=back_to_menu_keyboard())
         return
+
     code = args[0]
     user_id = update.effective_user.id
+
     async with async_session() as session:
         res = await session.execute(select(Coupon).where(Coupon.code == code, Coupon.active == 1))
         coupon = res.scalars().first()
         if not coupon:
-            await update.message.reply_text("❌ Cupón no válido o agotado.")
+            await update.message.reply_text("❌ Cupón no válido o agotado.", reply_markup=back_to_menu_keyboard())
             return
+
         reward = coupon.total_points // coupon.winners_limit
+
+        # Verificar cuántos ya cobraron
         res_movs = await session.execute(
             select(Movimiento).where(
                 Movimiento.detalle.like(f"Cobro cupón {code}%"))
@@ -1364,8 +1315,10 @@ async def cobrar_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(winners) >= coupon.winners_limit:
             coupon.active = 0
             await session.commit()
-            await update.message.reply_text("⚠️ Ya no hay recompensas disponibles para este cupón.")
+            await update.message.reply_text("⚠️ Ya no hay recompensas disponibles para este cupón.", reply_markup=back_to_menu_keyboard())
             return
+
+        # Acreditar puntos al usuario
         res_user = await session.execute(select(User).where(User.telegram_id == user_id))
         user = res_user.scalars().first()
         if user:
@@ -1374,7 +1327,11 @@ async def cobrar_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
                              detalle=f"Cobro cupón {code}", puntos=reward)
             session.add(mov)
             await session.commit()
-        await update.message.reply_text(f"✅ Cupón {code} cobrado. Recibiste {reward} puntos.")
+
+        await update.message.reply_text(
+            f"✅ Cupón {code} cobrado. Recibiste {reward} puntos.",
+            reply_markup=back_to_menu_keyboard()   # 👈 AGREGADO
+        )
 # --- Gestión de Cupones ---
 
 
@@ -1603,6 +1560,9 @@ async def handle_action_approve(query, context, action_id: int):
                     context,
                     chat_id=u.telegram_id,
                     text=f"🎁 Tu acción fue aprobada. Recibiste {action.cantidad} puntos."
+                    reply_markup=back_to_menu_keyboard()   # 👈 AGREGADO
+
+
                 )
 
         action.status = "accepted"
@@ -1840,9 +1800,14 @@ async def approve_action(query, context: ContextTypes.DEFAULT_TYPE, action_id: i
         context,
         chat_id=action.subadmin_id,
         text=f"✅ Tu acción '{action.tipo}' fue aprobada y ejecutada por el admin."
+        reply_markup=back_to_menu_keyboard()   # 👈 AGREGADO
+
+
     )
 
 # bot.py (Parte 5/5)
+
+
 # --- Callback principal (menú y acciones) ---
 
 
@@ -1898,15 +1863,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=back_to_menu_keyboard()
         )
 
-    # BORRAR:
-    # elif data == "subir_live":
-    #     await query.edit_message_text(
-    #         "🔗 Envía el link de tu live de TikTok (costo: 3 puntos).",
-    #         reply_markup=back_to_menu_keyboard()
-    #     )
-    #     context.user_data["state"] = "live_link"
-
-    # AGREGAR:
+    # --- Subir live con dos modalidades ---
     elif data == "subir_live":
         keyboard = [
             [InlineKeyboardButton(
@@ -1931,16 +1888,15 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "subir_live_personalizado":
         await query.edit_message_text(
-            "🔗 Envía el link de tu live de TikTok y el mensaje personalizado (costo: 10 puntos).",
+            "🔗 Envía el link de tu live de TikTok personalizado (costo: 10 puntos).",
             reply_markup=back_to_menu_keyboard()
         )
         context.user_data["state"] = "live_link_personalizado"
 
-    elif data == "ver_seguimiento":
-        await show_seguimientos(query, context)
-
-    elif data == "ver_video":
-        await show_videos(query, context)
+    # --- Unificación de ver contenido ---
+    elif data == "ver_contenido":
+        await show_contenido(query, context)
+        return
 
     elif data == "balance":
         await show_balance(query, context)
@@ -1965,22 +1921,21 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_main_menu(query, context)
         return
 
-    elif data == "ver_live":
-        await show_lives(query, context)
-        return
-
-    # ✅ Confirmaciones de apoyo
-    elif data.startswith("seguimiento_done_"):
+    # ✅ Confirmaciones de apoyo unificadas
+    elif data.startswith("confirm_seguimiento_"):
         seg_id = int(data.split("_")[-1])
         await handle_seguimiento_done(query, context, seg_id)
+        await show_contenido(query, context)
 
-    elif data.startswith("video_support_done_"):
+    elif data.startswith("confirm_video_"):
         vid_id = int(data.split("_")[-1])
         await handle_video_support_done(query, context, vid_id)
+        await show_contenido(query, context)
 
-    elif data.startswith("live_view_"):
+    elif data.startswith("confirm_live_"):
         live_id = int(data.split("_")[-1])
         await handle_live_view(query, context, live_id)
+        await show_contenido(query, context)
 
     elif data.startswith("live_quiereme_"):
         live_id = int(data.split("_")[-1])
