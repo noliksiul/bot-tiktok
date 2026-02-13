@@ -1796,15 +1796,29 @@ async def approve_action(query, context: ContextTypes.DEFAULT_TYPE, action_id: i
     )
 
     # Notificar al subadmin que su acción fue aprobada
-    await notify_user(
-        context,
-        chat_id=action.subadmin_id,
-        text=f"✅ Tu acción '{action.tipo}' fue aprobada y ejecutada por el admin."
-        reply_markup=back_to_menu_keyboard()   # 👈 AGREGADO
+    if action.cantidad is not None:
+        await notify_user(
+            context,
+            chat_id=action.subadmin_id,
+            text=f"🎁 Tu acción '{action.tipo}' fue aprobada y ejecutada por el admin. Recibiste {action.cantidad} puntos.",
+            reply_markup=back_to_menu_keyboard()
+        )
+    else:
+        await notify_user(
+            context,
+            chat_id=action.subadmin_id,
+            text=f"🎁 Tu acción '{action.tipo}' fue aprobada y ejecutada por el admin.",
+            reply_markup=back_to_menu_keyboard()
+        )
 
-
-    )
-
+    # Si la acción fue dar puntos, notificar también al usuario que recibió los puntos
+    if action.tipo == "dar_puntos":
+        await notify_user(
+            context,
+            chat_id=action.target_id,
+            text=f"🎁 Recibiste {action.cantidad} puntos (aprobado por admin).",
+            reply_markup=back_to_menu_keyboard()
+        )
 # bot.py (Parte 5/5)
 
 
