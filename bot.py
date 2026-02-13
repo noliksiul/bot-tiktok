@@ -1801,7 +1801,7 @@ async def approve_action(query, context: ContextTypes.DEFAULT_TYPE, action_id: i
             context,
             chat_id=action.subadmin_id,
             text=f"🎁 Tu acción '{action.tipo}' fue aprobada y ejecutada por el admin. Recibiste {action.cantidad} puntos.",
-            reply_markup=back_to_menu_keyboard()
+            reply_markup=back_to_menu_keyboard()   # ✅ coma correcta
         )
     else:
         await notify_user(
