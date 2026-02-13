@@ -923,7 +923,7 @@ async def handle_seguimiento_done(query, context: ContextTypes.DEFAULT_TYPE, seg
         res_seg = await session.execute(select(Seguimiento).where(Seguimiento.id == seg_id))
         seg = res_seg.scalars().first()
         if not seg:
-            await query.edit_message_text("❌ Seguimiento no encontrado.", reply_markup=back_to_menu_keyboard())
+            await query.message.reply_text("❌ Seguimiento no encontrado.", reply_markup=back_to_menu_keyboard())
             return
         if seg.telegram_id == user_id:
             await query.answer("No puedes apoyar tu propio seguimiento.", show_alert=True)
@@ -965,7 +965,13 @@ async def handle_seguimiento_done(query, context: ContextTypes.DEFAULT_TYPE, seg
         res_actor = await session.execute(select(User).where(User.telegram_id == user_id))
         actor = res_actor.scalars().first()
 
-    await query.edit_message_text("🟡 Tu apoyo fue registrado y está pendiente de aprobación del dueño.", reply_markup=back_to_menu_keyboard())
+    # 👉 Mostrar confirmación al usuario en un nuevo mensaje
+    await query.message.reply_text(
+        "🟡 Tu apoyo fue registrado y está pendiente de aprobación del dueño.",
+        reply_markup=back_to_menu_keyboard()
+    )
+
+    # 👉 Notificar al dueño con botones de aprobar/rechazar
     await notify_user(
         context,
         chat_id=seg.telegram_id,
