@@ -884,19 +884,35 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         )
         live = res_live.scalars().first()
         if live:
-            await context.bot.send_message(
+            # 👉 MENSAJE INICIAL (igual estilo que seguimiento)
+            sent_message = await context.bot.send_message(
                 chat_id=chat_id,
-                text=f"🔴 Live disponible:\n🔗 {live.link}\n🗓️ {live.created_at}\n\nRecuerda durar {LIVE_VIEW_MINUTES} minutos en el live.",
+                text=f"🔴 Live disponible:\n🔗 {live.link}\n🗓️ {live.created_at}",
                 reply_markup=InlineKeyboardMarkup([
                     [
-                        InlineKeyboardButton(
-                            "🌐 Abrir live", callback_data=f"abrir_live_{live.id}"),
+                        InlineKeyboardButton("🌐 Abrir live", url=live.link),
                         InlineKeyboardButton(
                             "➡️ Siguiente", callback_data="ver_contenido")
                     ],
                     [InlineKeyboardButton(
                         "🔙 Menú principal", callback_data="menu_principal")]
                 ])
+            )
+            # 👉 Después de 20 segundos: editar el mensaje para mostrar Confirmar + Menú principal
+            context.job_queue.run_once(
+                lambda _: context.bot.edit_message_reply_markup(
+                    chat_id=chat_id,
+                    message_id=sent_message.message_id,
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton(
+                            "👀 Solo vi el live", callback_data=f"confirm_live_{live.id}")],
+                        [InlineKeyboardButton(
+                            "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{live.id}")],
+                        [InlineKeyboardButton(
+                            "🔙 Menú principal", callback_data="menu_principal")]
+                    ])
+                ),
+                when=20
             )
             return
 
