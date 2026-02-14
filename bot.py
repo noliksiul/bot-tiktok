@@ -802,120 +802,135 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         chat_id = query.message.chat.id
         user_id = query.from_user.id
 
+    ultimo_tipo = context.user_data.get("ultimo_tipo", None)
+
     async with async_session() as session:
-        # Buscar seguimiento
-        res_seg = await session.execute(
-            select(Seguimiento)
-            .where(Seguimiento.telegram_id != user_id)
-            .order_by(Seguimiento.created_at.desc())
-        )
-        seg = res_seg.scalars().first()
-        if seg:
-            # 👉 MENSAJE INICIAL
-            sent_message = await context.bot.send_message(
-                chat_id=chat_id,
-                text=f"👀 Seguimiento disponible:\n🔗 {seg.link}\n🗓️ {seg.created_at}",
-                reply_markup=InlineKeyboardMarkup([
-                    [
-                        InlineKeyboardButton("🌐 Abrir perfil", url=seg.link),
-                        InlineKeyboardButton(
-                            "➡️ Siguiente", callback_data="ver_contenido")
-                    ],
-                    [InlineKeyboardButton(
-                        "🔙 Menú principal", callback_data="menu_principal")]
-                ])
-            )
-            # 👉 Después de 20 segundos: editar el mensaje para mostrar Confirmar + Menú principal
-            context.job_queue.run_once(
-                lambda _, sid=seg.id: context.bot.edit_message_reply_markup(
-                    chat_id=chat_id,
-                    message_id=sent_message.message_id,
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton(
-                            "🟡 Ya lo seguí ✅", callback_data=f"confirm_seguimiento_{sid}")],
-                        [InlineKeyboardButton(
-                            "🔙 Menú principal", callback_data="menu_principal")]
-                    ])
-                ),
-                when=20
-            )
-            return
+        # --- Orden de rotación: seguimiento → video → live ---
+        if ultimo_tipo == "seguimiento":
+            orden = ["video", "live", "seguimiento"]
+        elif ultimo_tipo == "video":
+            orden = ["live", "seguimiento", "video"]
+        elif ultimo_tipo == "live":
+            orden = ["seguimiento", "video", "live"]
+        else:
+            orden = ["seguimiento", "video", "live"]
 
-        # Buscar video
-        res_vid = await session.execute(
-            select(Video)
-            .where(Video.telegram_id != user_id)
-            .order_by(Video.created_at.desc())
-        )
-        vid = res_vid.scalars().first()
-        if vid:
-            sent_message = await context.bot.send_message(
-                chat_id=chat_id,
-                text=f"📺 Video ({vid.tipo}):\n📌 {vid.titulo}\n📝 {vid.descripcion}\n🔗 {vid.link}\n🗓️ {vid.created_at}",
-                reply_markup=InlineKeyboardMarkup([
-                    [
-                        InlineKeyboardButton("🌐 Abrir video", url=vid.link),
-                        InlineKeyboardButton(
-                            "➡️ Siguiente", callback_data="ver_contenido")
-                    ],
-                    [InlineKeyboardButton(
-                        "🔙 Menú principal", callback_data="menu_principal")]
-                ])
-            )
-            context.job_queue.run_once(
-                lambda _, vid_id=vid.id: context.bot.edit_message_reply_markup(
-                    chat_id=chat_id,
-                    message_id=sent_message.message_id,
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton(
-                            "⭐ Ya di like y compartí", callback_data=f"confirm_video_{vid_id}")],
-                        [InlineKeyboardButton(
-                            "🔙 Menú principal", callback_data="menu_principal")]
-                    ])
-                ),
-                when=20
-            )
-            return
+        for tipo in orden:
+            if tipo == "seguimiento":
+                res_seg = await session.execute(
+                    select(Seguimiento)
+                    .where(Seguimiento.telegram_id != user_id)
+                    .order_by(Seguimiento.created_at.desc())
+                )
+                seg = res_seg.scalars().first()
+                if seg:
+                    sent_message = await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=f"👀 Seguimiento disponible:\n🔗 {seg.link}\n🗓️ {seg.created_at}",
+                        reply_markup=InlineKeyboardMarkup([
+                            [
+                                InlineKeyboardButton(
+                                    "🌐 Abrir perfil", url=seg.link),
+                                InlineKeyboardButton(
+                                    "➡️ Siguiente", callback_data="ver_contenido")
+                            ],
+                            [InlineKeyboardButton(
+                                "🔙 Menú principal", callback_data="menu_principal")]
+                        ])
+                    )
+                    context.job_queue.run_once(
+                        lambda _, sid=seg.id: context.bot.edit_message_reply_markup(
+                            chat_id=chat_id,
+                            message_id=sent_message.message_id,
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton(
+                                    "🟡 Ya lo seguí ✅", callback_data=f"confirm_seguimiento_{sid}")],
+                                [InlineKeyboardButton(
+                                    "🔙 Menú principal", callback_data="menu_principal")]
+                            ])
+                        ),
+                        when=20
+                    )
+                    context.user_data["ultimo_tipo"] = "seguimiento"
+                    return
 
-        # Buscar live
-        res_live = await session.execute(
-            select(Live)
-            .where(Live.telegram_id != user_id)
-            .order_by(Live.created_at.desc())
-        )
-        live = res_live.scalars().first()
-        if live:
-            # 👉 MENSAJE INICIAL (igual estilo que seguimiento)
-            sent_message = await context.bot.send_message(
-                chat_id=chat_id,
-                text=f"🔴 Live disponible:\n🔗 {live.link}\n🗓️ {live.created_at}",
-                reply_markup=InlineKeyboardMarkup([
-                    [
-                        InlineKeyboardButton("🌐 Abrir live", url=live.link),
-                        InlineKeyboardButton(
-                            "➡️ Siguiente", callback_data="ver_contenido")
-                    ],
-                    [InlineKeyboardButton(
-                        "🔙 Menú principal", callback_data="menu_principal")]
-                ])
-            )
-            # 👉 Después de 20 segundos: editar el mensaje para mostrar Confirmar + Menú principal
-            context.job_queue.run_once(
-                lambda _, lid=live.id: context.bot.edit_message_reply_markup(
-                    chat_id=chat_id,
-                    message_id=sent_message.message_id,
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton(
-                            "👀 Solo vi el live", callback_data=f"confirm_live_{lid}")],
-                        [InlineKeyboardButton(
-                            "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{lid}")],
-                        [InlineKeyboardButton(
-                            "🔙 Menú principal", callback_data="menu_principal")]
-                    ])
-                ),
-                when=20
-            )
-            return
+            elif tipo == "video":
+                res_vid = await session.execute(
+                    select(Video)
+                    .where(Video.telegram_id != user_id)
+                    .order_by(Video.created_at.desc())
+                )
+                vid = res_vid.scalars().first()
+                if vid:
+                    sent_message = await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=f"📺 Video ({vid.tipo}):\n📌 {vid.titulo}\n📝 {vid.descripcion}\n🔗 {vid.link}\n🗓️ {vid.created_at}",
+                        reply_markup=InlineKeyboardMarkup([
+                            [
+                                InlineKeyboardButton(
+                                    "🌐 Abrir video", url=vid.link),
+                                InlineKeyboardButton(
+                                    "➡️ Siguiente", callback_data="ver_contenido")
+                            ],
+                            [InlineKeyboardButton(
+                                "🔙 Menú principal", callback_data="menu_principal")]
+                        ])
+                    )
+                    context.job_queue.run_once(
+                        lambda _, vid_id=vid.id: context.bot.edit_message_reply_markup(
+                            chat_id=chat_id,
+                            message_id=sent_message.message_id,
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton(
+                                    "⭐ Ya di like y compartí", callback_data=f"confirm_video_{vid_id}")],
+                                [InlineKeyboardButton(
+                                    "🔙 Menú principal", callback_data="menu_principal")]
+                            ])
+                        ),
+                        when=20
+                    )
+                    context.user_data["ultimo_tipo"] = "video"
+                    return
+
+            elif tipo == "live":
+                res_live = await session.execute(
+                    select(Live)
+                    .where(Live.telegram_id != user_id)
+                    .order_by(Live.created_at.desc())
+                )
+                live = res_live.scalars().first()
+                if live:
+                    sent_message = await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=f"🔴 Live disponible:\n🔗 {live.link}\n🗓️ {live.created_at}",
+                        reply_markup=InlineKeyboardMarkup([
+                            [
+                                InlineKeyboardButton(
+                                    "🌐 Abrir live", url=live.link),
+                                InlineKeyboardButton(
+                                    "➡️ Siguiente", callback_data="ver_contenido")
+                            ],
+                            [InlineKeyboardButton(
+                                "🔙 Menú principal", callback_data="menu_principal")]
+                        ])
+                    )
+                    context.job_queue.run_once(
+                        lambda _, lid=live.id: context.bot.edit_message_reply_markup(
+                            chat_id=chat_id,
+                            message_id=sent_message.message_id,
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton(
+                                    "👀 Solo vi el live", callback_data=f"confirm_live_{lid}")],
+                                [InlineKeyboardButton(
+                                    "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{lid}")],
+                                [InlineKeyboardButton(
+                                    "🔙 Menú principal", callback_data="menu_principal")]
+                            ])
+                        ),
+                        when=20
+                    )
+                    context.user_data["ultimo_tipo"] = "live"
+                    return
 
     await context.bot.send_message(
         chat_id=chat_id,
@@ -1492,40 +1507,6 @@ async def subir_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await session.commit()
     await update.message.reply_text(f"✅ Cupón creado: código {code}, {total_points} puntos, {winners_limit} ganadores.")
 
-
-async def cobrar_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    args = context.args
-    if len(args) < 1:
-        await update.message.reply_text("Uso: /cobrar_cupon <codigo>")
-        return
-    code = args[0]
-    user_id = update.effective_user.id
-    async with async_session() as session:
-        res = await session.execute(select(Coupon).where(Coupon.code == code, Coupon.active == 1))
-        coupon = res.scalars().first()
-        if not coupon:
-            await update.message.reply_text("❌ Cupón no válido o agotado.")
-            return
-        reward = coupon.total_points // coupon.winners_limit
-        res_movs = await session.execute(
-            select(Movimiento).where(
-                Movimiento.detalle.like(f"Cobro cupón {code}%"))
-        )
-        winners = res_movs.scalars().all()
-        if len(winners) >= coupon.winners_limit:
-            coupon.active = 0
-            await session.commit()
-            await update.message.reply_text("⚠️ Ya no hay recompensas disponibles para este cupón.")
-            return
-        res_user = await session.execute(select(User).where(User.telegram_id == user_id))
-        user = res_user.scalars().first()
-        if user:
-            user.balance = (user.balance or 0) + reward
-            mov = Movimiento(telegram_id=user_id,
-                             detalle=f"Cobro cupón {code}", puntos=reward)
-            session.add(mov)
-            await session.commit()
-        await update.message.reply_text(f"✅ Cupón {code} cobrado. Recibiste {reward} puntos.")
 
 # --- Acciones administrativas propuestas por subadmin ---
 
