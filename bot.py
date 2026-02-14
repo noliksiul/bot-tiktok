@@ -2053,34 +2053,34 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("abrir_live_"):
         live_id = int(data.split("_")[-1])
 
-    # Recuperar el live desde la base de datos
-    async with async_session() as session:
-        res = await session.execute(select(Live).where(Live.id == live_id))
-        live = res.scalars().first()
+        # Recuperar el live desde la base de datos
+        async with async_session() as session:
+            res = await session.execute(select(Live).where(Live.id == live_id))
+            live = res.scalars().first()
 
-    if live:
-        # Mensaje inicial al usuario con el link real
-        await query.message.reply_text(
-            f"⏳ Abre este link y permanece al menos 2.5 minutos en el live:\n\n{live.link}",
-            reply_markup=back_to_menu_keyboard()
-        )
+        if live:
+            # Mensaje inicial al usuario con el link real
+            await query.message.reply_text(
+                f"⏳ Abre este link y permanece al menos 2.5 minutos en el live:\n\n{live.link}",
+                reply_markup=back_to_menu_keyboard()
+            )
 
-        # Programar confirmación después de 2.5 minutos (150 segundos)
-        context.job_queue.run_once(
-            lambda _: context.bot.send_message(
-                chat_id=query.message.chat.id,
-                text="✅ Ya puedes confirmar tu apoyo en el live:",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton(
-                        "👀 Solo vi el live", callback_data=f"confirm_live_{live_id}")],
-                    [InlineKeyboardButton(
-                        "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{live_id}")],
-                    [InlineKeyboardButton(
-                        "🔙 Menú principal", callback_data="menu_principal")]
-                ])
-            ),
-            when=150  # 2.5 minutos
-        )
+            # Programar confirmación después de 2.5 minutos (150 segundos)
+            context.job_queue.run_once(
+                lambda _, lid=live_id: context.bot.send_message(
+                    chat_id=query.message.chat.id,
+                    text="✅ Ya puedes confirmar tu apoyo en el live:",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton(
+                            "👀 Solo vi el live", callback_data=f"confirm_live_{lid}")],
+                        [InlineKeyboardButton(
+                            "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{lid}")],
+                        [InlineKeyboardButton(
+                            "🔙 Menú principal", callback_data="menu_principal")]
+                    ])
+                ),
+                when=150  # 2.5 minutos
+            )
 
 
 async def reject_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action_id: int):
