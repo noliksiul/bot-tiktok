@@ -639,19 +639,23 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
             costo = 10
 
         u.balance = (u.balance or 0) - costo
-        mov = Movimiento(telegram_id=user_id,
-                         detalle=f"Subir live ({tipo})", puntos=-costo)
+        mov = Movimiento(
+            telegram_id=user_id,
+            detalle=f"Subir live ({tipo})",
+            puntos=-costo
+        )
         session.add(mov)
 
         await session.commit()
 
-    # ✅ Publicar en el canal con botones
+    # ✅ Publicar en el canal con botón de abrir live (callback, no url)
     try:
         await context.bot.send_message(
             chat_id=CHANNEL_ID,
             text=f"🔴 Nuevo live publicado por {u.tiktok_user}\n\n{link}\n\n¡Apóyalo para ganar puntos!",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🌐 Abrir live", url=link)],
+                [InlineKeyboardButton(
+                    "🌐 Abrir live", callback_data=f"abrir_live_{live.id}")],
                 [InlineKeyboardButton(
                     "🔙 Regresar al menú principal", callback_data="menu_principal")]
             ])
@@ -673,7 +677,8 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
                             f"{link}\n\n¡Apóyalo para ganar puntos!"
                         ),
                         reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("🌐 Abrir live", url=link)],
+                            [InlineKeyboardButton(
+                                "🌐 Abrir live", callback_data=f"abrir_live_{live.id}")],
                             [InlineKeyboardButton(
                                 "🔙 Regresar al menú principal", callback_data="menu_principal")]
                         ])
@@ -683,6 +688,7 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
 
     await update.message.reply_text("✅ Live registrado y notificado.", reply_markup=back_to_menu_keyboard())
     context.user_data["state"] = None
+
 
 # --- Subir video: flujo por pasos ---
 
@@ -878,33 +884,19 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         )
         live = res_live.scalars().first()
         if live:
-            sent_message = await context.bot.send_message(
+            await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"🔴 Live disponible:\n🔗 {live.link}\n🗓️ {live.created_at}\n\nRecuerda durar {LIVE_VIEW_MINUTES} minutos en el live.",
                 reply_markup=InlineKeyboardMarkup([
                     [
-                        InlineKeyboardButton("🌐 Abrir live", url=live.link),
+                        InlineKeyboardButton(
+                            "🌐 Abrir live", callback_data=f"abrir_live_{live.id}"),
                         InlineKeyboardButton(
                             "➡️ Siguiente", callback_data="ver_contenido")
                     ],
                     [InlineKeyboardButton(
                         "🔙 Menú principal", callback_data="menu_principal")]
                 ])
-            )
-            context.job_queue.run_once(
-                lambda _: context.bot.edit_message_reply_markup(
-                    chat_id=chat_id,
-                    message_id=sent_message.message_id,
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton(
-                            "👀 Solo vi el live", callback_data=f"confirm_live_{live.id}")],
-                        [InlineKeyboardButton(
-                            "❤️ Vi el live y di Quiéreme", callback_data=f"confirm_live_{live.id}_quiereme")],
-                        [InlineKeyboardButton(
-                            "🔙 Menú principal", callback_data="menu_principal")]
-                    ])
-                ),
-                when=20
             )
             return
 
@@ -1090,7 +1082,7 @@ async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, v
         res_vid = await session.execute(select(Video).where(Video.id == vid_id))
         vid = res_vid.scalars().first()
         if not vid:
-            await query.edit_message_text("❌ Video no encontrado.", reply_markup=back_to_menu_keyboard())
+            await query.message.reply_text("❌ Video no encontrado.", reply_markup=back_to_menu_keyboard())
             return
         if vid.telegram_id == user_id:
             await query.answer("No puedes apoyar tu propio video.", show_alert=True)
@@ -1131,7 +1123,13 @@ async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, v
         res_actor = await session.execute(select(User).where(User.telegram_id == user_id))
         actor = res_actor.scalars().first()
 
-    await query.edit_message_text("🟡 Tu apoyo fue registrado y está pendiente de aprobación del dueño.", reply_markup=back_to_menu_keyboard())
+    # 👉 Mostrar confirmación al usuario en un nuevo mensaje
+    await query.message.reply_text(
+        "🟡 Tu apoyo fue registrado y está pendiente de aprobación del dueño.",
+        reply_markup=back_to_menu_keyboard()
+    )
+
+    # 👉 Notificar al dueño con botones de aprobar/rechazar
     await notify_user(
         context,
         chat_id=vid.telegram_id,
@@ -1909,7 +1907,6 @@ async def approve_action(query, context: ContextTypes.DEFAULT_TYPE, action_id: i
 
 
 # --- Callback principal (menú y acciones) ---
-
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     try:
@@ -2020,7 +2017,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_main_menu(query, context)
         return
 
-    # ✅ Confirmaciones de apoyo unificadas (corregidas: ya no reabren contenido)
+    # ✅ Confirmaciones de apoyo unificadas
     elif data.startswith("confirm_seguimiento_"):
         seg_id = int(data.split("_")[-1])
         await handle_seguimiento_done(query, context, seg_id)
@@ -2055,7 +2052,35 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         action_id = int(data.split("_")[-1])
         await reject_admin_action(query, context, action_id)
 
+    # ✅ Nuevo bloque para abrir live y esperar 2.5 minutos
+     elif data.startswith("abrir_live_"):
+       live_id = int(data.split("_")[-1])
 
+    # Recuperar el live desde la base de datos
+    async with async_session() as session:
+        res = await session.execute(select(Live).where(Live.id == live_id))
+        live = res.scalars().first()
+
+    if live:
+        # Mensaje inicial al usuario con el link real
+        await query.message.reply_text(
+            f"⏳ Abre este link y permanece al menos 2.5 minutos en el live:\n\n{live.link}",
+            reply_markup=back_to_menu_keyboard()
+        )
+
+        # Programar confirmación después de 2.5 minutos (150 segundos)
+        context.job_queue.run_once(
+            lambda _: context.bot.send_message(
+                chat_id=query.message.chat.id,
+                text="✅ Ya puedes confirmar tu apoyo en el live:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("👀 Solo vi el live", callback_data=f"confirm_live_{live_id}")],
+                    [InlineKeyboardButton("❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{live_id}")],
+                    [InlineKeyboardButton("🔙 Menú principal", callback_data="menu_principal")]
+                ])
+            ),
+            when=150  # 2.5 minutos
+        )
 async def reject_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action_id: int):
     # Verificamos que solo el ADMIN_ID pueda rechazar
     if query.from_user.id != ADMIN_ID:
