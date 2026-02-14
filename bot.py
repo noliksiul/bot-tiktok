@@ -789,6 +789,7 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print("Aviso: no se pudo publicar en el canal:", e)
 
 # bot.py (Parte 3/5)
+
 # --- Ver contenido unificado (seguimiento, video, live) ---
 
 
@@ -826,12 +827,12 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
             )
             # 👉 Después de 20 segundos: editar el mensaje para mostrar Confirmar + Menú principal
             context.job_queue.run_once(
-                lambda _: context.bot.edit_message_reply_markup(
+                lambda _, sid=seg.id: context.bot.edit_message_reply_markup(
                     chat_id=chat_id,
                     message_id=sent_message.message_id,
                     reply_markup=InlineKeyboardMarkup([
                         [InlineKeyboardButton(
-                            "🟡 Ya lo seguí ✅", callback_data=f"confirm_seguimiento_{seg.id}")],
+                            "🟡 Ya lo seguí ✅", callback_data=f"confirm_seguimiento_{sid}")],
                         [InlineKeyboardButton(
                             "🔙 Menú principal", callback_data="menu_principal")]
                     ])
@@ -862,12 +863,12 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                 ])
             )
             context.job_queue.run_once(
-                lambda _: context.bot.edit_message_reply_markup(
+                lambda _, vid_id=vid.id: context.bot.edit_message_reply_markup(
                     chat_id=chat_id,
                     message_id=sent_message.message_id,
                     reply_markup=InlineKeyboardMarkup([
                         [InlineKeyboardButton(
-                            "⭐ Ya di like y compartí", callback_data=f"confirm_video_{vid.id}")],
+                            "⭐ Ya di like y compartí", callback_data=f"confirm_video_{vid_id}")],
                         [InlineKeyboardButton(
                             "🔙 Menú principal", callback_data="menu_principal")]
                     ])
@@ -900,14 +901,14 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
             )
             # 👉 Después de 20 segundos: editar el mensaje para mostrar Confirmar + Menú principal
             context.job_queue.run_once(
-                lambda _: context.bot.edit_message_reply_markup(
+                lambda _, lid=live.id: context.bot.edit_message_reply_markup(
                     chat_id=chat_id,
                     message_id=sent_message.message_id,
                     reply_markup=InlineKeyboardMarkup([
                         [InlineKeyboardButton(
-                            "👀 Solo vi el live", callback_data=f"confirm_live_{live.id}")],
+                            "👀 Solo vi el live", callback_data=f"confirm_live_{lid}")],
                         [InlineKeyboardButton(
-                            "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{live.id}")],
+                            "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{lid}")],
                         [InlineKeyboardButton(
                             "🔙 Menú principal", callback_data="menu_principal")]
                     ])
@@ -921,7 +922,6 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         text="⚠️ No hay contenido disponible por ahora.",
         reply_markup=back_to_menu_keyboard()
     )
-
 # --- Registrar interacción de seguimiento (notifica con TikTok del actor) ---
 
 
