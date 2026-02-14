@@ -2053,8 +2053,8 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await reject_admin_action(query, context, action_id)
 
     # ✅ Nuevo bloque para abrir live y esperar 2.5 minutos
-     elif data.startswith("abrir_live_"):
-       live_id = int(data.split("_")[-1])
+    elif data.startswith("abrir_live_"):
+        live_id = int(data.split("_")[-1])
 
     # Recuperar el live desde la base de datos
     async with async_session() as session:
@@ -2074,13 +2074,18 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 chat_id=query.message.chat.id,
                 text="✅ Ya puedes confirmar tu apoyo en el live:",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("👀 Solo vi el live", callback_data=f"confirm_live_{live_id}")],
-                    [InlineKeyboardButton("❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{live_id}")],
-                    [InlineKeyboardButton("🔙 Menú principal", callback_data="menu_principal")]
+                    [InlineKeyboardButton(
+                        "👀 Solo vi el live", callback_data=f"confirm_live_{live_id}")],
+                    [InlineKeyboardButton(
+                        "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{live_id}")],
+                    [InlineKeyboardButton(
+                        "🔙 Menú principal", callback_data="menu_principal")]
                 ])
             ),
             when=150  # 2.5 minutos
         )
+
+
 async def reject_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action_id: int):
     # Verificamos que solo el ADMIN_ID pueda rechazar
     if query.from_user.id != ADMIN_ID:
