@@ -161,7 +161,7 @@ class Live(Base):
     alias = Column(Text, nullable=True)   # 👈 nuevo campo
     puntos = Column(Integer, default=0)   # 👈 nuevo campo
     created_at = Column(TIMESTAMP, server_default=func.now())
-
+    expires_at = Column(TIMESTAMP)   # ✅ nuevo campo para caducidad de 1 día
     # --- Tabla de cupones ---
 
 
@@ -210,24 +210,22 @@ async def migrate_db():
         await conn.execute(text("ALTER TABLE admin_actions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP;"))
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_admin_actions_status_expires ON admin_actions(status, expires_at);"))
 
-        # interacciones: convertir puntos a FLOAT
-        await conn.execute(text("ALTER TABLE interacciones ALTER COLUMN puntos TYPE FLOAT USING puntos::float;"))
-
-# movimientos: índice por usuario
+        # movimientos: índice por usuario
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_movimientos_telegram_id ON movimientos(telegram_id);"))
-
-# movimientos: convertir puntos a FLOAT
+        # movimientos: convertir puntos a FLOAT
         await conn.execute(text("ALTER TABLE movimientos ALTER COLUMN puntos TYPE FLOAT USING puntos::float;"))
 
         # Seguimiento/Video: índices por dueño
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_seguimientos_telegram_id ON seguimientos(telegram_id);"))
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_videos_telegram_id ON videos(telegram_id);"))
+
         # Lives: índice por dueño
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_lives_telegram_id ON lives(telegram_id);"))
         # Lives: columnas nuevas
         await conn.execute(text("ALTER TABLE lives ADD COLUMN IF NOT EXISTS alias TEXT;"))
         await conn.execute(text("ALTER TABLE lives ADD COLUMN IF NOT EXISTS puntos INTEGER DEFAULT 0;"))
-
+        # ✅ nuevo campo
+        await conn.execute(text("ALTER TABLE lives ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP;"))
 
 # --- Helpers de referidos ---
 
