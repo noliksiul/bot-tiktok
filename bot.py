@@ -666,7 +666,8 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
             text=f"🔴 Nuevo live publicado por {u.tiktok_user}\n\n{link}\n\n¡Apóyalo para ganar puntos!",
             reply_markup=InlineKeyboardMarkup([
                 # ✅ abre directo
-                [InlineKeyboardButton("🌐 Abrir live", url=link)],
+                [InlineKeyboardButton(
+                    "🌐 Abrir live", callback_data=f"abrir_live_{live.id}")],
                 [InlineKeyboardButton(
                     "🔙 Regresar al menú principal", callback_data="menu_principal")]
             ])
