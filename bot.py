@@ -1,6 +1,5 @@
 # bot.py (Parte 1/5)
 
-from bot import handle_seguimiento_done, handle_video_support_done, handle_live_view, handle_live_quiereme
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import os
 import asyncio
