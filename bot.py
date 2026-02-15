@@ -1,5 +1,6 @@
 # bot.py (Parte 1/5)
 
+from bot import handle_seguimiento_done, handle_video_support_done, handle_live_view, handle_live_quiereme
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import os
 import asyncio
@@ -2049,14 +2050,14 @@ async def approve_action(query, context: ContextTypes.DEFAULT_TYPE, action_id: i
         )
 # bot.py (Parte 5/5)
 
-
 # --- Callback principal (menú y acciones) ---
+
+
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    try:
-        await query.answer()
-    except:
-        pass
+
+    # 👉 Siempre responder al callback
+    await query.answer()
 
     data = query.data
 
@@ -2164,18 +2165,22 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ✅ Confirmaciones de apoyo unificadas
     elif data.startswith("confirm_seguimiento_"):
         seg_id = int(data.split("_")[-1])
+        print("DEBUG: confirm_seguimiento_", seg_id)
         await handle_seguimiento_done(query, context, seg_id)
 
     elif data.startswith("confirm_video_"):
         vid_id = int(data.split("_")[-1])
+        print("DEBUG: confirm_video_", vid_id)
         await handle_video_support_done(query, context, vid_id)
 
     elif data.startswith("confirm_live_"):
         live_id = int(data.split("_")[-1])
+        print("DEBUG: confirm_live_", live_id)
         await handle_live_view(query, context, live_id)
 
     elif data.startswith("live_quiereme_"):
         live_id = int(data.split("_")[-1])
+        print("DEBUG: live_quiereme_", live_id)
         await handle_live_quiereme(query, context, live_id)
 
     # ✅ Aprobaciones/Rechazos de dueños
@@ -2200,19 +2205,16 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("abrir_live_"):
         live_id = int(data.split("_")[-1])
 
-        # Recuperar el live desde la base de datos
         async with async_session() as session:
             res = await session.execute(select(Live).where(Live.id == live_id))
             live = res.scalars().first()
 
         if live:
-            # Mensaje inicial al usuario con el link real
-            await query.message.reply_text(
+            await query.edit_message_text(
                 f"⏳ Abre este link y permanece al menos 2.5 minutos en el live:\n\n{live.link}",
                 reply_markup=back_to_menu_keyboard()
             )
 
-            # Programar confirmación después de 2.5 minutos (150 segundos)
             context.job_queue.run_once(
                 lambda _, lid=live_id: context.bot.send_message(
                     chat_id=query.message.chat.id,
@@ -2226,7 +2228,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             "🔙 Menú principal", callback_data="menu_principal")]
                     ])
                 ),
-                when=150  # 2.5 minutos
+                when=150
             )
 
 
