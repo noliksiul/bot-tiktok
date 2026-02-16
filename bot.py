@@ -1220,10 +1220,9 @@ async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, v
             callback_no=f"reject_interaction_{inter.id}"
         )
     )
-# --- Registrar interacción de live (notifica con TikTok del actor) ---
-# --- Registrar interacción de live (notifica con TikTok del actor) ---
 
 
+# --- Registrar interacción de live (solo ver, automático con 0.25 puntos) ---
 async def handle_live_view(query, context: ContextTypes.DEFAULT_TYPE, live_id: int):
     user_id = query.from_user.id
     async with async_session() as session:
@@ -1247,21 +1246,81 @@ async def handle_live_view(query, context: ContextTypes.DEFAULT_TYPE, live_id: i
         inter = res_inter.scalars().first()
 
         if inter:
+            await query.answer("⚠️ Ya habías registrado tu apoyo en este live.", show_alert=True)
+            return
+        else:
+            # 👉 Crear nueva interacción ya aceptada con 0.25 puntos
+            inter = Interaccion(
+                tipo="live_view",
+                item_id=live.id,
+                actor_id=user_id,
+                owner_id=live.telegram_id,
+                status="accepted",   # ✅ directo aceptado
+                puntos=0.25,
+                expires_at=datetime.utcnow()
+            )
+            session.add(inter)
+
+            # 👉 Acreditar puntos al actor
+            res_actor = await session.execute(select(User).where(User.telegram_id == user_id))
+            actor = res_actor.scalars().first()
+            if actor:
+                actor.balance = (actor.balance or 0) + 0.25
+                mov = Movimiento(
+                    telegram_id=user_id,
+                    detalle="Apoyo live (solo ver, automático)",
+                    puntos=0.25
+                )
+                session.add(mov)
+
+            await session.commit()
+
+    # 👉 Confirmación al usuario (editando el mensaje original)
+    await query.edit_message_text(
+        "✅ Tu apoyo al live fue registrado automáticamente. Ganaste 0.25 puntos.",
+        reply_markup=back_to_menu_keyboard()
+    )
+
+
+# --- Registrar interacción de live con Quiéreme (requiere aprobación, 2 puntos) ---
+async def handle_live_quiereme(query, context: ContextTypes.DEFAULT_TYPE, live_id: int):
+    user_id = query.from_user.id
+    async with async_session() as session:
+        res_live = await session.execute(select(Live).where(Live.id == live_id))
+        live = res_live.scalars().first()
+        if not live:
+            await query.edit_message_text("❌ Live no encontrado.", reply_markup=back_to_menu_keyboard())
+            return
+        if live.telegram_id == user_id:
+            await query.answer("No puedes apoyar tu propio live.", show_alert=True)
+            return
+
+        # 👉 Verificar duplicados
+        res_inter = await session.execute(
+            select(Interaccion).where(
+                Interaccion.tipo == "live_quiereme",
+                Interaccion.item_id == live.id,
+                Interaccion.actor_id == user_id
+            )
+        )
+        inter = res_inter.scalars().first()
+
+        if inter:
             if inter.status == "pending":
                 await query.answer("⚠️ Ya habías registrado tu apoyo, está pendiente de aprobación.", show_alert=True)
             else:
                 await query.answer(f"⚠️ Esta interacción ya está en estado: {inter.status}.", show_alert=True)
             return
         else:
-            # 👉 Crear nueva interacción
+            # 👉 Crear nueva interacción con puntos extra
             expires = datetime.utcnow() + timedelta(days=AUTO_APPROVE_AFTER_DAYS)
             inter = Interaccion(
-                tipo="live_view",
+                tipo="live_quiereme",
                 item_id=live.id,
                 actor_id=user_id,
                 owner_id=live.telegram_id,
-                status="pending",
-                puntos=PUNTOS_LIVE_SOLO_VER,
+                status="pending",   # ✅ requiere aprobación
+                puntos=2.0,         # ✅ total de puntos por Quiéreme
                 expires_at=expires
             )
             session.add(inter)
@@ -1273,7 +1332,7 @@ async def handle_live_view(query, context: ContextTypes.DEFAULT_TYPE, live_id: i
 
     # 👉 Confirmación al usuario (editando el mensaje original)
     await query.edit_message_text(
-        "🟡 Tu apoyo al live fue registrado y está pendiente de aprobación del dueño.",
+        "🟡 Tu apoyo con Quiéreme fue registrado y está pendiente de aprobación del dueño.",
         reply_markup=back_to_menu_keyboard()
     )
 
@@ -1282,11 +1341,11 @@ async def handle_live_view(query, context: ContextTypes.DEFAULT_TYPE, live_id: i
         context,
         chat_id=live.telegram_id,
         text=(
-            f"📩 Nuevo apoyo a tu live:\n"
+            f"📩 Nuevo apoyo a tu live con Quiéreme:\n"
             f"Item ID: {live.id}\n"
             f"Actor: {user_id}\n"
             f"Usuario TikTok: {actor.tiktok_user or 'no registrado'}\n"
-            f"Puntos: {PUNTOS_LIVE_SOLO_VER}\n\n"
+            f"Puntos: 2.0\n\n"
             "¿Apruebas?"
         ),
         reply_markup=yes_no_keyboard(
