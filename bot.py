@@ -674,31 +674,37 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
         print("No se pudo publicar en el canal:", e)
 
     # ✅ Si es personalizado, notificar a todos los usuarios
+    # ✅ Si es personalizado, notificar a todos los usuarios
     if tipo == "personalizado":
         async with async_session() as session:
             res = await session.execute(select(User.telegram_id).where(User.telegram_id != user_id))
             todos = res.scalars().all()
-            for uid in todos:
-                try:
-                    await context.bot.send_message(
-                        chat_id=uid,
-                        text=(
-                            f"📢 Mensaje personalizado de {u.tiktok_user}:\n\n"
-                            f"{link}\n\n¡Apóyalo para ganar puntos!"
-                        ),
-                        reply_markup=InlineKeyboardMarkup([
-                            # ✅ abre directo
-                            [InlineKeyboardButton("🌐 Abrir live", url=link)],
-                            [InlineKeyboardButton(
-                                "🔙 Regresar al menú principal", callback_data="menu_principal")]
-                        ])
-                    )
-                except Exception as e:
-                    print(f"No se pudo notificar a {uid}: {e}")
+        for uid in todos:
+            try:
+                # Normalizar el link para que Telegram lo reconozca como URL válido
+                live_link = link.strip()
+                if not live_link.startswith("http"):
+                    live_link = "https://" + live_link
 
+                await context.bot.send_message(
+                    chat_id=uid,
+                    text=(
+                        f"📢 Mensaje personalizado de {u.tiktok_user}:\n\n"
+                        f"{live_link}\n\n¡Apóyalo para ganar puntos!"
+                    ),
+                    reply_markup=InlineKeyboardMarkup([
+                        # ✅ abre directo el link del dueño del live
+                        [InlineKeyboardButton("🌐 Abrir live", url=live_link)],
+                        [InlineKeyboardButton(
+                            "🔙 Regresar al menú principal", callback_data="menu_principal")]
+                    ])
+                )
+            except Exception as e:
+                print(f"No se pudo notificar a {uid}: {e}")
+
+# ✅ Confirmación al dueño del live y reset de estado
     await update.message.reply_text("✅ Live registrado y notificado.", reply_markup=back_to_menu_keyboard())
-    context.user_data["state"] = None
-
+context.user_data["state"] = None
 
 # --- Subir video: flujo por pasos ---
 
