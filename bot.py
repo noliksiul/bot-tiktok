@@ -1076,6 +1076,7 @@ async def reject_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_id
 # --- Registrar interacción de seguimiento (notifica con TikTok del actor) ---
 
 
+# --- Registrar interacción de seguimiento (notifica con TikTok del actor) ---
 async def handle_seguimiento_done(query, context: ContextTypes.DEFAULT_TYPE, seg_id: int):
     user_id = query.from_user.id
     async with async_session() as session:
@@ -1146,7 +1147,6 @@ async def handle_seguimiento_done(query, context: ContextTypes.DEFAULT_TYPE, seg
             callback_no=f"reject_interaction_{inter.id}"
         )
     )
-# --- Registrar interacción de video (notifica con TikTok del actor) ---
 
 
 # --- Registrar interacción de video (notifica con TikTok del actor) ---
@@ -1275,7 +1275,7 @@ async def handle_live_view(query, context: ContextTypes.DEFAULT_TYPE, live_id: i
 
             await session.commit()
 
-    # 👉 Confirmación al usuario (editando el mensaje original)
+    # 👉 Confirmación al usuario
     await query.edit_message_text(
         "✅ Tu apoyo al live fue registrado automáticamente. Ganaste 0.25 puntos.",
         reply_markup=back_to_menu_keyboard()
@@ -1330,7 +1330,7 @@ async def handle_live_quiereme(query, context: ContextTypes.DEFAULT_TYPE, live_i
         res_actor = await session.execute(select(User).where(User.telegram_id == user_id))
         actor = res_actor.scalars().first()
 
-    # 👉 Confirmación al usuario (editando el mensaje original)
+    # 👉 Confirmación al usuario
     await query.edit_message_text(
         "🟡 Tu apoyo con Quiéreme fue registrado y está pendiente de aprobación del dueño.",
         reply_markup=back_to_menu_keyboard()
