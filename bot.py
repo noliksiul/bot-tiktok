@@ -806,13 +806,14 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print("Aviso: no se pudo publicar en el canal:", e)
 
 # bot.py (Parte 3/5)
-
-
 # --- Ver contenido unificado (seguimiento, video, live) ---
+
+
 async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(update_or_query, Update):
         chat_id = update_or_query.effective_chat.id
         user_id = update_or_query.effective_user.id
+        query = None
     else:
         query = update_or_query
         chat_id = query.message.chat.id
@@ -836,7 +837,6 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                 res_seg = await session.execute(
                     select(Seguimiento)
                     .where(Seguimiento.telegram_id != user_id)
-                    # ✅ excluir seguimientos ya apoyados y pendientes
                     .where(~Seguimiento.id.in_(
                         select(Interaccion.item_id).where(
                             Interaccion.tipo == "seguimiento",
@@ -848,8 +848,7 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                 )
                 seg = res_seg.scalars().first()
                 if seg:
-                    sent_message = await context.bot.send_message(
-                        chat_id=chat_id,
+                    await query.edit_message_text(
                         text=f"👀 Seguimiento disponible:\n🔗 {seg.link}\n🗓️ {seg.created_at}",
                         reply_markup=InlineKeyboardMarkup([
                             [
@@ -865,7 +864,7 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                     context.job_queue.run_once(
                         lambda _, sid=seg.id: context.bot.edit_message_reply_markup(
                             chat_id=chat_id,
-                            message_id=sent_message.message_id,
+                            message_id=query.message.message_id,
                             reply_markup=InlineKeyboardMarkup([
                                 [InlineKeyboardButton(
                                     "🟡 Ya lo seguí ✅", callback_data=f"confirm_seguimiento_{sid}")],
@@ -882,7 +881,6 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                 res_vid = await session.execute(
                     select(Video)
                     .where(Video.telegram_id != user_id)
-                    # ✅ excluir videos ya apoyados y pendientes
                     .where(~Video.id.in_(
                         select(Interaccion.item_id).where(
                             Interaccion.tipo == "video_support",
@@ -894,8 +892,7 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                 )
                 vid = res_vid.scalars().first()
                 if vid:
-                    sent_message = await context.bot.send_message(
-                        chat_id=chat_id,
+                    await query.edit_message_text(
                         text=f"📺 Video ({vid.tipo}):\n📌 {vid.titulo}\n📝 {vid.descripcion}\n🔗 {vid.link}\n🗓️ {vid.created_at}",
                         reply_markup=InlineKeyboardMarkup([
                             [
@@ -911,7 +908,7 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                     context.job_queue.run_once(
                         lambda _, vid_id=vid.id: context.bot.edit_message_reply_markup(
                             chat_id=chat_id,
-                            message_id=sent_message.message_id,
+                            message_id=query.message.message_id,
                             reply_markup=InlineKeyboardMarkup([
                                 [InlineKeyboardButton(
                                     "⭐ Ya di like y compartí", callback_data=f"confirm_video_{vid_id}")],
@@ -928,7 +925,6 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                 res_live = await session.execute(
                     select(Live)
                     .where(Live.telegram_id != user_id)
-                    # ✅ excluir lives ya apoyados y pendientes
                     .where(~Live.id.in_(
                         select(Interaccion.item_id).where(
                             Interaccion.actor_id == user_id,
@@ -937,19 +933,17 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                                 ["live_view", "live_quiereme"])
                         )
                     ))
-                    # ✅ solo mostrar lives de las últimas 24 horas
                     .where(Live.created_at >= datetime.utcnow() - timedelta(days=1))
                     .order_by(Live.created_at.desc())
                 )
                 live = res_live.scalars().first()
                 if live:
-                    sent_message = await context.bot.send_message(
-                        chat_id=chat_id,
+                    await query.edit_message_text(
                         text=f"🔴 Live disponible:\n🔗 {live.link}\n🗓️ {live.created_at}",
                         reply_markup=InlineKeyboardMarkup([
                             [
                                 InlineKeyboardButton(
-                                    "🌐 Abrir live", url=live.link),
+                                    "🌐 Abrir live", callback_data=f"abrir_live_{live.id}"),
                                 InlineKeyboardButton(
                                     "➡️ Siguiente", callback_data="ver_contenido")
                             ],
@@ -960,7 +954,7 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                     context.job_queue.run_once(
                         lambda _, lid=live.id: context.bot.edit_message_reply_markup(
                             chat_id=chat_id,
-                            message_id=sent_message.message_id,
+                            message_id=query.message.message_id,
                             reply_markup=InlineKeyboardMarkup([
                                 [InlineKeyboardButton(
                                     "👀 Solo vi el live", callback_data=f"confirm_live_{lid}")],
@@ -975,8 +969,7 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                     context.user_data["ultimo_tipo"] = "live"
                     return
 
-    await context.bot.send_message(
-        chat_id=chat_id,
+    await query.edit_message_text(
         text="⚠️ No hay contenido disponible por ahora.",
         reply_markup=back_to_menu_keyboard()
     )
@@ -1073,7 +1066,6 @@ async def reject_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_id
         text=f"❌ Tu apoyo en {inter.tipo} fue rechazado.",
         reply_markup=back_to_menu_keyboard()
     )
-# --- Registrar interacción de seguimiento (notifica con TikTok del actor) ---
 
 
 # --- Registrar interacción de seguimiento (notifica con TikTok del actor) ---
@@ -2188,6 +2180,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # --- Unificación de ver contenido ---
     elif data == "ver_contenido":
+        # ⚠️ aquí dentro usa edit_message_text
         await show_contenido(query, context)
         return
 
@@ -2217,22 +2210,18 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ✅ Confirmaciones de apoyo unificadas
     elif data.startswith("confirm_seguimiento_"):
         seg_id = int(data.split("_")[-1])
-        print("DEBUG: confirm_seguimiento_", seg_id)
         await handle_seguimiento_done(query, context, seg_id)
 
     elif data.startswith("confirm_video_"):
         vid_id = int(data.split("_")[-1])
-        print("DEBUG: confirm_video_", vid_id)
         await handle_video_support_done(query, context, vid_id)
 
     elif data.startswith("confirm_live_"):
         live_id = int(data.split("_")[-1])
-        print("DEBUG: confirm_live_", live_id)
         await handle_live_view(query, context, live_id)
 
     elif data.startswith("live_quiereme_"):
         live_id = int(data.split("_")[-1])
-        print("DEBUG: live_quiereme_", live_id)
         await handle_live_quiereme(query, context, live_id)
 
     # ✅ Aprobaciones/Rechazos de dueños
@@ -2268,8 +2257,9 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
             context.job_queue.run_once(
-                lambda _, lid=live_id: context.bot.send_message(
+                lambda _, lid=live_id: context.bot.edit_message_text(
                     chat_id=query.message.chat.id,
+                    message_id=query.message.message_id,
                     text="✅ Ya puedes confirmar tu apoyo en el live:",
                     reply_markup=InlineKeyboardMarkup([
                         [InlineKeyboardButton(
