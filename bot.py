@@ -661,14 +661,14 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
 
         await session.commit()
 
-    # ✅ Publicar en el canal con botón de abrir live directo
+    # ✅ Publicar en el canal con botón que dispara flujo de confirmación
     try:
         await context.bot.send_message(
             chat_id=CHANNEL_ID,
             text=f"🔴 Nuevo live publicado por {u.tiktok_user}\n\n{link}\n\n¡Apóyalo para ganar puntos!",
             reply_markup=InlineKeyboardMarkup([
-                # ✅ abre directo
-                [InlineKeyboardButton("🌐 Abrir live", url=link)],
+                [InlineKeyboardButton(
+                    "🌐 Abrir live", callback_data=f"abrir_live_{live.id}")],
                 [InlineKeyboardButton(
                     "🔙 Regresar al menú principal", callback_data="menu_principal")]
             ])
@@ -694,9 +694,8 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
                             f"{live_link}\n\n¡Apóyalo para ganar puntos!"
                         ),
                         reply_markup=InlineKeyboardMarkup([
-                            # ✅ abre directo
                             [InlineKeyboardButton(
-                                "🌐 Abrir live", url=live_link)],
+                                "🌐 Abrir live", callback_data=f"abrir_live_{live.id}")],
                             [InlineKeyboardButton(
                                 "🔙 Regresar al menú principal", callback_data="menu_principal")]
                         ])
@@ -2092,6 +2091,7 @@ async def approve_action(query, context: ContextTypes.DEFAULT_TYPE, action_id: i
             text=f"🎁 Recibiste {action.cantidad} puntos (aprobado por admin).",
             reply_markup=back_to_menu_keyboard()
         )
+
 # bot.py (Parte 5/5)
 
 # --- Callback principal (menú y acciones) ---
