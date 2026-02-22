@@ -661,17 +661,11 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
 
         await session.commit()
 
-    # ✅ Publicar en el canal con botón que dispara flujo de confirmación
+    # ✅ Publicar en el canal (sin botones)
     try:
         await context.bot.send_message(
             chat_id=CHANNEL_ID,
-            text=f"🔴 Nuevo live publicado por {u.tiktok_user}\n\n{link}\n\n¡Apóyalo para ganar puntos!",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(
-                    "🌐 Abrir live", callback_data=f"abrir_live_{live.id}")],
-                [InlineKeyboardButton(
-                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
-            ])
+            text=f"🔴 Nuevo live publicado por {u.tiktok_user}\n\n{link}\n\n¡Apóyalo para ganar puntos!"
         )
     except Exception as e:
         print("No se pudo publicar en el canal:", e)
@@ -695,9 +689,7 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
                         ),
                         reply_markup=InlineKeyboardMarkup([
                             [InlineKeyboardButton(
-                                "🌐 Abrir live", callback_data=f"abrir_live_{live.id}")],
-                            [InlineKeyboardButton(
-                                "🔙 Regresar al menú principal", callback_data="menu_principal")]
+                                "🌐 Abrir live", callback_data=f"abrir_live_{live.id}")]
                         ])
                     )
                 except Exception as e:
@@ -706,13 +698,6 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
     # ✅ Confirmación al dueño del live y reset de estado
     await update.message.reply_text("✅ Live registrado y notificado.", reply_markup=back_to_menu_keyboard())
     context.user_data["state"] = None
-# --- Subir video: flujo por pasos ---
-
-
-async def save_video_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["video_title"] = update.message.text.strip()
-    context.user_data["state"] = "video_desc"
-    await update.message.reply_text("📝 Ahora envíame la descripción del video:", reply_markup=back_to_menu_keyboard())
 
 
 async def save_video_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
