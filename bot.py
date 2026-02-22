@@ -793,7 +793,9 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
     except Exception as e:
         print("Aviso: no se pudo publicar en el canal:", e)
+
 # bot.py (Parte 3/5)
+
 # --- Ver contenido unificado (seguimiento, video, live) ---
 
 
@@ -2273,18 +2275,19 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if state == "video_title":
         context.user_data["video_title"] = update.message.text.strip()
-        context.user_data["state"] = "video_description"
+        # ⚠️ corregido: antes era "video_description"
+        context.user_data["state"] = "video_desc"
         await update.message.reply_text(
             f"📌 Título guardado: {context.user_data['video_title']}\n\nAhora envíame la descripción de tu video:",
             reply_markup=back_to_menu_keyboard()
         )
         return
 
-    if state == "video_description":
-        context.user_data["video_description"] = update.message.text.strip()
+    if state == "video_desc":   # ⚠️ corregido: antes era "video_description"
+        context.user_data["video_desc"] = update.message.text.strip()
         context.user_data["state"] = "video_link"
         await update.message.reply_text(
-            f"📝 Descripción guardada: {context.user_data['video_description']}\n\nAhora envíame el link de tu video de TikTok:",
+            f"📝 Descripción guardada: {context.user_data['video_desc']}\n\nAhora envíame el link de tu video de TikTok:",
             reply_markup=back_to_menu_keyboard()
         )
         return
@@ -2295,7 +2298,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             f"✅ Video registrado:\n\n"
             f"🎬 Título: {context.user_data['video_title']}\n"
-            f"📝 Descripción: {context.user_data['video_description']}\n"
+            # ⚠️ corregido: antes era "video_description"
+            f"📝 Descripción: {context.user_data['video_desc']}\n"
             f"🔗 Link: {context.user_data['video_link']}\n\n"
             f"Tu video ha sido guardado correctamente.",
             reply_markup=back_to_menu_keyboard()
