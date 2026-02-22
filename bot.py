@@ -661,7 +661,7 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
 
         await session.commit()
 
-    # ✅ Publicar en el canal (sin botones)
+    # ✅ Publicar en el canal (sin botones, con vista previa del link)
     try:
         await context.bot.send_message(
             chat_id=CHANNEL_ID,
@@ -670,7 +670,7 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
     except Exception as e:
         print("No se pudo publicar en el canal:", e)
 
-    # ✅ Si es personalizado, notificar a todos los usuarios
+    # ✅ Si es personalizado, notificar a todos los usuarios (con vista previa del link)
     if tipo == "personalizado":
         async with async_session() as session:
             res = await session.execute(select(User.telegram_id).where(User.telegram_id != user_id))
@@ -685,7 +685,7 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
                         chat_id=uid,
                         text=(
                             f"📢 Mensaje personalizado de {u.tiktok_user}:\n\n"
-                            f"🔴 Entrar aquí para apoyar el live 👇"
+                            f"{live_link}\n\n¡Apóyalo para ganar puntos!"
                         ),
                         reply_markup=InlineKeyboardMarkup([
                             [InlineKeyboardButton(
