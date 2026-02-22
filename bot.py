@@ -2235,9 +2235,9 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             live = res.scalars().first()
 
         if live:
-            # Mensaje inicial con botón para entrar al live y regresar al menú
+            # Mensaje inicial con link en el texto (para vista previa) + botones
             await query.edit_message_text(
-                f"⏳ Abre este link y permanece al menos 2.5 minutos en el live:",
+                f"⏳ Abre este link y permanece al menos 2.5 minutos en el live:\n\n{live.link}",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🌐 Entrar al live", url=live.link)],
                     [InlineKeyboardButton(
