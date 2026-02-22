@@ -78,10 +78,13 @@ def yes_no_keyboard(callback_yes: str, callback_no: str):
 
 class User(Base):
     __tablename__ = "users"
+
     id = Column(Integer, primary_key=True)
-    telegram_id = Column(BigInteger, unique=True, index=True)
-    tiktok_user = Column(Text)
-    balance = Column(Float, default=10)   # ✅ CAMBIAR a Float
+    # ✅ único por cada cuenta de Telegram
+    telegram_id = Column(BigInteger, unique=True, index=True, nullable=False)
+    # ✅ cada usuario de TikTok solo puede estar asociado a un Telegram
+    tiktok_user = Column(Text, unique=True, nullable=False)
+    balance = Column(Float, default=10.0)   # ✅ Float con valor inicial
     referrer_id = Column(BigInteger, nullable=True, index=True)
     referral_code = Column(Text, unique=True, index=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
@@ -638,6 +641,14 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
             await update.message.reply_text("⚠️ No estás registrado en el sistema.", reply_markup=back_to_menu_keyboard())
             return
 
+        # 🚨 Validar que el usuario de Telegram tenga un TikTok asociado
+        if not u.tiktok_user:
+            await update.message.reply_text(
+                "⚠️ No tienes un usuario de TikTok asociado. Regístralo primero antes de subir un live.",
+                reply_markup=back_to_menu_keyboard()
+            )
+            return
+
         # Guardar el live con expiración de 1 día
         live = Live(
             telegram_id=user_id,
@@ -661,16 +672,27 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
 
         await session.commit()
 
-    # ✅ Publicar en el canal (sin botones, con vista previa del link)
+    # ✅ Publicar en el canal (con vista previa del link y mensaje motivador)
     try:
         await context.bot.send_message(
             chat_id=CHANNEL_ID,
-            text=f"🔴 Nuevo live publicado por {u.tiktok_user}\n\n{link}\n\n¡Apóyalo para ganar puntos!"
+            text=(
+                f"🔴 Nuevo live publicado por {u.tiktok_user}\n\n"
+                f"{link}\n\n"
+                f"⚡ Para ganar tus puntos debes entrar al link y permanecer al menos 2.5 minutos.\n"
+                f"Después se activarán las confirmaciones de recompensa y son aún mayores dejando el quiereme."
+            ),
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "🚀 ¡Entrar al live ahora!", callback_data=f"abrir_live_{live.id}")],
+                [InlineKeyboardButton(
+                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
+            ])
         )
     except Exception as e:
         print("No se pudo publicar en el canal:", e)
 
-    # ✅ Si es personalizado, notificar a todos los usuarios (con vista previa del link)
+    # ✅ Si es personalizado, notificar a todos los usuarios (con vista previa del link y mensaje motivador)
     if tipo == "personalizado":
         async with async_session() as session:
             res = await session.execute(select(User.telegram_id).where(User.telegram_id != user_id))
@@ -685,11 +707,15 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
                         chat_id=uid,
                         text=(
                             f"📢 Mensaje personalizado de {u.tiktok_user}:\n\n"
-                            f"{live_link}\n\n¡Apóyalo para ganar puntos!"
+                            f"{live_link}\n\n"
+                            f"⚡ Para ganar tus puntos debes entrar al link y permanecer al menos 2.5 minutos.\n"
+                            f"Después se activarán las confirmaciones de recompensa."
                         ),
                         reply_markup=InlineKeyboardMarkup([
                             [InlineKeyboardButton(
-                                "🌐 Entrar aquí", callback_data=f"abrir_live_{live.id}")]
+                                "🚀 ¡Entrar al live ahora!", callback_data=f"abrir_live_{live.id}")],
+                            [InlineKeyboardButton(
+                                "🔙 Regresar al menú principal", callback_data="menu_principal")]
                         ])
                     )
                 except Exception as e:
