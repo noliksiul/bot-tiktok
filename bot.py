@@ -685,11 +685,11 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
                         chat_id=uid,
                         text=(
                             f"📢 Mensaje personalizado de {u.tiktok_user}:\n\n"
-                            f"{live_link}\n\n¡Apóyalo para ganar puntos!"
+                            f"🔴 Entrar aquí para apoyar el live 👇"
                         ),
                         reply_markup=InlineKeyboardMarkup([
                             [InlineKeyboardButton(
-                                "🌐 Abrir live", callback_data=f"abrir_live_{live.id}")]
+                                "🌐 Entrar aquí", callback_data=f"abrir_live_{live.id}")]
                         ])
                     )
                 except Exception as e:
