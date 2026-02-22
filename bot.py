@@ -622,7 +622,6 @@ async def save_seguimiento(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     except Exception as e:
         print("Aviso: no se pudo publicar en el canal:", e)
-# --- Subir live ---
 # --- Guardar live con dos modalidades ---
 
 
@@ -630,7 +629,7 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
     user_id = update.effective_user.id
     link = update.message.text.strip()
 
-    # Normalizar el link para que siempre tenga https:// y Telegram lo reconozca
+    # Normalizar el link
     if not link.startswith("http"):
         link = "https://" + link
 
@@ -641,7 +640,6 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
             await update.message.reply_text("⚠️ No estás registrado en el sistema.", reply_markup=back_to_menu_keyboard())
             return
 
-        # 🚨 Validar que el usuario de Telegram tenga un TikTok asociado
         if not u.tiktok_user:
             await update.message.reply_text(
                 "⚠️ No tienes un usuario de TikTok asociado. Regístralo primero antes de subir un live.",
@@ -649,7 +647,6 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
             )
             return
 
-        # ✅ Validar balance antes de descontar
         costo = 5 if tipo == "normal" else 10
         if (u.balance or 0) < costo:
             await update.message.reply_text(
@@ -658,29 +655,23 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
             )
             return
 
-        # Guardar el live con expiración de 1 día
         live = Live(
             telegram_id=user_id,
             link=link,
             alias=u.tiktok_user,
             puntos=0,
             created_at=datetime.utcnow(),
-            expires_at=datetime.utcnow() + timedelta(days=1)   # ✅ expira en 1 día
+            expires_at=datetime.utcnow() + timedelta(days=1)
         )
         session.add(live)
 
-        # ✅ Cobrar puntos según tipo
         u.balance = (u.balance or 0) - costo
-        mov = Movimiento(
-            telegram_id=user_id,
-            detalle=f"Subir live ({tipo})",
-            puntos=-costo
-        )
+        mov = Movimiento(telegram_id=user_id,
+                         detalle=f"Subir live ({tipo})", puntos=-costo)
         session.add(mov)
 
         await session.commit()
 
-    # ✅ Publicar en el canal (con vista previa del link y mensaje motivador)
     try:
         await context.bot.send_message(
             chat_id=CHANNEL_ID,
@@ -700,17 +691,14 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
     except Exception as e:
         print("No se pudo publicar en el canal:", e)
 
-    # ✅ Si es personalizado, notificar a todos los usuarios (con vista previa del link y mensaje motivador)
     if tipo == "personalizado":
         async with async_session() as session:
             res = await session.execute(select(User.telegram_id).where(User.telegram_id != user_id))
             todos = res.scalars().all()
             for uid in todos:
                 try:
-                    live_link = link.strip()
-                    if not live_link.startswith("http"):
-                        live_link = "https://" + live_link
-
+                    live_link = link if link.startswith(
+                        "http") else "https://" + link
                     await context.bot.send_message(
                         chat_id=uid,
                         text=(
@@ -729,17 +717,18 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
                 except Exception as e:
                     print(f"No se pudo notificar a {uid}: {e}")
 
-    # ✅ Confirmación al dueño del live y reset de estado
     await update.message.reply_text("✅ Live registrado y notificado.", reply_markup=back_to_menu_keyboard())
     context.user_data["state"] = None
 
 
+# --- Guardar descripción del video ---
 async def save_video_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["video_desc"] = update.message.text.strip()
     context.user_data["state"] = "video_link"
     await update.message.reply_text("🔗 Envía el link del video:", reply_markup=back_to_menu_keyboard())
 
 
+# --- Guardar link del video ---
 async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     link = update.message.text.strip()
     user_id = update.effective_user.id
@@ -751,41 +740,32 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         res = await session.execute(select(User).where(User.telegram_id == user_id))
         user = res.scalars().first()
         if not user:
-            await update.message.reply_text(
-                "❌ No estás registrado. Usa /start primero.",
-                reply_markup=back_to_menu_keyboard()
-            )
-            context.user_data["state"] = None
-            return
-        if (user.balance or 0) < 5:
-            await update.message.reply_text(
-                "⚠️ No tienes suficientes puntos para subir video (mínimo 5).",
-                reply_markup=back_to_menu_keyboard()
-            )
+            await update.message.reply_text("❌ No estás registrado. Usa /start primero.", reply_markup=back_to_menu_keyboard())
             context.user_data["state"] = None
             return
 
-        # ✅ Guardar video en DB
-        vid = Video(
-            telegram_id=user_id,
-            tipo=tipo,
-            titulo=titulo,
-            descripcion=descripcion,
-            link=link
-        )
+        if (user.balance or 0) < 5:
+            await update.message.reply_text("⚠️ No tienes suficientes puntos para subir video (mínimo 5).", reply_markup=back_to_menu_keyboard())
+            context.user_data["state"] = None
+            return
+
+        vid = Video(telegram_id=user_id, tipo=tipo, titulo=titulo,
+                    descripcion=descripcion, link=link)
         session.add(vid)
+
         user.balance = (user.balance or 0) - 5
         mov = Movimiento(telegram_id=user_id, detalle="Subir video", puntos=-5)
         session.add(mov)
+
         await session.commit()
 
-    # ✅ Mensaje de confirmación al usuario
     await update.message.reply_text(
         "✅ Tu video se subió con éxito.\n\n"
         "⚠️ No olvides aceptar o rechazar las solicitudes de apoyo. "
         "Si en 2 días no lo haces, regalarás tus puntos automáticamente.",
         reply_markup=back_to_menu_keyboard()
     )
+
     context.user_data["state"] = None
     context.user_data["video_title"] = None
     context.user_data["video_desc"] = None
@@ -793,36 +773,26 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         alias = user.tiktok_user if user and user.tiktok_user else str(user_id)
-
         if tipo == "TikTok Shop":
-            # 📢 Publicar en canal principal
             await context.bot.send_message(
                 chat_id=CHANNEL_ID,
-                text=f"📢 Nuevo video TikTok Shop publicado por {alias}\n"
-                     f"📌 {titulo}\n📝 {descripcion}\n🔗 {link}",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🛍️ Compra ahora", url=link)]
-                ])
+                text=f"📢 Nuevo video TikTok Shop publicado por {alias}\n📌 {titulo}\n📝 {descripcion}\n🔗 {link}",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("🛍️ Compra ahora", url=link)]])
             )
-            # 📢 Publicar también en canal de ofertas
             await context.bot.send_message(
                 chat_id=CHANNEL_SHOP_ID,
-                text=f"📢 Oferta imperdible de TikTok Shop\n"
-                     f"📌 {titulo}\n📝 {descripcion}\n🔗 {link}",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🛍️ Compra ahora", url=link)]
-                ])
+                text=f"📢 Oferta imperdible de TikTok Shop\n📌 {titulo}\n📝 {descripcion}\n🔗 {link}",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("🛍️ Compra ahora", url=link)]])
             )
         else:
-            # 🎬 Publicar en canal normal
             await context.bot.send_message(
                 chat_id=CHANNEL_ID,
-                text=f"📢 Nuevo video ({tipo}) publicado por {alias}\n"
-                     f"📌 {titulo}\n📝 {descripcion}\n🔗 {link}"
+                text=f"📢 Nuevo video ({tipo}) publicado por {alias}\n📌 {titulo}\n📝 {descripcion}\n🔗 {link}"
             )
     except Exception as e:
         print("Aviso: no se pudo publicar en el canal:", e)
-
 # bot.py (Parte 3/5)
 # --- Ver contenido unificado (seguimiento, video, live) ---
 
@@ -2161,7 +2131,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "video_tipo_colaboracion": "Colaboración"
         }
         context.user_data["video_tipo"] = tipos.get(data, "Normal")
-        context.user_data["state"] = "video_title"
+        context.user_data["state"] = "video_title"   # ✅ primer paso correcto
         await query.edit_message_text(
             f"🎬 Tipo seleccionado: {context.user_data['video_tipo']}\n\nAhora envíame el título de tu video:",
             reply_markup=back_to_menu_keyboard()
