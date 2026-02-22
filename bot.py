@@ -719,13 +719,16 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
 
     await update.message.reply_text("✅ Live registrado y notificado.", reply_markup=back_to_menu_keyboard())
     context.user_data["state"] = None
-
-
 # --- Guardar descripción del video ---
+
+
 async def save_video_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["video_desc"] = update.message.text.strip()
     context.user_data["state"] = "video_link"
-    await update.message.reply_text("🔗 Envía el link del video:", reply_markup=back_to_menu_keyboard())
+    await update.message.reply_text(
+        "🔗 Envía el link del video:",
+        reply_markup=back_to_menu_keyboard()
+    )
 
 
 # --- Guardar link del video ---
@@ -740,21 +743,36 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         res = await session.execute(select(User).where(User.telegram_id == user_id))
         user = res.scalars().first()
         if not user:
-            await update.message.reply_text("❌ No estás registrado. Usa /start primero.", reply_markup=back_to_menu_keyboard())
+            await update.message.reply_text(
+                "❌ No estás registrado. Usa /start primero.",
+                reply_markup=back_to_menu_keyboard()
+            )
             context.user_data["state"] = None
             return
 
         if (user.balance or 0) < 5:
-            await update.message.reply_text("⚠️ No tienes suficientes puntos para subir video (mínimo 5).", reply_markup=back_to_menu_keyboard())
+            await update.message.reply_text(
+                "⚠️ No tienes suficientes puntos para subir video (mínimo 5).",
+                reply_markup=back_to_menu_keyboard()
+            )
             context.user_data["state"] = None
             return
 
-        vid = Video(telegram_id=user_id, tipo=tipo, titulo=titulo,
-                    descripcion=descripcion, link=link)
+        vid = Video(
+            telegram_id=user_id,
+            tipo=tipo,
+            titulo=titulo,
+            descripcion=descripcion,
+            link=link
+        )
         session.add(vid)
 
         user.balance = (user.balance or 0) - 5
-        mov = Movimiento(telegram_id=user_id, detalle="Subir video", puntos=-5)
+        mov = Movimiento(
+            telegram_id=user_id,
+            detalle="Subir video",
+            puntos=-5
+        )
         session.add(mov)
 
         await session.commit()
@@ -766,6 +784,7 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=back_to_menu_keyboard()
     )
 
+    # ✅ limpiar estados y datos temporales
     context.user_data["state"] = None
     context.user_data["video_title"] = None
     context.user_data["video_desc"] = None
@@ -778,13 +797,15 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 chat_id=CHANNEL_ID,
                 text=f"📢 Nuevo video TikTok Shop publicado por {alias}\n📌 {titulo}\n📝 {descripcion}\n🔗 {link}",
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("🛍️ Compra ahora", url=link)]])
+                    [[InlineKeyboardButton("🛍️ Compra ahora", url=link)]]
+                )
             )
             await context.bot.send_message(
                 chat_id=CHANNEL_SHOP_ID,
                 text=f"📢 Oferta imperdible de TikTok Shop\n📌 {titulo}\n📝 {descripcion}\n🔗 {link}",
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("🛍️ Compra ahora", url=link)]])
+                    [[InlineKeyboardButton("🛍️ Compra ahora", url=link)]]
+                )
             )
         else:
             await context.bot.send_message(
@@ -2270,43 +2291,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
 
-async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    state = context.user_data.get("state")
-
-    if state == "video_title":
-        context.user_data["video_title"] = update.message.text.strip()
-        # ⚠️ corregido: antes era "video_description"
-        context.user_data["state"] = "video_desc"
-        await update.message.reply_text(
-            f"📌 Título guardado: {context.user_data['video_title']}\n\nAhora envíame la descripción de tu video:",
-            reply_markup=back_to_menu_keyboard()
-        )
-        return
-
-    if state == "video_desc":   # ⚠️ corregido: antes era "video_description"
-        context.user_data["video_desc"] = update.message.text.strip()
-        context.user_data["state"] = "video_link"
-        await update.message.reply_text(
-            f"📝 Descripción guardada: {context.user_data['video_desc']}\n\nAhora envíame el link de tu video de TikTok:",
-            reply_markup=back_to_menu_keyboard()
-        )
-        return
-
-    if state == "video_link":
-        context.user_data["video_link"] = update.message.text.strip()
-        context.user_data["state"] = None
-        await update.message.reply_text(
-            f"✅ Video registrado:\n\n"
-            f"🎬 Título: {context.user_data['video_title']}\n"
-            # ⚠️ corregido: antes era "video_description"
-            f"📝 Descripción: {context.user_data['video_desc']}\n"
-            f"🔗 Link: {context.user_data['video_link']}\n\n"
-            f"Tu video ha sido guardado correctamente.",
-            reply_markup=back_to_menu_keyboard()
-        )
-        return
-
-
 async def reject_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action_id: int):
     # Verificamos que solo el ADMIN_ID pueda rechazar
     if query.from_user.id != ADMIN_ID:
@@ -2374,7 +2358,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif state == "video_title":
         await save_video_title(update, context)
 
-    elif state == "video_desc":
+    elif state == "video_desc":   # ✅ corregido: antes era "video_description"
         await save_video_desc(update, context)
 
     elif state == "video_link":
