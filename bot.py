@@ -2234,8 +2234,21 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["state"] = "cobrar_cupon"
 
     elif data == "menu_principal":
-        await show_main_menu(query, context)
-        return
+        # ✅ Resetear estado
+        context.user_data["ultimo_tipo"] = None
+
+    await query.edit_message_text(
+        text="🏠 Menú principal:",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton(
+                "📂 Ver contenido", callback_data="ver_contenido")],
+            [InlineKeyboardButton(
+                "➕ Subir video", callback_data="subir_video")],
+            [InlineKeyboardButton("🔴 Subir live", callback_data="subir_live")],
+            [InlineKeyboardButton("👥 Subir seguimiento",
+                                  callback_data="subir_seguimiento")]
+        ])
+    )
 
     # ✅ Confirmaciones de apoyo unificadas
     elif data.startswith("confirm_seguimiento_"):
