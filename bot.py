@@ -620,6 +620,7 @@ async def save_seguimiento(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print("Aviso: no se pudo publicar en el canal:", e)
 # --- Subir live ---
+
 # --- Guardar live con dos modalidades ---
 
 
@@ -638,6 +639,15 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
             await update.message.reply_text("⚠️ No estás registrado en el sistema.", reply_markup=back_to_menu_keyboard())
             return
 
+        # ✅ Cobrar puntos según tipo con validación de saldo
+        costo = 5 if tipo == "normal" else 10
+        if (u.balance or 0) < costo:
+            await update.message.reply_text(
+                f"⚠️ Puntos insuficientes. Necesitas al menos {costo} puntos para subir este live.",
+                reply_markup=back_to_menu_keyboard()
+            )
+            return
+
         # Guardar el live con expiración de 1 día
         live = Live(
             telegram_id=user_id,
@@ -649,8 +659,7 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
         )
         session.add(live)
 
-        # ✅ Cobrar puntos según tipo
-        costo = 5 if tipo == "normal" else 10
+        # ✅ Descontar puntos solo si hay saldo suficiente
         u.balance = (u.balance or 0) - costo
         mov = Movimiento(
             telegram_id=user_id,
@@ -661,14 +670,18 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
 
         await session.commit()
 
-    # ✅ Publicar en el canal con botón que dispara flujo de confirmación
+    # ✅ Publicar en el canal con preview + botón llamativo
     try:
         await context.bot.send_message(
             chat_id=CHANNEL_ID,
-            text=f"🔴 Nuevo live publicado por {u.tiktok_user}\n\n{link}\n\n¡Apóyalo para ganar puntos!",
+            text=(
+                f"🔴 Nuevo live publicado por {u.tiktok_user}\n\n"
+                f"⏳ Permanece al menos 2.5 minutos en el live\n\n"
+                f"{link}"   # ⚠️ Esto activa la imagen de previsualización automática
+            ),
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton(
-                    "🌐 Abrir live", callback_data=f"abrir_live_{live.id}")],
+                    "👉🚀 Entrar aquí 🔴✨", callback_data=f"abrir_live_{live.id}")],
                 [InlineKeyboardButton(
                     "🔙 Regresar al menú principal", callback_data="menu_principal")]
             ])
@@ -695,7 +708,7 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
                         ),
                         reply_markup=InlineKeyboardMarkup([
                             [InlineKeyboardButton(
-                                "🌐 Abrir live", callback_data=f"abrir_live_{live.id}")],
+                                "👉🚀 Entrar aquí 🔴✨", callback_data=f"abrir_live_{live.id}")],
                             [InlineKeyboardButton(
                                 "🔙 Regresar al menú principal", callback_data="menu_principal")]
                         ])
@@ -2172,6 +2185,18 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["state"] = "live_link_normal"
 
     elif data == "subir_live_personalizado":
+        # ⚠️ Validar saldo antes de permitir subir live personalizado
+        async with async_session() as session:
+            res = await session.execute(select(User).where(User.telegram_id == query.from_user.id))
+            user = res.scalars().first()
+
+        if not user or (user.balance or 0) < 10:
+            await query.edit_message_text(
+                "⚠️ No tienes suficientes puntos para subir este live personalizado (costo: 10 puntos).",
+                reply_markup=back_to_menu_keyboard()
+            )
+            return
+
         await query.edit_message_text(
             "🔗 Envía el link de tu live de TikTok personalizado (costo: 10 puntos).",
             reply_markup=back_to_menu_keyboard()
@@ -2180,7 +2205,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # --- Unificación de ver contenido ---
     elif data == "ver_contenido":
-        # ⚠️ aquí dentro usa edit_message_text
         await show_contenido(query, context)
         return
 
@@ -2251,11 +2275,20 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             live = res.scalars().first()
 
         if live:
+            # ✅ Mostrar preview del link y botón llamativo
             await query.edit_message_text(
-                f"⏳ Abre este link y permanece al menos 2.5 minutos en el live:\n\n{live.link}",
-                reply_markup=back_to_menu_keyboard()
+                f"🔴 Live publicado por {live.alias or 'usuario'}\n\n"
+                f"⏳ Permanece al menos 2.5 minutos en el live\n\n"
+                # ⚠️ Esto activa la imagen de previsualización automática
+                f"{live.link}",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("👉🚀 Entrar aquí 🔴✨", url=live.link)],
+                    [InlineKeyboardButton(
+                        "🔙 Regresar al menú principal", callback_data="menu_principal")]
+                ])
             )
 
+            # ✅ Después de 2.5 minutos aparecen confirmaciones
             context.job_queue.run_once(
                 lambda _, lid=live_id: context.bot.edit_message_text(
                     chat_id=query.message.chat.id,
