@@ -688,7 +688,6 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
         )
     except Exception as e:
         print("No se pudo publicar en el canal:", e)
-
     # ✅ Si es personalizado, notificar a todos los usuarios
     if tipo == "personalizado":
         async with async_session() as session:
@@ -705,8 +704,8 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
                         text=(
                             f"📢 Mensaje personalizado de {u.tiktok_user}:\n\n"
                             f"⏳ Permanece al menos 2.5 minutos en el live\n\n"
-                            # ⚠️ Esto activa la imagen de previsualización automática
-                            f"{live_link}"
+                            # ⚠️ Link en línea sola para activar la imagen de previsualización
+                            f"{live_link}\n"
                         ),
                         reply_markup=InlineKeyboardMarkup([
                             [InlineKeyboardButton(
