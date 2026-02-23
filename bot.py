@@ -704,7 +704,9 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
                         chat_id=uid,
                         text=(
                             f"📢 Mensaje personalizado de {u.tiktok_user}:\n\n"
-                            f"{live_link}\n\n¡Apóyalo para ganar puntos!"
+                            f"⏳ Permanece al menos 2.5 minutos en el live\n\n"
+                            # ⚠️ Esto activa la imagen de previsualización automática
+                            f"{live_link}"
                         ),
                         reply_markup=InlineKeyboardMarkup([
                             [InlineKeyboardButton(
@@ -719,7 +721,6 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
     # ✅ Confirmación al dueño del live y reset de estado
     await update.message.reply_text("✅ Live registrado y notificado.", reply_markup=back_to_menu_keyboard())
     context.user_data["state"] = None
-
 # --- Subir video: flujo por pasos ---
 
 
@@ -2269,7 +2270,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("reject_action_"):
         action_id = int(data.split("_")[-1])
         await reject_admin_action(query, context, action_id)
-
     # ✅ Nuevo bloque para abrir live y esperar 2.5 minutos
     elif data.startswith("abrir_live_"):
         live_id = int(data.split("_")[-1])
@@ -2279,14 +2279,14 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             live = res.scalars().first()
 
         if live:
-            # ✅ Mostrar preview del link y botón llamativo
+            # ✅ Mostrar preview del link y botones de abrir/regresar
             await query.edit_message_text(
                 f"🔴 Live publicado por {live.alias or 'usuario'}\n\n"
                 f"⏳ Permanece al menos 2.5 minutos en el live\n\n"
                 # ⚠️ Esto activa la imagen de previsualización automática
                 f"{live.link}",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("👉🚀 Entrar aquí 🔴✨", url=live.link)],
+                    [InlineKeyboardButton("🌐 Abrir live", url=live.link)],
                     [InlineKeyboardButton(
                         "🔙 Regresar al menú principal", callback_data="menu_principal")]
                 ])
