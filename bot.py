@@ -2237,18 +2237,19 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # ✅ Resetear estado
         context.user_data["ultimo_tipo"] = None
 
-    await query.edit_message_text(
-        text="🏠 Menú principal:",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(
-                "📂 Ver contenido", callback_data="ver_contenido")],
-            [InlineKeyboardButton(
-                "➕ Subir video", callback_data="subir_video")],
-            [InlineKeyboardButton("🔴 Subir live", callback_data="subir_live")],
-            [InlineKeyboardButton("👥 Subir seguimiento",
-                                  callback_data="subir_seguimiento")]
-        ])
-    )
+        await query.edit_message_text(
+            text="🏠 Menú principal:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "📂 Ver contenido", callback_data="ver_contenido")],
+                [InlineKeyboardButton(
+                    "➕ Subir video", callback_data="subir_video")],
+                [InlineKeyboardButton(
+                    "🔴 Subir live", callback_data="subir_live")],
+                [InlineKeyboardButton(
+                    "👥 Subir seguimiento", callback_data="subir_seguimiento")]
+            ])
+        )
 
     # ✅ Confirmaciones de apoyo unificadas
     elif data.startswith("confirm_seguimiento_"):
@@ -2284,6 +2285,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("reject_action_"):
         action_id = int(data.split("_")[-1])
         await reject_admin_action(query, context, action_id)
+
     # ✅ Nuevo bloque para abrir live y esperar 2.5 minutos
     elif data.startswith("abrir_live_"):
         live_id = int(data.split("_")[-1])
