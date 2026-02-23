@@ -890,7 +890,7 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                     context.user_data["ultimo_tipo"] = "seguimiento"
                     return
 
-                    elif tipo == "video":
+            elif tipo == "video":
                 res_vid = await session.execute(
                     select(Video)
                     .where(Video.telegram_id != user_id)
