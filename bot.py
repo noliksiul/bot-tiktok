@@ -675,34 +675,37 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
         )
     except Exception as e:
         print("No se pudo publicar en el canal:", e)
-# ✅ Si es personalizado, notificar a todos los usuarios
-if tipo == "personalizado":
-    async with async_session() as session:
-        res = await session.execute(select(User.telegram_id).where(User.telegram_id != user_id))
-        todos = res.scalars().all()
-        for uid in todos:
-            try:
-                live_link = link.strip()
-                if not live_link.startswith("http"):
-                    live_link = "https://" + live_link
 
-                await context.bot.send_message(
-                    chat_id=uid,
-                    text=(
-                        f"📢 Mensaje personalizado de {u.tiktok_user}:\n\n"
-                        f"{live_link}\n\n¡Apóyalo para ganar puntos!"
-                    ),
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton(
-                            "🌐 Abrir live", callback_data=f"abrir_live_{live.id}")]
-                    ])
-                )
-            except Exception as e:
-                print(f"No se pudo notificar a {uid}: {e}")
+    # ✅ Si es personalizado, notificar a todos los usuarios
+    if tipo == "personalizado":
+        async with async_session() as session:
+            res = await session.execute(select(User.telegram_id).where(User.telegram_id != user_id))
+            todos = res.scalars().all()
+            for uid in todos:
+                try:
+                    live_link = link.strip()
+                    if not live_link.startswith("http"):
+                        live_link = "https://" + live_link
 
-# ✅ Confirmación al dueño del live y reset de estado
-await update.message.reply_text("✅ Live registrado y notificado.", reply_markup=back_to_menu_keyboard())
-context.user_data["state"] = None
+                    await context.bot.send_message(
+                        chat_id=uid,
+                        text=(
+                            f"📢 Mensaje personalizado de {u.tiktok_user}:\n\n"
+                            f"{live_link}\n\n¡Apóyalo para ganar puntos!"
+                        ),
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton(
+                                "🌐 Abrir live", callback_data=f"abrir_live_{live.id}")],
+                            [InlineKeyboardButton(
+                                "🔙 Regresar al menú principal", callback_data="menu_principal")]
+                        ])
+                    )
+                except Exception as e:
+                    print(f"No se pudo notificar a {uid}: {e}")
+
+    # ✅ Confirmación al dueño del live y reset de estado
+    await update.message.reply_text("✅ Live registrado y notificado.", reply_markup=back_to_menu_keyboard())
+    context.user_data["state"] = None
 # --- Subir video: flujo por pasos ---
 
 
