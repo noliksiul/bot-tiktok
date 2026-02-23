@@ -938,6 +938,8 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                 res_live = await session.execute(
                     select(Live)
                     .where(Live.telegram_id != user_id)
+                    # ✅ solo mostrar lives normales
+                    .where(Live.tipo == "normal")
                     .where(~Live.id.in_(
                         select(Interaccion.item_id).where(
                             Interaccion.actor_id == user_id,
