@@ -719,6 +719,7 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
     # ✅ Confirmación al dueño del live y reset de estado
     await update.message.reply_text("✅ Live registrado y notificado.", reply_markup=back_to_menu_keyboard())
     context.user_data["state"] = None
+
 # --- Subir video: flujo por pasos ---
 
 
@@ -951,14 +952,17 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                 live = res_live.scalars().first()
                 if live:
                     await query.edit_message_text(
-                        text=f"🔴 Live disponible:\n🔗 {live.link}\n🗓️ {live.created_at}",
+                        text=(
+                            f"🔴 Live disponible publicado por {live.alias or 'usuario'}\n\n"
+                            f"⏳ Permanece al menos 2.5 minutos en el live\n\n"
+                            # ⚠️ Esto activa la imagen de previsualización automática
+                            f"{live.link}"
+                        ),
                         reply_markup=InlineKeyboardMarkup([
-                            [
-                                InlineKeyboardButton(
-                                    "🌐 Abrir live", callback_data=f"abrir_live_{live.id}"),
-                                InlineKeyboardButton(
-                                    "➡️ Siguiente", callback_data="ver_contenido")
-                            ],
+                            [InlineKeyboardButton(
+                                "👉🚀 Entrar aquí 🔴✨", callback_data=f"abrir_live_{live.id}")],
+                            [InlineKeyboardButton(
+                                "➡️ Siguiente", callback_data="ver_contenido")],
                             [InlineKeyboardButton(
                                 "🔙 Menú principal", callback_data="menu_principal")]
                         ])
@@ -976,7 +980,7 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                                     "🔙 Menú principal", callback_data="menu_principal")]
                             ])
                         ),
-                        when=20
+                        when=150
                     )
                     context.user_data["ultimo_tipo"] = "live"
                     return
