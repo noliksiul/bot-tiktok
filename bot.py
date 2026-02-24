@@ -352,6 +352,9 @@ async def referral_weekly_summary_loop(application: Application):
 
 
 async def show_main_menu(update_or_query, context, message="🏠 Menú principal:"):
+    # ✅ Reiniciar rotación de contenido al volver al menú
+    context.user_data["ultimo_tipo"] = None
+
     keyboard = [
         [InlineKeyboardButton("📈 Subir seguimiento",
                               callback_data="subir_seguimiento")],
@@ -366,7 +369,6 @@ async def show_main_menu(update_or_query, context, message="🏠 Menú principal
         [InlineKeyboardButton("📊 Estadísticas de referidos",
                               callback_data="resumen_referidos")],
         [InlineKeyboardButton("📋 Comandos", callback_data="comandos")],
-        # ✅ mantenemos solo este
         [InlineKeyboardButton("💳 Cobrar cupón", callback_data="cobrar_cupon")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -374,7 +376,6 @@ async def show_main_menu(update_or_query, context, message="🏠 Menú principal
         await update_or_query.message.reply_text(message, reply_markup=reply_markup)
     else:
         await update_or_query.edit_message_text(message, reply_markup=reply_markup)
-
 # --- Start con saludo personalizado y menú directo ---
 
 
@@ -850,11 +851,11 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                 res_seg = await session.execute(
                     select(Seguimiento)
                     .where(Seguimiento.telegram_id != user_id)
+                    # 🔧 CAMBIO: ahora excluye TODOS los apoyos, no solo los pendientes
                     .where(~Seguimiento.id.in_(
                         select(Interaccion.item_id).where(
                             Interaccion.tipo == "seguimiento",
-                            Interaccion.actor_id == user_id,
-                            Interaccion.status == "pending"
+                            Interaccion.actor_id == user_id
                         )
                     ))
                     .order_by(Seguimiento.created_at.desc())
@@ -894,11 +895,11 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                 res_vid = await session.execute(
                     select(Video)
                     .where(Video.telegram_id != user_id)
+                    # 🔧 CAMBIO: ahora excluye TODOS los apoyos, no solo los pendientes
                     .where(~Video.id.in_(
                         select(Interaccion.item_id).where(
                             Interaccion.tipo == "video_support",
-                            Interaccion.actor_id == user_id,
-                            Interaccion.status == "pending"
+                            Interaccion.actor_id == user_id
                         )
                     ))
                     .order_by(Video.created_at.desc())
@@ -940,10 +941,10 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                     .where(Live.telegram_id != user_id)
                     # ✅ solo mostrar lives normales
                     .where(Live.tipo == "normal")
+                    # 🔧 CAMBIO: ahora excluye TODOS los apoyos, no solo los pendientes
                     .where(~Live.id.in_(
                         select(Interaccion.item_id).where(
                             Interaccion.actor_id == user_id,
-                            Interaccion.status == "pending",
                             Interaccion.tipo.in_(
                                 ["live_view", "live_quiereme"])
                         )
