@@ -352,6 +352,12 @@ async def referral_weekly_summary_loop(application: Application):
 
 
 async def show_main_menu(update_or_query, context, message="🏠 Menú principal:"):
+    # 🔧 CAMBIO: cancelar cualquier job pendiente antes de reiniciar
+    job = context.user_data.get("contenido_job")
+    if job:
+        job.schedule_removal()
+        context.user_data["contenido_job"] = None
+
     # ✅ Reiniciar rotación de contenido al volver al menú
     context.user_data["ultimo_tipo"] = None
 
@@ -875,7 +881,12 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                                 "🔙 Menú principal", callback_data="menu_principal")]
                         ])
                     )
-                    context.job_queue.run_once(
+                    # 🔧 CAMBIO: cancelar job anterior antes de crear uno nuevo
+                    old_job = context.user_data.get("contenido_job")
+                    if old_job:
+                        old_job.schedule_removal()
+
+                    job = context.job_queue.run_once(
                         lambda _, sid=seg.id: context.bot.edit_message_reply_markup(
                             chat_id=chat_id,
                             message_id=query.message.message_id,
@@ -888,6 +899,8 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                         ),
                         when=20
                     )
+                    # 🔧 CAMBIO: guardar job en user_data
+                    context.user_data["contenido_job"] = job
                     context.user_data["ultimo_tipo"] = "seguimiento"
                     return
 
@@ -919,7 +932,12 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                                 "🔙 Menú principal", callback_data="menu_principal")]
                         ])
                     )
-                    context.job_queue.run_once(
+                    # 🔧 CAMBIO: cancelar job anterior antes de crear uno nuevo
+                    old_job = context.user_data.get("contenido_job")
+                    if old_job:
+                        old_job.schedule_removal()
+
+                    job = context.job_queue.run_once(
                         lambda _, vid_id=vid.id: context.bot.edit_message_reply_markup(
                             chat_id=chat_id,
                             message_id=query.message.message_id,
@@ -932,6 +950,8 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                         ),
                         when=20
                     )
+                    # 🔧 CAMBIO: guardar job en user_data
+                    context.user_data["contenido_job"] = job
                     context.user_data["ultimo_tipo"] = "video"
                     return
 
@@ -970,7 +990,12 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                                 "🔙 Menú principal", callback_data="menu_principal")]
                         ])
                     )
-                    context.job_queue.run_once(
+                    # 🔧 CAMBIO: cancelar job anterior antes de crear uno nuevo
+                    old_job = context.user_data.get("contenido_job")
+                    if old_job:
+                        old_job.schedule_removal()
+
+                    job = context.job_queue.run_once(
                         lambda _, lid=live.id: context.bot.edit_message_reply_markup(
                             chat_id=chat_id,
                             message_id=query.message.message_id,
@@ -985,6 +1010,8 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                         ),
                         when=150
                     )
+                    # 🔧 CAMBIO: guardar job en user_data
+                    context.user_data["contenido_job"] = job
                     context.user_data["ultimo_tipo"] = "live"
                     return
 
@@ -1135,6 +1162,13 @@ async def handle_seguimiento_done(query, context: ContextTypes.DEFAULT_TYPE, seg
         res_actor = await session.execute(select(User).where(User.telegram_id == user_id))
         actor = res_actor.scalars().first()
 
+    # 🔧 CAMBIO: cancelar cualquier job pendiente y reiniciar ciclo
+    job = context.user_data.get("contenido_job")
+    if job:
+        job.schedule_removal()
+        context.user_data["contenido_job"] = None
+    context.user_data["ultimo_tipo"] = None
+
     # 👉 Confirmación al usuario (editando el mensaje original)
     await query.edit_message_text(
         "🟡 Tu apoyo fue registrado y está pendiente de aprobación del dueño.",
@@ -1208,6 +1242,13 @@ async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, v
         res_actor = await session.execute(select(User).where(User.telegram_id == user_id))
         actor = res_actor.scalars().first()
 
+    # 🔧 CAMBIO: cancelar cualquier job pendiente y reiniciar ciclo
+    job = context.user_data.get("contenido_job")
+    if job:
+        job.schedule_removal()
+        context.user_data["contenido_job"] = None
+    context.user_data["ultimo_tipo"] = None
+
     # 👉 Confirmación al usuario (editando el mensaje original)
     await query.edit_message_text(
         "🟡 Tu apoyo fue registrado y está pendiente de aprobación del dueño.",
@@ -1232,8 +1273,9 @@ async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, v
         )
     )
 
-
 # --- Registrar interacción de live (solo ver, automático con 0.25 puntos) ---
+
+
 async def handle_live_view(query, context: ContextTypes.DEFAULT_TYPE, live_id: int):
     user_id = query.from_user.id
     async with async_session() as session:
@@ -1285,6 +1327,13 @@ async def handle_live_view(query, context: ContextTypes.DEFAULT_TYPE, live_id: i
                 session.add(mov)
 
             await session.commit()
+
+    # 🔧 CAMBIO: cancelar cualquier job pendiente y reiniciar ciclo
+    job = context.user_data.get("contenido_job")
+    if job:
+        job.schedule_removal()
+        context.user_data["contenido_job"] = None
+    context.user_data["ultimo_tipo"] = None
 
     # 👉 Confirmación al usuario
     await query.edit_message_text(
@@ -1340,6 +1389,13 @@ async def handle_live_quiereme(query, context: ContextTypes.DEFAULT_TYPE, live_i
         # 👉 Obtener TikTok del actor
         res_actor = await session.execute(select(User).where(User.telegram_id == user_id))
         actor = res_actor.scalars().first()
+
+    # 🔧 CAMBIO: cancelar cualquier job pendiente y reiniciar ciclo
+    job = context.user_data.get("contenido_job")
+    if job:
+        job.schedule_removal()
+        context.user_data["contenido_job"] = None
+    context.user_data["ultimo_tipo"] = None
 
     # 👉 Confirmación al usuario
     await query.edit_message_text(
