@@ -867,7 +867,7 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                 )
                 seg = res_seg.scalars().first()
                 if seg:
-                    # Mantener flujo con edit_message_text
+                    # Menú con edit_message_text
                     await query.edit_message_text(
                         text=f"👀 Seguimiento disponible:\n🗓️ {seg.created_at}",
                         reply_markup=InlineKeyboardMarkup([
@@ -881,7 +881,7 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                                 "🔙 Menú principal", callback_data="menu_principal")]
                         ])
                     )
-                    # Enviar mensaje adicional con el link plano para preview
+                    # Mensaje adicional con el link plano → preview
                     await context.bot.send_message(chat_id=chat_id, text=seg.link)
 
                     old_job = context.user_data.get("contenido_job")
@@ -931,7 +931,6 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                                 "🔙 Menú principal", callback_data="menu_principal")]
                         ])
                     )
-                    # Enviar mensaje adicional con el link plano para preview
                     await context.bot.send_message(chat_id=chat_id, text=vid.link)
 
                     old_job = context.user_data.get("contenido_job")
@@ -985,7 +984,6 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                                 "🔙 Menú principal", callback_data="menu_principal")]
                         ])
                     )
-                    # Enviar mensaje adicional con el link plano para preview
                     await context.bot.send_message(chat_id=chat_id, text=live.link)
 
                     old_job = context.user_data.get("contenido_job")
