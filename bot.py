@@ -867,7 +867,6 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                 )
                 seg = res_seg.scalars().first()
                 if seg:
-                    # Menú con edit_message_text
                     await query.edit_message_text(
                         text=f"👀 Seguimiento disponible:\n🗓️ {seg.created_at}",
                         reply_markup=InlineKeyboardMarkup([
@@ -881,8 +880,12 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                                 "🔙 Menú principal", callback_data="menu_principal")]
                         ])
                     )
-                    # Mensaje adicional con el link plano → preview
-                    await context.bot.send_message(chat_id=chat_id, text=seg.link)
+                    # Mensaje adicional con preview forzada
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=seg.link,
+                        disable_web_page_preview=False
+                    )
 
                     old_job = context.user_data.get("contenido_job")
                     if old_job:
@@ -931,7 +934,11 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                                 "🔙 Menú principal", callback_data="menu_principal")]
                         ])
                     )
-                    await context.bot.send_message(chat_id=chat_id, text=vid.link)
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=vid.link,
+                        disable_web_page_preview=False
+                    )
 
                     old_job = context.user_data.get("contenido_job")
                     if old_job:
@@ -984,7 +991,11 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                                 "🔙 Menú principal", callback_data="menu_principal")]
                         ])
                     )
-                    await context.bot.send_message(chat_id=chat_id, text=live.link)
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=live.link,
+                        disable_web_page_preview=False
+                    )
 
                     old_job = context.user_data.get("contenido_job")
                     if old_job:
