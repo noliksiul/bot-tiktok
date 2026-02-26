@@ -857,7 +857,6 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                 res_seg = await session.execute(
                     select(Seguimiento)
                     .where(Seguimiento.telegram_id != user_id)
-                    # 🔧 CAMBIO: ahora excluye TODOS los apoyos, no solo los pendientes
                     .where(~Seguimiento.id.in_(
                         select(Interaccion.item_id).where(
                             Interaccion.tipo == "seguimiento",
@@ -869,7 +868,8 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                 seg = res_seg.scalars().first()
                 if seg:
                     await query.edit_message_text(
-                        text=f"👀 Seguimiento disponible:\n🔗 {seg.link}\n🗓️ {seg.created_at}",
+                        # 🔧 CAMBIO: link plano en el texto para activar preview
+                        text=f"👀 Seguimiento disponible:\n{seg.link}\n🗓️ {seg.created_at}",
                         reply_markup=InlineKeyboardMarkup([
                             [
                                 InlineKeyboardButton(
@@ -881,11 +881,9 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                                 "🔙 Menú principal", callback_data="menu_principal")]
                         ])
                     )
-                    # 🔧 CAMBIO: cancelar job anterior antes de crear uno nuevo
                     old_job = context.user_data.get("contenido_job")
                     if old_job:
                         old_job.schedule_removal()
-
                     job = context.job_queue.run_once(
                         lambda _, sid=seg.id: context.bot.edit_message_reply_markup(
                             chat_id=chat_id,
@@ -899,7 +897,6 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                         ),
                         when=20
                     )
-                    # 🔧 CAMBIO: guardar job en user_data
                     context.user_data["contenido_job"] = job
                     context.user_data["ultimo_tipo"] = "seguimiento"
                     return
@@ -908,7 +905,6 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                 res_vid = await session.execute(
                     select(Video)
                     .where(Video.telegram_id != user_id)
-                    # 🔧 CAMBIO: ahora excluye TODOS los apoyos, no solo los pendientes
                     .where(~Video.id.in_(
                         select(Interaccion.item_id).where(
                             Interaccion.tipo == "video_support",
@@ -920,7 +916,8 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                 vid = res_vid.scalars().first()
                 if vid:
                     await query.edit_message_text(
-                        text=f"📺 Video ({vid.tipo}):\n📌 {vid.titulo}\n📝 {vid.descripcion}\n🔗 {vid.link}\n🗓️ {vid.created_at}",
+                        # 🔧 CAMBIO: link plano en el texto para activar preview
+                        text=f"📺 Video ({vid.tipo}):\n📌 {vid.titulo}\n📝 {vid.descripcion}\n{vid.link}\n🗓️ {vid.created_at}",
                         reply_markup=InlineKeyboardMarkup([
                             [
                                 InlineKeyboardButton(
@@ -932,11 +929,9 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                                 "🔙 Menú principal", callback_data="menu_principal")]
                         ])
                     )
-                    # 🔧 CAMBIO: cancelar job anterior antes de crear uno nuevo
                     old_job = context.user_data.get("contenido_job")
                     if old_job:
                         old_job.schedule_removal()
-
                     job = context.job_queue.run_once(
                         lambda _, vid_id=vid.id: context.bot.edit_message_reply_markup(
                             chat_id=chat_id,
@@ -950,7 +945,6 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                         ),
                         when=20
                     )
-                    # 🔧 CAMBIO: guardar job en user_data
                     context.user_data["contenido_job"] = job
                     context.user_data["ultimo_tipo"] = "video"
                     return
@@ -959,9 +953,7 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                 res_live = await session.execute(
                     select(Live)
                     .where(Live.telegram_id != user_id)
-                    # ✅ solo mostrar lives normales
                     .where(Live.tipo == "normal")
-                    # 🔧 CAMBIO: ahora excluye TODOS los apoyos, no solo los pendientes
                     .where(~Live.id.in_(
                         select(Interaccion.item_id).where(
                             Interaccion.actor_id == user_id,
@@ -975,10 +967,10 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                 live = res_live.scalars().first()
                 if live:
                     await query.edit_message_text(
+                        # 🔧 CAMBIO: link plano en el texto para activar preview
                         text=(
                             f"🔴 Live disponible publicado por {live.alias or 'usuario'}\n\n"
                             f"⏳ Permanece al menos 2.5 minutos en el live\n\n"
-                            # ⚠️ Esto activa la imagen de previsualización automática
                             f"{live.link}"
                         ),
                         reply_markup=InlineKeyboardMarkup([
@@ -990,11 +982,9 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                                 "🔙 Menú principal", callback_data="menu_principal")]
                         ])
                     )
-                    # 🔧 CAMBIO: cancelar job anterior antes de crear uno nuevo
                     old_job = context.user_data.get("contenido_job")
                     if old_job:
                         old_job.schedule_removal()
-
                     job = context.job_queue.run_once(
                         lambda _, lid=live.id: context.bot.edit_message_reply_markup(
                             chat_id=chat_id,
@@ -1010,7 +1000,6 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                         ),
                         when=150
                     )
-                    # 🔧 CAMBIO: guardar job en user_data
                     context.user_data["contenido_job"] = job
                     context.user_data["ultimo_tipo"] = "live"
                     return
