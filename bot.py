@@ -1,13 +1,16 @@
 # bot.py (Parte 1/5)
-
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    LinkPreviewOptions   # 👈 AGREGA ESTA LÍNEA
+)
 import os
 import asyncio
 import secrets
 from datetime import datetime, timedelta
 
 from flask import Flask, request
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, ContextTypes, filters
@@ -20,7 +23,6 @@ from sqlalchemy import (
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
-
 # --- Configuración DB ---
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 if DATABASE_URL.startswith("postgres://"):
@@ -868,7 +870,7 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                 seg = res_seg.scalars().first()
                 if seg:
                     await query.edit_message_text(
-                        text=f"👀 Seguimiento disponible:\n🗓️ {seg.created_at}",
+                        text=f"👀 Seguimiento disponible:\n🗓️ {seg.created_at}\n{seg.link}",
                         reply_markup=InlineKeyboardMarkup([
                             [
                                 InlineKeyboardButton(
@@ -878,15 +880,14 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                             ],
                             [InlineKeyboardButton(
                                 "🔙 Menú principal", callback_data="menu_principal")]
-                        ])
+                        ]),
+                        link_preview_options=LinkPreviewOptions(
+                            is_disabled=False,
+                            url=seg.link,
+                            prefer_large_media=True,
+                            show_above_text=True
+                        )
                     )
-                    # Mensaje adicional con preview forzada
-                    await context.bot.send_message(
-                        chat_id=chat_id,
-                        text=seg.link,
-                        disable_web_page_preview=False
-                    )
-
                     old_job = context.user_data.get("contenido_job")
                     if old_job:
                         old_job.schedule_removal()
@@ -922,7 +923,7 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                 vid = res_vid.scalars().first()
                 if vid:
                     await query.edit_message_text(
-                        text=f"📺 Video ({vid.tipo}):\n📌 {vid.titulo}\n📝 {vid.descripcion}\n🗓️ {vid.created_at}",
+                        text=f"📺 Video ({vid.tipo}):\n📌 {vid.titulo}\n📝 {vid.descripcion}\n🗓️ {vid.created_at}\n{vid.link}",
                         reply_markup=InlineKeyboardMarkup([
                             [
                                 InlineKeyboardButton(
@@ -932,14 +933,14 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                             ],
                             [InlineKeyboardButton(
                                 "🔙 Menú principal", callback_data="menu_principal")]
-                        ])
+                        ]),
+                        link_preview_options=LinkPreviewOptions(
+                            is_disabled=False,
+                            url=vid.link,
+                            prefer_large_media=True,
+                            show_above_text=True
+                        )
                     )
-                    await context.bot.send_message(
-                        chat_id=chat_id,
-                        text=vid.link,
-                        disable_web_page_preview=False
-                    )
-
                     old_job = context.user_data.get("contenido_job")
                     if old_job:
                         old_job.schedule_removal()
@@ -980,7 +981,7 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                     await query.edit_message_text(
                         text=(
                             f"🔴 Live disponible publicado por {live.alias or 'usuario'}\n\n"
-                            f"⏳ Permanece al menos 2.5 minutos en el live"
+                            f"⏳ Permanece al menos 2.5 minutos en el live\n{live.link}"
                         ),
                         reply_markup=InlineKeyboardMarkup([
                             [InlineKeyboardButton(
@@ -989,14 +990,14 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                                 "➡️ Siguiente", callback_data="ver_contenido")],
                             [InlineKeyboardButton(
                                 "🔙 Menú principal", callback_data="menu_principal")]
-                        ])
+                        ]),
+                        link_preview_options=LinkPreviewOptions(
+                            is_disabled=False,
+                            url=live.link,
+                            prefer_large_media=True,
+                            show_above_text=True
+                        )
                     )
-                    await context.bot.send_message(
-                        chat_id=chat_id,
-                        text=live.link,
-                        disable_web_page_preview=False
-                    )
-
                     old_job = context.user_data.get("contenido_job")
                     if old_job:
                         old_job.schedule_removal()
