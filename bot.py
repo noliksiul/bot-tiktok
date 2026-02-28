@@ -952,9 +952,8 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                     context.user_data["contenido_job"] = job
                     context.user_data["ultimo_tipo"] = "video"
                     return
-
-                    elif tipo == "live":
-                res_live = await session.execute(
+            elif tipo == "live":
+                    res_live = await session.execute(
                     select(Live)
                     .where(Live.telegram_id != user_id)
                     .where(Live.tipo == "normal")
@@ -969,19 +968,16 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                     .order_by(Live.created_at.desc())
                 )
                 live = res_live.scalars().first()
-                if live:
+            if live:
                     await query.edit_message_text(
                         text=(
                             f"🔴 Live disponible publicado por {live.alias or 'usuario'}\n\n"
                             f"⏳ Permanece al menos 2.5 minutos en el live\n{live.link}"
                         ),
                         reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton(
-                                "👉🚀 Entrar aquí 🔴✨", callback_data=f"abrir_live_{live.id}")],
-                            [InlineKeyboardButton(
-                                "➡️ Siguiente", callback_data="ver_contenido")],
-                            [InlineKeyboardButton(
-                                "🔙 Menú principal", callback_data="menu_principal")]
+                            [InlineKeyboardButton("👉🚀 Entrar aquí 🔴✨", callback_data=f"abrir_live_{live.id}")],
+                            [InlineKeyboardButton("➡️ Siguiente", callback_data="ver_contenido")],
+                            [InlineKeyboardButton("🔙 Menú principal", callback_data="menu_principal")]
                         ]),
                         link_preview_options=LinkPreviewOptions(
                             is_disabled=False,
@@ -998,12 +994,9 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                             chat_id=chat_id,
                             message_id=query.message.message_id,
                             reply_markup=InlineKeyboardMarkup([
-                                [InlineKeyboardButton(
-                                    "👀 Solo vi el live", callback_data=f"confirm_live_{lid}")],
-                                [InlineKeyboardButton(
-                                    "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{lid}")],
-                                [InlineKeyboardButton(
-                                    "🔙 Menú principal", callback_data="menu_principal")]
+                                [InlineKeyboardButton("👀 Solo vi el live", callback_data=f"confirm_live_{lid}")],
+                                [InlineKeyboardButton("❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{lid}")],
+                                [InlineKeyboardButton("🔙 Menú principal", callback_data="menu_principal")]
                             ])
                         ),
                         when=150
