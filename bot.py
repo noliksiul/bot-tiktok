@@ -1,5 +1,4 @@
 # bot.py (Parte 1/5)
-from telegram.ext import CommandHandler
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -870,25 +869,35 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                 )
                 seg = res_seg.scalars().first()
                 if seg:
-                    await query.edit_message_text(
-                        text=f"👀 Seguimiento disponible:\n🗓️ {seg.created_at}\n{seg.link}",
-                        reply_markup=InlineKeyboardMarkup([
-                            [
-                                InlineKeyboardButton(
-                                    "🌐 Abrir perfil", url=seg.link),
-                                InlineKeyboardButton(
-                                    "➡️ Siguiente", callback_data="ver_contenido")
-                            ],
-                            [InlineKeyboardButton(
-                                "🔙 Menú principal", callback_data="menu_principal")]
-                        ]),
-                        link_preview_options=LinkPreviewOptions(
-                            is_disabled=False,
-                            url=seg.link,
-                            prefer_large_media=True,
-                            show_above_text=True
+                    if "tiktok.com" in seg.link:
+                        thumbnail_url = "https://p16-sign-va.tiktokcdn.com/tos-maliva-p-0037c001/thumbnail.jpg"
+                        await context.bot.send_photo(
+                            chat_id=chat_id,
+                            photo=thumbnail_url,
+                            caption=f"👀 Seguimiento disponible:\n🗓️ {seg.created_at}\n{seg.link}",
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton("🌐 Abrir perfil", url=seg.link),
+                                 InlineKeyboardButton("➡️ Siguiente", callback_data="ver_contenido")],
+                                [InlineKeyboardButton(
+                                    "🔙 Menú principal", callback_data="menu_principal")]
+                            ])
                         )
-                    )
+                    else:
+                        await query.edit_message_text(
+                            text=f"👀 Seguimiento disponible:\n🗓️ {seg.created_at}\n{seg.link}",
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton("🌐 Abrir perfil", url=seg.link),
+                                 InlineKeyboardButton("➡️ Siguiente", callback_data="ver_contenido")],
+                                [InlineKeyboardButton(
+                                    "🔙 Menú principal", callback_data="menu_principal")]
+                            ]),
+                            link_preview_options=LinkPreviewOptions(
+                                is_disabled=False,
+                                url=seg.link,
+                                prefer_large_media=True,
+                                show_above_text=True
+                            )
+                        )
                     old_job = context.user_data.get("contenido_job")
                     if old_job:
                         old_job.schedule_removal()
@@ -923,25 +932,35 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                 )
                 vid = res_vid.scalars().first()
                 if vid:
-                    await query.edit_message_text(
-                        text=f"📺 Video ({vid.tipo}):\n📌 {vid.titulo}\n📝 {vid.descripcion}\n🗓️ {vid.created_at}\n{vid.link}",
-                        reply_markup=InlineKeyboardMarkup([
-                            [
-                                InlineKeyboardButton(
-                                    "🌐 Abrir video", url=vid.link),
-                                InlineKeyboardButton(
-                                    "➡️ Siguiente", callback_data="ver_contenido")
-                            ],
-                            [InlineKeyboardButton(
-                                "🔙 Menú principal", callback_data="menu_principal")]
-                        ]),
-                        link_preview_options=LinkPreviewOptions(
-                            is_disabled=False,
-                            url=vid.link,
-                            prefer_large_media=True,
-                            show_above_text=True
+                    if "tiktok.com" in vid.link:
+                        thumbnail_url = "https://p16-sign-va.tiktokcdn.com/tos-maliva-p-0037c001/thumbnail.jpg"
+                        await context.bot.send_photo(
+                            chat_id=chat_id,
+                            photo=thumbnail_url,
+                            caption=f"📺 Video ({vid.tipo}):\n📌 {vid.titulo}\n📝 {vid.descripcion}\n🗓️ {vid.created_at}\n{vid.link}",
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton("🌐 Abrir video", url=vid.link),
+                                 InlineKeyboardButton("➡️ Siguiente", callback_data="ver_contenido")],
+                                [InlineKeyboardButton(
+                                    "🔙 Menú principal", callback_data="menu_principal")]
+                            ])
                         )
-                    )
+                    else:
+                        await query.edit_message_text(
+                            text=f"📺 Video ({vid.tipo}):\n📌 {vid.titulo}\n📝 {vid.descripcion}\n🗓️ {vid.created_at}\n{vid.link}",
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton("🌐 Abrir video", url=vid.link),
+                                 InlineKeyboardButton("➡️ Siguiente", callback_data="ver_contenido")],
+                                [InlineKeyboardButton(
+                                    "🔙 Menú principal", callback_data="menu_principal")]
+                            ]),
+                            link_preview_options=LinkPreviewOptions(
+                                is_disabled=False,
+                                url=vid.link,
+                                prefer_large_media=True,
+                                show_above_text=True
+                            )
+                        )
                     old_job = context.user_data.get("contenido_job")
                     if old_job:
                         old_job.schedule_removal()
@@ -962,43 +981,60 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                     context.user_data["ultimo_tipo"] = "video"
                     return
 
-            elif tipo == "live":
-                res_live = await session.execute(
-                    select(Live)
-                    .where(Live.telegram_id != user_id)
-                    .where(Live.tipo == "normal")
-                    .where(~Live.id.in_(
-                        select(Interaccion.item_id).where(
-                            Interaccion.actor_id == user_id,
-                            Interaccion.tipo.in_(
-                                ["live_view", "live_quiereme"])
-                        )
-                    ))
-                    .where(Live.created_at >= datetime.utcnow() - timedelta(days=1))
-                    .order_by(Live.created_at.desc())
-                )
+                elif tipo == "live":
+                    res_live = await session.execute(
+                        select(Live)
+                        .where(Live.telegram_id != user_id)
+                        .where(Live.tipo == "normal")
+                        .where(~Live.id.in_(
+                            select(Interaccion.item_id).where(
+                                Interaccion.actor_id == user_id,
+                                Interaccion.tipo.in_(
+                                    ["live_view", "live_quiereme"])
+                            )
+                        ))
+                        .where(Live.created_at >= datetime.utcnow() - timedelta(days=1))
+                        .order_by(Live.created_at.desc())
+                    )
                 live = res_live.scalars().first()
                 if live:
-                    await query.edit_message_text(
-                        text=(
-                            f"🔴 Live disponible publicado por {live.alias or 'usuario'}\n\n"
-                            f"⏳ Permanece al menos 2.5 minutos en el live\n{live.link}"
-                        ),
-                        reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton(
-                                "👉🚀 Entrar aquí 🔴✨", callback_data=f"abrir_live_{live.id}")],
-                            [InlineKeyboardButton(
-                                "➡️ Siguiente", callback_data="ver_contenido")],
-                            [InlineKeyboardButton(
-                                "🔙 Menú principal", callback_data="menu_principal")]
-                        ]),
-                        link_preview_options=LinkPreviewOptions(
-                            is_disabled=False,
-                            url=live.link,
-                            prefer_large_media=True,
-                            show_above_text=True
+                    if "tiktok.com" in live.link:
+                        thumbnail_url = "https://p16-sign-va.tiktokcdn.com/tos-maliva-p-0037c001/thumbnail.jpg"
+                        await context.bot.send_photo(
+                            chat_id=chat_id,
+                            photo=thumbnail_url,
+                            caption=f"🔴 Live disponible publicado por {live.alias or 'usuario'}\n\n⏳ Permanece al menos 2.5 minutos en el live\n{live.link}",
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton(
+                                    "👉🚀 Entrar aquí 🔴✨", callback_data=f"abrir_live_{live.id}")],
+                                [InlineKeyboardButton(
+                                    "➡️ Siguiente", callback_data="ver_contenido")],
+                                [InlineKeyboardButton(
+                                    "🔙 Menú principal", callback_data="menu_principal")]
+                            ])
                         )
-                    )
+                    else:
+                        await query.edit_message_text(
+                            text=(
+                                f"🔴 Live disponible publicado por {live.alias or 'usuario'}\n\n"
+                                f"⏳ Permanece al menos 2.5 minutos en el live\n{live.link}"
+                            ),
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton(
+                                    "👉🚀 Entrar aquí 🔴✨", callback_data=f"abrir_live_{live.id}")],
+                                [InlineKeyboardButton(
+                                    "➡️ Siguiente", callback_data="ver_contenido")],
+                                [InlineKeyboardButton(
+                                    "🔙 Menú principal", callback_data="menu_principal")]
+                            ]),
+                            link_preview_options=LinkPreviewOptions(
+                                is_disabled=False,
+                                url=live.link,
+                                prefer_large_media=True,
+                                show_above_text=True
+                            )
+                        )
+
                     old_job = context.user_data.get("contenido_job")
                     if old_job:
                         old_job.schedule_removal()
@@ -1017,51 +1053,6 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                         ),
                         when=150
                     )
-                    context.user_data["contenido_job"] = job
-                    context.user_data["ultimo_tipo"] = "live"
-                    return
-
-    await query.edit_message_text(
-        text="⚠️ No hay contenido disponible por ahora.",
-        reply_markup=back_to_menu_keyboard()
-    )
-    # -------------------------------------------------------------------------------------------------------------------
-    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-
-# 👉 Función aislada de prueba
-
-
-async def mostrar_tiktok(update, context):
-    chat_id = update.effective_chat.id
-
-    # 🔗 Link del TikTok
-    tiktok_link = "https://www.tiktok.com/@scout2015/video/6718335390845095173"
-
-    # 🖼️ Miniatura simulada (puedes usar una URL fija de prueba)
-    thumbnail_url = "https://p16-sign-va.tiktokcdn.com/tos-maliva-p-0037c001/thumbnail.jpg"
-
-    # 📩 Enviar la miniatura como foto
-    await context.bot.send_photo(
-        chat_id=chat_id,
-        photo=thumbnail_url,
-        caption=f"📺 TikTok disponible:\n{tiktok_link}",
-        reply_markup=InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton("🌐 Abrir TikTok", url=tiktok_link),
-                InlineKeyboardButton(
-                    "➡️ Siguiente", callback_data="ver_contenido")
-            ],
-            [InlineKeyboardButton("🔙 Menú principal",
-                                  callback_data="menu_principal")]
-        ])
-    )
-
-# 👉 Registrar el comando de prueba
-
-
-def registrar_comandos(application):
-    application.add_handler(CommandHandler("tiktoktest", mostrar_tiktok))
-    # ------------------------------------------------------------------------------------------------------------------------
 # --- Aprobar interacción ---
 
 
@@ -2571,8 +2562,6 @@ application.add_handler(CommandHandler("subir_cupon", subir_cupon))
 application.add_handler(CommandHandler("cobrar_cupon", cobrar_cupon))
 application.add_handler(CommandHandler("mi_ref_link", cmd_my_ref_link))
 application.add_handler(CommandHandler("comandos", comandos))
-application.add_handler(CommandHandler("tiktoktest", mostrar_tiktok))
-
 
 application.add_handler(MessageHandler(
     filters.TEXT & ~filters.COMMAND, text_handler))
