@@ -1,4 +1,5 @@
 # bot.py (Parte 1/5)
+from telegram.ext import CommandHandler
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -1024,6 +1025,43 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         text="⚠️ No hay contenido disponible por ahora.",
         reply_markup=back_to_menu_keyboard()
     )
+    # -------------------------------------------------------------------------------------------------------------------
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+# 👉 Función aislada de prueba
+
+
+async def mostrar_tiktok(update, context):
+    chat_id = update.effective_chat.id
+
+    # 🔗 Link del TikTok
+    tiktok_link = "https://www.tiktok.com/@scout2015/video/6718335390845095173"
+
+    # 🖼️ Miniatura simulada (puedes usar una URL fija de prueba)
+    thumbnail_url = "https://p16-sign-va.tiktokcdn.com/tos-maliva-p-0037c001/thumbnail.jpg"
+
+    # 📩 Enviar la miniatura como foto
+    await context.bot.send_photo(
+        chat_id=chat_id,
+        photo=thumbnail_url,
+        caption=f"📺 TikTok disponible:\n{tiktok_link}",
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("🌐 Abrir TikTok", url=tiktok_link),
+                InlineKeyboardButton(
+                    "➡️ Siguiente", callback_data="ver_contenido")
+            ],
+            [InlineKeyboardButton("🔙 Menú principal",
+                                  callback_data="menu_principal")]
+        ])
+    )
+
+# 👉 Registrar el comando de prueba
+
+
+def registrar_comandos(application):
+    application.add_handler(CommandHandler("tiktoktest", mostrar_tiktok))
+    # ------------------------------------------------------------------------------------------------------------------------
 # --- Aprobar interacción ---
 
 
@@ -2533,6 +2571,8 @@ application.add_handler(CommandHandler("subir_cupon", subir_cupon))
 application.add_handler(CommandHandler("cobrar_cupon", cobrar_cupon))
 application.add_handler(CommandHandler("mi_ref_link", cmd_my_ref_link))
 application.add_handler(CommandHandler("comandos", comandos))
+application.add_handler(CommandHandler("tiktoktest", mostrar_tiktok))
+
 
 application.add_handler(MessageHandler(
     filters.TEXT & ~filters.COMMAND, text_handler))
