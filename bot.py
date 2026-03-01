@@ -832,11 +832,10 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
-    # Identificar si viene de un mensaje nuevo o un callback query
     if isinstance(update_or_query, Update):
         chat_id = update_or_query.effective_chat.id
         user_id = update_or_query.effective_user.id
-        query = update_or_query.callback_query if update_or_query.callback_query else None
+        query = None
     else:
         query = update_or_query
         chat_id = query.message.chat.id
@@ -845,20 +844,17 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     ultimo_tipo = context.user_data.get("ultimo_tipo", None)
 
     async with async_session() as session:
-        ordenes = {
-            "seguimiento": ["video", "live", "seguimiento"],
-            "video": ["live", "seguimiento", "video"],
-            "live": ["seguimiento", "video", "live"]
-        }
-        orden = ordenes.get(ultimo_tipo, ["seguimiento", "video", "live"])
+        # --- Orden de rotación: seguimiento → video → live ---
+        if ultimo_tipo == "seguimiento":
+            orden = ["video", "live", "seguimiento"]
+        elif ultimo_tipo == "video":
+            orden = ["live", "seguimiento", "video"]
+        elif ultimo_tipo == "live":
+            orden = ["seguimiento", "video", "live"]
+        else:
+            orden = ["seguimiento", "video", "live"]
 
         for tipo in orden:
-            item = None
-            texto = ""
-            markup = None
-            link_for_preview = ""
-
-            # --- SECCIÓN: SEGUIMIENTO ---
             if tipo == "seguimiento":
                 res_seg = await session.execute(
                     select(Seguimiento)
@@ -871,18 +867,37 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                     ))
                     .order_by(Seguimiento.created_at.desc())
                 )
-                item = res_seg.scalars().first()
-                if item:
-                    link_for_preview = item.link
-                    texto = f"🔗 {item.link}\n\n👀 <b>Seguimiento disponible</b>\n🗓️ {item.created_at.strftime('%d/%m/%Y')}"
-                    markup = InlineKeyboardMarkup([
-                        [InlineKeyboardButton("🌐 Abrir perfil", url=item.link),
-                         InlineKeyboardButton("➡️ Siguiente", callback_data="ver_contenido")],
-                        [InlineKeyboardButton(
-                            "🔙 Menú principal", callback_data="menu_principal")]
-                    ])
+                seg = res_seg.scalars().first()
+                if seg:
+                    await query.edit_message_text(
+                        text=f"👀 Seguimiento disponible:\n🗓️ {seg.created_at}\n{seg.link}",
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton("🌐 Abrir perfil", url=seg.link),
+                             InlineKeyboardButton("➡️ Siguiente", callback_data="ver_contenido")],
+                            [InlineKeyboardButton(
+                                "🔙 Menú principal", callback_data="menu_principal")]
+                        ])
+                    )
+                    old_job = context.user_data.get("contenido_job")
+                    if old_job:
+                        old_job.schedule_removal()
+                    job = context.job_queue.run_once(
+                        lambda _, sid=seg.id: context.bot.edit_message_reply_markup(
+                            chat_id=chat_id,
+                            message_id=query.message.message_id,
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton(
+                                    "🟡 Ya lo seguí ✅", callback_data=f"confirm_seguimiento_{sid}")],
+                                [InlineKeyboardButton(
+                                    "🔙 Menú principal", callback_data="menu_principal")]
+                            ])
+                        ),
+                        when=20
+                    )
+                    context.user_data["contenido_job"] = job
+                    context.user_data["ultimo_tipo"] = "seguimiento"
+                    return
 
-            # --- SECCIÓN: VIDEO ---
             elif tipo == "video":
                 res_vid = await session.execute(
                     select(Video)
@@ -895,23 +910,41 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                     ))
                     .order_by(Video.created_at.desc())
                 )
-                item = res_vid.scalars().first()
-                if item:
-                    link_for_preview = item.link
-                    texto = f"🔗 {item.link}\n\n📺 <b>Video ({item.tipo})</b>\n📌 {item.titulo}\n📝 {item.descripcion}"
-                    markup = InlineKeyboardMarkup([
-                        [InlineKeyboardButton("🌐 Abrir video", url=item.link),
-                         InlineKeyboardButton("➡️ Siguiente", callback_data="ver_contenido")],
-                        [InlineKeyboardButton(
-                            "🔙 Menú principal", callback_data="menu_principal")]
-                    ])
+                vid = res_vid.scalars().first()
+                if vid:
+                    await query.edit_message_text(
+                        text=f"📺 Video ({vid.tipo}):\n📌 {vid.titulo}\n📝 {vid.descripcion}\n🗓️ {vid.created_at}\n{vid.link}",
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton("🌐 Abrir video", url=vid.link),
+                             InlineKeyboardButton("➡️ Siguiente", callback_data="ver_contenido")],
+                            [InlineKeyboardButton(
+                                "🔙 Menú principal", callback_data="menu_principal")]
+                        ])
+                    )
+                    old_job = context.user_data.get("contenido_job")
+                    if old_job:
+                        old_job.schedule_removal()
+                    job = context.job_queue.run_once(
+                        lambda _, vid_id=vid.id: context.bot.edit_message_reply_markup(
+                            chat_id=chat_id,
+                            message_id=query.message.message_id,
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton(
+                                    "⭐ Ya di like y compartí", callback_data=f"confirm_video_{vid_id}")],
+                                [InlineKeyboardButton(
+                                    "🔙 Menú principal", callback_data="menu_principal")]
+                            ])
+                        ),
+                        when=20
+                    )
+                    context.user_data["contenido_job"] = job
+                    context.user_data["ultimo_tipo"] = "video"
+                    return
 
-            # --- SECCIÓN: LIVE ---
             elif tipo == "live":
                 res_live = await session.execute(
                     select(Live)
                     .where(Live.telegram_id != user_id)
-                    .where(Live.tipo == "normal")
                     .where(~Live.id.in_(
                         select(Interaccion.item_id).where(
                             Interaccion.actor_id == user_id,
@@ -922,106 +955,49 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                     .where(Live.created_at >= datetime.utcnow() - timedelta(days=1))
                     .order_by(Live.created_at.desc())
                 )
-                item = res_live.scalars().first()
-                if item:
-                    link_for_preview = item.link
-                    texto = f"🔗 {item.link}\n\n🔴 <b>Live de {item.alias or 'un usuario'}</b>\n⏳ Quédate al menos 2.5 minutos."
-                    markup = InlineKeyboardMarkup([
-                        [InlineKeyboardButton(
-                            "👉🚀 Entrar aquí 🔴✨", callback_data=f"abrir_live_{item.id}")],
-                        [InlineKeyboardButton(
-                            "➡️ Siguiente", callback_data="ver_contenido")],
-                        [InlineKeyboardButton(
-                            "🔙 Menú principal", callback_data="menu_principal")]
-                    ])
-
-            # SI SE ENCONTRÓ CONTENIDO, ENVIARLO
-            if item:
-                # Borramos el mensaje anterior para que el nuevo genere la miniatura correctamente
-                if query:
-                    try:
-                        await query.delete_message()
-                    except:
-                        pass
-
-                nuevo_msg = await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=texto,
-                    parse_mode="HTML",
-                    reply_markup=markup,
-                    link_preview_options=LinkPreviewOptions(
-                        is_disabled=False,
-                        url=link_for_preview,
-                        prefer_large_media=True,
-                        show_above_text=True
+                live = res_live.scalars().first()
+                if live:
+                    await query.edit_message_text(
+                        text=(
+                            f"🔴 Live disponible publicado por {live.alias or 'usuario'}\n\n"
+                            f"⏳ Permanece al menos 2.5 minutos en el live\n\n{live.link}"
+                        ),
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton(
+                                "👉🚀 Entrar aquí 🔴✨", callback_data=f"abrir_live_{live.id}")],
+                            [InlineKeyboardButton(
+                                "➡️ Siguiente", callback_data="ver_contenido")],
+                            [InlineKeyboardButton(
+                                "🔙 Menú principal", callback_data="menu_principal")]
+                        ])
                     )
-                )
+                    old_job = context.user_data.get("contenido_job")
+                    if old_job:
+                        old_job.schedule_removal()
+                    job = context.job_queue.run_once(
+                        lambda _, lid=live.id: context.bot.edit_message_reply_markup(
+                            chat_id=chat_id,
+                            message_id=query.message.message_id,
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton(
+                                    "👀 Solo vi el live", callback_data=f"confirm_live_{lid}")],
+                                [InlineKeyboardButton(
+                                    "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{lid}")],
+                                [InlineKeyboardButton(
+                                    "🔙 Menú principal", callback_data="menu_principal")]
+                            ])
+                        ),
+                        when=150
+                    )
+                    context.user_data["contenido_job"] = job
+                    context.user_data["ultimo_tipo"] = "live"
+                    return
 
-                # Programar los jobs con el ID del nuevo mensaje
-                if tipo == "seguimiento":
-                    _manage_jobs(context, chat_id, nuevo_msg.message_id,
-                                 f"confirm_seguimiento_{item.id}", 20)
-                elif tipo == "video":
-                    _manage_jobs(context, chat_id, nuevo_msg.message_id,
-                                 f"confirm_video_{item.id}", 20, "⭐ Ya di like y compartí")
-                elif tipo == "live":
-                    _manage_live_jobs(context, chat_id,
-                                      nuevo_msg.message_id, item.id)
+    await query.edit_message_text(
+        text="⚠️ No hay contenido disponible por ahora.",
+        reply_markup=back_to_menu_keyboard()
+    )
 
-                context.user_data["ultimo_tipo"] = tipo
-                return
-
-    # Si no hay nada
-    msg_final = "⚠️ No hay contenido nuevo para ti en este momento."
-    if query:
-        await query.edit_message_text(text=msg_final, reply_markup=back_to_menu_keyboard())
-    else:
-        await context.bot.send_message(chat_id=chat_id, text=msg_final, reply_markup=back_to_menu_keyboard())
-# --- Funciones auxiliares para no repetir código de Jobs ---
-
-
-def _manage_jobs(context, chat_id, message_id, callback_data, seconds, button_text="🟡 Confirmar acción ✅"):
-    old_job = context.user_data.get("contenido_job")
-    if old_job:
-        old_job.schedule_removal()
-
-    async def callback(ctx):
-        await ctx.bot.edit_message_reply_markup(
-            chat_id=chat_id,
-            message_id=message_id,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(
-                    button_text, callback_data=callback_data)],
-                [InlineKeyboardButton("🔙 Menú principal",
-                                      callback_data="menu_principal")]
-            ])
-        )
-
-    context.user_data["contenido_job"] = context.job_queue.run_once(
-        callback, when=seconds)
-
-
-def _manage_live_jobs(context, chat_id, message_id, live_id):
-    old_job = context.user_data.get("contenido_job")
-    if old_job:
-        old_job.schedule_removal()
-
-    async def callback(ctx):
-        await ctx.bot.edit_message_reply_markup(
-            chat_id=chat_id,
-            message_id=message_id,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(
-                    "👀 Solo vi el live", callback_data=f"confirm_live_{live_id}")],
-                [InlineKeyboardButton(
-                    "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{live_id}")],
-                [InlineKeyboardButton("🔙 Menú principal",
-                                      callback_data="menu_principal")]
-            ])
-        )
-
-    context.user_data["contenido_job"] = context.job_queue.run_once(
-        callback, when=150)
 # --- Aprobar interacción ---
 
 
