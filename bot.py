@@ -845,7 +845,6 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     ultimo_tipo = context.user_data.get("ultimo_tipo", None)
 
     async with async_session() as session:
-        # --- Orden de rotación optimizado ---
         ordenes = {
             "seguimiento": ["video", "live", "seguimiento"],
             "video": ["live", "seguimiento", "video"],
@@ -854,6 +853,11 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         orden = ordenes.get(ultimo_tipo, ["seguimiento", "video", "live"])
 
         for tipo in orden:
+            item = None
+            texto = ""
+            markup = None
+            link_for_preview = ""
+
             # --- SECCIÓN: SEGUIMIENTO ---
             if tipo == "seguimiento":
                 res_seg = await session.execute(
@@ -867,30 +871,16 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                     ))
                     .order_by(Seguimiento.created_at.desc())
                 )
-                seg = res_seg.scalars().first()
-                if seg:
-                    # Ponemos el link al principio para forzar la preview de Telegram
-                    texto = f"🔗 {seg.link}\n\n👀 *Seguimiento disponible*\n🗓️ {seg.created_at.strftime('%d/%m/%Y')}"
-                    await query.edit_message_text(
-                        text=texto,
-                        parse_mode="Markdown",
-                        reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("🌐 Abrir perfil", url=seg.link),
-                             InlineKeyboardButton("➡️ Siguiente", callback_data="ver_contenido")],
-                            [InlineKeyboardButton(
-                                "🔙 Menú principal", callback_data="menu_principal")]
-                        ]),
-                        link_preview_options=LinkPreviewOptions(
-                            is_disabled=False,
-                            url=seg.link,
-                            prefer_large_media=True,
-                            show_above_text=False  # False suele ser más estable en ediciones
-                        )
-                    )
-                    _manage_jobs(context, chat_id, query.message.message_id,
-                                 f"confirm_seguimiento_{seg.id}", 20)
-                    context.user_data["ultimo_tipo"] = "seguimiento"
-                    return
+                item = res_seg.scalars().first()
+                if item:
+                    link_for_preview = item.link
+                    texto = f"🔗 {item.link}\n\n👀 <b>Seguimiento disponible</b>\n🗓️ {item.created_at.strftime('%d/%m/%Y')}"
+                    markup = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🌐 Abrir perfil", url=item.link),
+                         InlineKeyboardButton("➡️ Siguiente", callback_data="ver_contenido")],
+                        [InlineKeyboardButton(
+                            "🔙 Menú principal", callback_data="menu_principal")]
+                    ])
 
             # --- SECCIÓN: VIDEO ---
             elif tipo == "video":
@@ -905,29 +895,16 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                     ))
                     .order_by(Video.created_at.desc())
                 )
-                vid = res_vid.scalars().first()
-                if vid:
-                    texto = f"🔗 {vid.link}\n\n📺 *Video ({vid.tipo})*\n📌 {vid.titulo}\n📝 {vid.descripcion}"
-                    await query.edit_message_text(
-                        text=texto,
-                        parse_mode="Markdown",
-                        reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("🌐 Abrir video", url=vid.link),
-                             InlineKeyboardButton("➡️ Siguiente", callback_data="ver_contenido")],
-                            [InlineKeyboardButton(
-                                "🔙 Menú principal", callback_data="menu_principal")]
-                        ]),
-                        link_preview_options=LinkPreviewOptions(
-                            is_disabled=False,
-                            url=vid.link,
-                            prefer_large_media=True,
-                            show_above_text=False
-                        )
-                    )
-                    _manage_jobs(context, chat_id, query.message.message_id,
-                                 f"confirm_video_{vid.id}", 20, "⭐ Ya di like y compartí")
-                    context.user_data["ultimo_tipo"] = "video"
-                    return
+                item = res_vid.scalars().first()
+                if item:
+                    link_for_preview = item.link
+                    texto = f"🔗 {item.link}\n\n📺 <b>Video ({item.tipo})</b>\n📌 {item.titulo}\n📝 {item.descripcion}"
+                    markup = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🌐 Abrir video", url=item.link),
+                         InlineKeyboardButton("➡️ Siguiente", callback_data="ver_contenido")],
+                        [InlineKeyboardButton(
+                            "🔙 Menú principal", callback_data="menu_principal")]
+                    ])
 
             # --- SECCIÓN: LIVE ---
             elif tipo == "live":
@@ -945,35 +922,61 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                     .where(Live.created_at >= datetime.utcnow() - timedelta(days=1))
                     .order_by(Live.created_at.desc())
                 )
-                live = res_live.scalars().first()
-                if live:
-                    texto = f"🔗 {live.link}\n\n🔴 *Live de {live.alias or 'un usuario'}*\n⏳ Quédate al menos 2.5 minutos."
-                    await query.edit_message_text(
-                        text=texto,
-                        parse_mode="Markdown",
-                        reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton(
-                                "👉🚀 Entrar aquí 🔴✨", callback_data=f"abrir_live_{live.id}")],
-                            [InlineKeyboardButton(
-                                "➡️ Siguiente", callback_data="ver_contenido")],
-                            [InlineKeyboardButton(
-                                "🔙 Menú principal", callback_data="menu_principal")]
-                        ]),
-                        link_preview_options=LinkPreviewOptions(
-                            is_disabled=False, url=live.link, prefer_large_media=True)
+                item = res_live.scalars().first()
+                if item:
+                    link_for_preview = item.link
+                    texto = f"🔗 {item.link}\n\n🔴 <b>Live de {item.alias or 'un usuario'}</b>\n⏳ Quédate al menos 2.5 minutos."
+                    markup = InlineKeyboardMarkup([
+                        [InlineKeyboardButton(
+                            "👉🚀 Entrar aquí 🔴✨", callback_data=f"abrir_live_{item.id}")],
+                        [InlineKeyboardButton(
+                            "➡️ Siguiente", callback_data="ver_contenido")],
+                        [InlineKeyboardButton(
+                            "🔙 Menú principal", callback_data="menu_principal")]
+                    ])
+
+            # SI SE ENCONTRÓ CONTENIDO, ENVIARLO
+            if item:
+                # Borramos el mensaje anterior para que el nuevo genere la miniatura correctamente
+                if query:
+                    try:
+                        await query.delete_message()
+                    except:
+                        pass
+
+                nuevo_msg = await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=texto,
+                    parse_mode="HTML",
+                    reply_markup=markup,
+                    link_preview_options=LinkPreviewOptions(
+                        is_disabled=False,
+                        url=link_for_preview,
+                        prefer_large_media=True,
+                        show_above_text=True
                     )
-                    # Para el live usamos un job de 150 segundos (2.5 min)
+                )
+
+                # Programar los jobs con el ID del nuevo mensaje
+                if tipo == "seguimiento":
+                    _manage_jobs(context, chat_id, nuevo_msg.message_id,
+                                 f"confirm_seguimiento_{item.id}", 20)
+                elif tipo == "video":
+                    _manage_jobs(context, chat_id, nuevo_msg.message_id,
+                                 f"confirm_video_{item.id}", 20, "⭐ Ya di like y compartí")
+                elif tipo == "live":
                     _manage_live_jobs(context, chat_id,
-                                      query.message.message_id, live.id)
-                    context.user_data["ultimo_tipo"] = "live"
-                    return
+                                      nuevo_msg.message_id, item.id)
 
-    # Si sale del bucle sin encontrar nada
-    await query.edit_message_text(
-        text="⚠️ No hay contenido nuevo para ti en este momento. ¡Vuelve más tarde!",
-        reply_markup=back_to_menu_keyboard()
-    )
+                context.user_data["ultimo_tipo"] = tipo
+                return
 
+    # Si no hay nada
+    msg_final = "⚠️ No hay contenido nuevo para ti en este momento."
+    if query:
+        await query.edit_message_text(text=msg_final, reply_markup=back_to_menu_keyboard())
+    else:
+        await context.bot.send_message(chat_id=chat_id, text=msg_final, reply_markup=back_to_menu_keyboard())
 # --- Funciones auxiliares para no repetir código de Jobs ---
 
 
