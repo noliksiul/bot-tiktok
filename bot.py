@@ -1,13 +1,16 @@
 # bot.py (Parte 1/5)
-
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    LinkPreviewOptions   # 👈 AGREGA ESTA LÍNEA
+)
 import os
 import asyncio
 import secrets
 from datetime import datetime, timedelta
 
 from flask import Flask, request
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, ContextTypes, filters
@@ -17,11 +20,9 @@ from sqlalchemy import (
     UniqueConstraint, select, text, Float   # 👈 AGREGA Float
 )
 
-
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
-
 # --- Configuración DB ---
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 if DATABASE_URL.startswith("postgres://"):
@@ -45,11 +46,14 @@ PUNTOS_LIVE_SOLO_VER = 0.5
 PUNTOS_LIVE_QUIEREME_EXTRA = 1.5
 LIVE_VIEW_MINUTES = 5
 
-
 # --- Canal y grupo ---
-CHANNEL_ID = -1003468913370
+CHANNEL_ID = -1003468913370   # 👈 Canal principal de videos
 GROUP_URL = "https://t.me/+9sy0_CwwjnxlOTJh"
 CHANNEL_URL = "https://t.me/apoyotiktok002"
+
+# --- Canal de ofertas TikTok Shop ---
+CHANNEL_SHOP_ID = -1003664738296   # 👈 Canal secundario para ofertas TikTok Shop
+CHANNEL_SHOP_URL = "https://t.me/ofertasimperdiblestiktokshop"
 
 # --- Configuración administrador ---
 ADMIN_ID = 890166032
@@ -159,6 +163,20 @@ class Live(Base):
     alias = Column(Text, nullable=True)   # 👈 nuevo campo
     puntos = Column(Integer, default=0)   # 👈 nuevo campo
     created_at = Column(TIMESTAMP, server_default=func.now())
+    expires_at = Column(TIMESTAMP)   # ✅ nuevo campo para caducidad de 1 día
+    # --- Tabla de cupones ---
+
+
+class Coupon(Base):
+    __tablename__ = "coupons"
+    id = Column(Integer, primary_key=True)
+    code = Column(Text, unique=True)
+    total_points = Column(Integer)
+    winners_limit = Column(Integer)
+    created_by = Column(BigInteger)
+    active = Column(Integer, default=1)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
 
 # --- Inicialización DB ---
 
@@ -194,24 +212,22 @@ async def migrate_db():
         await conn.execute(text("ALTER TABLE admin_actions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP;"))
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_admin_actions_status_expires ON admin_actions(status, expires_at);"))
 
-        # interacciones: convertir puntos a FLOAT
-        await conn.execute(text("ALTER TABLE interacciones ALTER COLUMN puntos TYPE FLOAT USING puntos::float;"))
-
-# movimientos: índice por usuario
+        # movimientos: índice por usuario
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_movimientos_telegram_id ON movimientos(telegram_id);"))
-
-# movimientos: convertir puntos a FLOAT
+        # movimientos: convertir puntos a FLOAT
         await conn.execute(text("ALTER TABLE movimientos ALTER COLUMN puntos TYPE FLOAT USING puntos::float;"))
 
         # Seguimiento/Video: índices por dueño
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_seguimientos_telegram_id ON seguimientos(telegram_id);"))
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_videos_telegram_id ON videos(telegram_id);"))
+
         # Lives: índice por dueño
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_lives_telegram_id ON lives(telegram_id);"))
         # Lives: columnas nuevas
         await conn.execute(text("ALTER TABLE lives ADD COLUMN IF NOT EXISTS alias TEXT;"))
         await conn.execute(text("ALTER TABLE lives ADD COLUMN IF NOT EXISTS puntos INTEGER DEFAULT 0;"))
-
+        # ✅ nuevo campo
+        await conn.execute(text("ALTER TABLE lives ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP;"))
 
 # --- Helpers de referidos ---
 
@@ -236,6 +252,7 @@ async def notify_user(context: ContextTypes.DEFAULT_TYPE, chat_id: int, text: st
 # --- Tarea periódica: auto-acreditación ---
 AUTO_APPROVE_INTERVAL_SECONDS = 60
 AUTO_APPROVE_AFTER_DAYS = 2
+# --- Tarea periódica: auto-acreditación ---
 
 
 async def auto_approve_loop(application: Application):
@@ -264,6 +281,16 @@ async def auto_approve_loop(application: Application):
                             detalle=f"Auto-aprobado {inter.tipo}",
                             puntos=inter.puntos
                         ))
+                        # ✅ notificar al actor
+                        try:
+                            await application.bot.send_message(
+                                chat_id=inter.actor_id,
+                                text=f"✅ Tu apoyo en {inter.tipo} fue auto-aprobado. Ganaste {inter.puntos} puntos.",
+                                reply_markup=back_to_menu_keyboard()
+                            )
+                        except Exception as e:
+                            print("Aviso: no se pudo notificar al actor:", e)
+
                         # bonus referrer
                         if actor.referrer_id:
                             res_ref = await session.execute(select(User).where(User.telegram_id == actor.referrer_id))
@@ -279,7 +306,8 @@ async def auto_approve_loop(application: Application):
                                 try:
                                     await application.bot.send_message(
                                         chat_id=referrer.telegram_id,
-                                        text=f"💸 Bonus automático: {PUNTOS_REFERIDO_BONUS} puntos por interacción auto-aprobada de tu referido {actor.telegram_id}."
+                                        text=f"💸 Bonus automático: {PUNTOS_REFERIDO_BONUS} puntos por interacción auto-aprobada de tu referido {actor.telegram_id}.",
+                                        reply_markup=back_to_menu_keyboard()
                                     )
                                 except Exception as e:
                                     print(
@@ -288,6 +316,8 @@ async def auto_approve_loop(application: Application):
         except Exception as e:
             print("Error en auto_approve_loop:", e)
         await asyncio.sleep(AUTO_APPROVE_INTERVAL_SECONDS)
+
+# --- Resumen semanal de referidos ---
 
 # --- Resumen semanal de referidos ---
 
@@ -310,40 +340,50 @@ async def referral_weekly_summary_loop(application: Application):
                         try:
                             await application.bot.send_message(
                                 chat_id=chat_id,
-                                text=f"📊 Resumen semanal: ganaste {total} puntos por referidos en los últimos 7 días."
+                                text=f"📊 Resumen semanal: ganaste {total:.2f} puntos por referidos en los últimos 7 días.",
+                                reply_markup=back_to_menu_keyboard()   # ✅ botón regresar al menú principal
                             )
                         except Exception as e:
                             print("Aviso: no se pudo enviar resumen semanal:", e)
         except Exception as e:
             print("Error en referral_weekly_summary_loop:", e)
-        await asyncio.sleep(3600 * 24 * 7)  # cada semana
+        await asyncio.sleep(3600 * 24 * 7)  # ✅ cada semana
 # bot.py (Parte 2/5)
 
 # --- Menú principal ---
 
 
 async def show_main_menu(update_or_query, context, message="🏠 Menú principal:"):
+    # 🔧 CAMBIO: cancelar cualquier job pendiente antes de reiniciar
+    job = context.user_data.get("contenido_job")
+    if job:
+        job.schedule_removal()
+        context.user_data["contenido_job"] = None
+
+    # ✅ Reiniciar rotación de contenido al volver al menú
+    context.user_data["ultimo_tipo"] = None
+
     keyboard = [
         [InlineKeyboardButton("📈 Subir seguimiento",
                               callback_data="subir_seguimiento")],
         [InlineKeyboardButton("🎥 Subir video", callback_data="subir_video")],
-        [InlineKeyboardButton("👀 Ver seguimiento",
-                              callback_data="ver_seguimiento")],
-        [InlineKeyboardButton("📺 Ver video", callback_data="ver_video")],
         [InlineKeyboardButton("📡 Subir live", callback_data="subir_live")],
-        [InlineKeyboardButton("🔴 Ver live en vivo", callback_data="ver_live")],
+        [InlineKeyboardButton(
+            "👀 Ver contenido", callback_data="ver_contenido")],
         [InlineKeyboardButton("💰 Balance e historial",
                               callback_data="balance")],
         [InlineKeyboardButton("🔗 Mi link de referido",
                               callback_data="mi_ref_link")],
-        [InlineKeyboardButton("📋 Comandos", callback_data="comandos")]
+        [InlineKeyboardButton("📊 Estadísticas de referidos",
+                              callback_data="resumen_referidos")],
+        [InlineKeyboardButton("📋 Comandos", callback_data="comandos")],
+        [InlineKeyboardButton("💳 Cobrar cupón", callback_data="cobrar_cupon")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     if isinstance(update_or_query, Update) and getattr(update_or_query, "message", None):
         await update_or_query.message.reply_text(message, reply_markup=reply_markup)
     else:
         await update_or_query.edit_message_text(message, reply_markup=reply_markup)
-
 # --- Start con saludo personalizado y menú directo ---
 
 
@@ -383,7 +423,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await notify_user(
                     context,
                     chat_id=user.referrer_id,
-                    text=f"🎉 Nuevo referido: {update.effective_user.id} (@{update.effective_user.username or 'sin_username'}) se registró con tu link."
+                    text=f"🎉 Nuevo referido: {update.effective_user.id} (@{update.effective_user.username or 'sin_username'}) se registró con tu link.",
+                    reply_markup=back_to_menu_keyboard()
                 )
 
     # Bienvenida sin saldo y sin botón extra
@@ -399,10 +440,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Botones de canal/grupo
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("📢 Ir al canal", url=CHANNEL_URL)],
-        [InlineKeyboardButton("👥 Ir al grupo", url=GROUP_URL)]
+        [InlineKeyboardButton("👥 Ir al grupo", url=GROUP_URL)],
+        [InlineKeyboardButton(
+            "🛍️ Ir a ofertas TikTokShop", url=CHANNEL_SHOP_URL)]
+
     ])
     await update.message.reply_text(
-        "📢 Recuerda seguir nuestro canal y grupo para no perderte amistades, promociones y códigos para el bot.",
+        "📢 Recuerda seguir nuestros canale y grupo para no perderte amistades, promociones y códigos para el bot.",
         reply_markup=keyboard
     )
 
@@ -445,6 +489,42 @@ async def show_my_ref_link(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                     user.referral_code = u.referral_code
         deeplink = build_referral_deeplink(bot_username, user.referral_code)
         texto = f"🔗 Tu link de referido:\n{deeplink}\n\nCada interacción aceptada de tus referidos te da {PUNTOS_REFERIDO_BONUS} puntos."
+
+    reply_markup = back_to_menu_keyboard()
+    if is_update:
+        await update_or_query.message.reply_text(texto, reply_markup=reply_markup)
+    else:
+        await update_or_query.edit_message_text(texto, reply_markup=reply_markup)
+        # --- Mostrar resumen de referidos (interactivo desde menú) ---
+
+
+async def referral_weekly_summary(update_or_query, context: ContextTypes.DEFAULT_TYPE):
+    if isinstance(update_or_query, Update):
+        user_id = update_or_query.effective_user.id
+        is_update = True
+    else:
+        user_id = update_or_query.from_user.id
+        is_update = False
+
+    async with async_session() as session:
+        since = datetime.utcnow() - timedelta(days=7)
+        res = await session.execute(
+            select(Movimiento.telegram_id, func.sum(Movimiento.puntos))
+            .where(Movimiento.detalle.like("%Bonus por referido%"))
+            .where(Movimiento.created_at >= since)
+            .group_by(Movimiento.telegram_id)
+        )
+        rows = res.all()
+
+    texto = "📊 Resumen semanal de referidos:\n"
+    encontrado = False
+    for chat_id, total in rows:
+        if chat_id == user_id and total and total > 0:
+            texto += f"- Ganaste {total:.2f} puntos por referidos en los últimos 7 días.\n"
+            encontrado = True
+
+    if not encontrado:
+        texto = "⚠️ No ganaste puntos por referidos en los últimos 7 días."
 
     reply_markup = back_to_menu_keyboard()
     if is_update:
@@ -548,13 +628,19 @@ async def save_seguimiento(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     except Exception as e:
         print("Aviso: no se pudo publicar en el canal:", e)
-
 # --- Subir live ---
 
+# --- Guardar live con dos modalidades ---
 
-async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tipo="normal"):
     user_id = update.effective_user.id
     link = update.message.text.strip()
+
+    # Normalizar el link para que siempre tenga https:// y Telegram lo reconozca
+    if not link.startswith("http"):
+        link = "https://" + link
+
     async with async_session() as session:
         res = await session.execute(select(User).where(User.telegram_id == user_id))
         u = res.scalars().first()
@@ -562,46 +648,87 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("⚠️ No estás registrado en el sistema.", reply_markup=back_to_menu_keyboard())
             return
 
-        # Guardar el live
+        # ✅ Cobrar puntos según tipo con validación de saldo
+        costo = 5 if tipo == "normal" else 10
+        if (u.balance or 0) < costo:
+            await update.message.reply_text(
+                f"⚠️ Puntos insuficientes. Necesitas al menos {costo} puntos para subir este live.",
+                reply_markup=back_to_menu_keyboard()
+            )
+            return
+
+        # Guardar el live con expiración de 1 día
         live = Live(
             telegram_id=user_id,
             link=link,
             alias=u.tiktok_user,
-            puntos=0
+            puntos=0,
+            created_at=datetime.utcnow(),
+            expires_at=datetime.utcnow() + timedelta(days=1)   # ✅ expira en 1 día
         )
         session.add(live)
+
+        # ✅ Descontar puntos solo si hay saldo suficiente
+        u.balance = (u.balance or 0) - costo
+        mov = Movimiento(
+            telegram_id=user_id,
+            detalle=f"Subir live ({tipo})",
+            puntos=-costo
+        )
+        session.add(mov)
+
         await session.commit()
 
-    # ✅ Publicar en el canal
+    # ✅ Publicar en el canal con preview + botón llamativo
     try:
         await context.bot.send_message(
             chat_id=CHANNEL_ID,
-            text=f"🔴 Nuevo live publicado por {u.tiktok_user}\n\n{link}\n\n¡Apóyalo para ganar puntos!"
+            text=(
+                f"🔴 Nuevo live publicado por {u.tiktok_user}\n\n"
+                f"⏳ Permanece al menos 2.5 minutos en el live\n\n"
+                f"{link}"   # ⚠️ Esto activa la imagen de previsualización automática
+            ),
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "👉🚀 Entrar aquí 🔴✨", callback_data=f"abrir_live_{live.id}")],
+                [InlineKeyboardButton(
+                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
+            ])
         )
     except Exception as e:
         print("No se pudo publicar en el canal:", e)
+    # ✅ Si es personalizado, notificar a todos los usuarios
+    if tipo == "personalizado":
+        async with async_session() as session:
+            res = await session.execute(select(User.telegram_id).where(User.telegram_id != user_id))
+            todos = res.scalars().all()
+            for uid in todos:
+                try:
+                    live_link = link.strip()
+                    if not live_link.startswith("http"):
+                        live_link = "https://" + live_link
 
-    # ✅ Notificar a todos los usuarios (excepto el que subió)
-    async with async_session() as session:
-        res = await session.execute(select(User.telegram_id).where(User.telegram_id != user_id))
-        todos = res.scalars().all()
-        for uid in todos:
-            try:
-                await context.bot.send_message(
-                    chat_id=uid,
-                    text=(
-                        f"📢 Hey! El usuario {u.tiktok_user} está en LIVE 🔴\n\n"
-                        f"👉 Solo por entrar puedes ganar puntos.\n"
-                        f"💖 Si le das 'Quiéreme' podrás ganar puntos extra (pendiente de validación)."
+                    await context.bot.send_message(
+                        chat_id=uid,
+                        text=(
+                            f"📢 Mensaje personalizado de {u.tiktok_user}:\n\n"
+                            f"⏳ Permanece al menos 2.5 minutos en el live\n\n"
+                            # ⚠️ Link en línea sola para activar la imagen de previsualización
+                            f"{live_link}\n"
+                        ),
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton(
+                                "👉🚀 Entrar aquí 🔴✨", callback_data=f"abrir_live_{live.id}")],
+                            [InlineKeyboardButton(
+                                "🔙 Regresar al menú principal", callback_data="menu_principal")]
+                        ])
                     )
-                )
-            except Exception as e:
-                print(f"No se pudo notificar a {uid}: {e}")
+                except Exception as e:
+                    print(f"No se pudo notificar a {uid}: {e}")
 
-    await update.message.reply_text("✅ Live registrado y notificado a la comunidad.", reply_markup=back_to_menu_keyboard())
+    # ✅ Confirmación al dueño del live y reset de estado
+    await update.message.reply_text("✅ Live registrado y notificado.", reply_markup=back_to_menu_keyboard())
     context.user_data["state"] = None
-
-
 # --- Subir video: flujo por pasos ---
 
 
@@ -619,6 +746,9 @@ async def save_video_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     link = update.message.text.strip()
+    if not link.startswith("http"):
+        link = "https://" + link
+
     user_id = update.effective_user.id
     tipo = context.user_data.get("video_tipo", "Normal")
     titulo = context.user_data.get("video_title", "")
@@ -628,14 +758,21 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         res = await session.execute(select(User).where(User.telegram_id == user_id))
         user = res.scalars().first()
         if not user:
-            await update.message.reply_text("❌ No estás registrado. Usa /start primero.", reply_markup=back_to_menu_keyboard())
+            await update.message.reply_text(
+                "❌ No estás registrado. Usa /start primero.",
+                reply_markup=back_to_menu_keyboard()
+            )
             context.user_data["state"] = None
             return
         if (user.balance or 0) < 5:
-            await update.message.reply_text("⚠️ No tienes suficientes puntos para subir video (mínimo 5).", reply_markup=back_to_menu_keyboard())
+            await update.message.reply_text(
+                "⚠️ No tienes suficientes puntos para subir video (mínimo 5).",
+                reply_markup=back_to_menu_keyboard()
+            )
             context.user_data["state"] = None
             return
 
+        # ✅ Guardar video en DB
         vid = Video(
             telegram_id=user_id,
             tipo=tipo,
@@ -649,6 +786,7 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         session.add(mov)
         await session.commit()
 
+    # ✅ Mensaje de confirmación al usuario
     await update.message.reply_text(
         "✅ Tu video se subió con éxito.\n\n"
         "⚠️ No olvides aceptar o rechazar las solicitudes de apoyo. "
@@ -662,225 +800,229 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         alias = user.tiktok_user if user and user.tiktok_user else str(user_id)
-        await context.bot.send_message(
-            chat_id=CHANNEL_ID,
-            text=f"📢 Nuevo video ({tipo}) publicado por {alias}\n📌 {titulo}\n📝 {descripcion}\n🔗 {link}"
-        )
+
+        if tipo == "TikTok Shop":
+            # 📢 Publicar en canal principal
+            await context.bot.send_message(
+                chat_id=CHANNEL_ID,
+                text=f"📢 Nuevo video TikTok Shop publicado por {alias}\n"
+                     # link en línea independiente
+                     f"📌 {titulo}\n📝 {descripcion}\n\n{link}",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🛍️ Compra ahora", url=link)]
+                ])
+            )
+            # 📢 Publicar también en canal de ofertas
+            await context.bot.send_message(
+                chat_id=CHANNEL_SHOP_ID,
+                text=f"📢 Oferta imperdible de TikTok Shop\n"
+                     # link en línea independiente
+                     f"📌 {titulo}\n📝 {descripcion}\n\n{link}",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🛍️ Compra ahora", url=link)]
+                ])
+            )
+        else:
+            # 🎬 Publicar en canal normal
+            await context.bot.send_message(
+                chat_id=CHANNEL_ID,
+                text=f"📢 Nuevo video ({tipo}) publicado por {alias}\n"
+                     # link en línea independiente
+                     f"📌 {titulo}\n📝 {descripcion}\n\n{link}",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🌐 Ver video", url=link)]
+                ])
+            )
     except Exception as e:
         print("Aviso: no se pudo publicar en el canal:", e)
-
-# bot.py (Parte 3/5)
-
-# --- Ver seguimientos (no propios, solo una vez) ---
+        # bot.py (Parte 3/5)
+# --- Ver contenido unificado (seguimiento, video, live) ---
 
 
-async def show_seguimientos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
+async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(update_or_query, Update):
         chat_id = update_or_query.effective_chat.id
         user_id = update_or_query.effective_user.id
+        query = None
     else:
         query = update_or_query
         chat_id = query.message.chat.id
         user_id = query.from_user.id
 
+    ultimo_tipo = context.user_data.get("ultimo_tipo", None)
+
     async with async_session() as session:
-        res = await session.execute(
-            select(Seguimiento)
-            .where(Seguimiento.telegram_id != user_id)
-            .where(~Seguimiento.id.in_(
-                select(Interaccion.item_id).where(
-                    Interaccion.tipo == "seguimiento",
-                    Interaccion.actor_id == user_id
+        # --- Orden de rotación: seguimiento → video → live ---
+        if ultimo_tipo == "seguimiento":
+            orden = ["video", "live", "seguimiento"]
+        elif ultimo_tipo == "video":
+            orden = ["live", "seguimiento", "video"]
+        elif ultimo_tipo == "live":
+            orden = ["seguimiento", "video", "live"]
+        else:
+            orden = ["seguimiento", "video", "live"]
+
+        for tipo in orden:
+            if tipo == "seguimiento":
+                res_seg = await session.execute(
+                    select(Seguimiento)
+                    .where(Seguimiento.telegram_id != user_id)
+                    .where(~Seguimiento.id.in_(
+                        select(Interaccion.item_id).where(
+                            Interaccion.tipo == "seguimiento",
+                            Interaccion.actor_id == user_id
+                        )
+                    ))
+                    .order_by(Seguimiento.created_at.desc())
                 )
-            ))
-            .order_by(Seguimiento.created_at.desc())
-        )
-        rows = res.scalars().all()
+                seg = res_seg.scalars().first()
+                if seg:
+                    await query.edit_message_text(
+                        text=f"👀 Seguimiento disponible:\n🗓️ {seg.created_at}\n{seg.link}",
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton("🌐 Abrir perfil", url=seg.link),
+                             InlineKeyboardButton("➡️ Siguiente", callback_data="ver_contenido")],
+                            [InlineKeyboardButton(
+                                "🔙 Menú principal", callback_data="menu_principal")]
+                        ]),
+                        link_preview_options=LinkPreviewOptions(
+                            is_disabled=False,
+                            url=seg.link,
+                            prefer_large_media=True,
+                            show_above_text=True
+                        )
+                    )
+                    old_job = context.user_data.get("contenido_job")
+                    if old_job:
+                        old_job.schedule_removal()
+                    job = context.job_queue.run_once(
+                        lambda _, sid=seg.id: context.bot.edit_message_reply_markup(
+                            chat_id=chat_id,
+                            message_id=query.message.message_id,
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton(
+                                    "🟡 Ya lo seguí ✅", callback_data=f"confirm_seguimiento_{sid}")],
+                                [InlineKeyboardButton(
+                                    "🔙 Menú principal", callback_data="menu_principal")]
+                            ])
+                        ),
+                        when=20
+                    )
+                    context.user_data["contenido_job"] = job
+                    context.user_data["ultimo_tipo"] = "seguimiento"
+                    return
 
-    if not rows:
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text="⚠️ No hay seguimientos disponibles por ahora.",
-            reply_markup=back_to_menu_keyboard()
-        )
-        return
-
-    seg = rows[0]
-    keyboard = [
-        [InlineKeyboardButton(
-            "🟡 Ya lo seguí ✅", callback_data=f"seguimiento_done_{seg.id}")],
-        [InlineKeyboardButton("🔙 Regresar al menú principal",
-                              callback_data="menu_principal")]
-    ]
-    texto = (
-        "👀 Seguimiento disponible:\n"
-        f"🔗 {seg.link}\n"
-        f"🗓️ {seg.created_at}\n\n"
-        "Pulsa el botón si ya seguiste."
-    )
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text=texto,
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-# --- Ver videos (no propios, solo una vez) ---
-
-
-async def show_videos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
-    if isinstance(update_or_query, Update):
-        chat_id = update_or_query.effective_chat.id
-        user_id = update_or_query.effective_user.id
-    else:
-        query = update_or_query
-        chat_id = query.message.chat.id
-        user_id = query.from_user.id
-
-    async with async_session() as session:
-        res = await session.execute(
-            select(Video)
-            .where(Video.telegram_id != user_id)
-            .where(~Video.id.in_(
-                select(Interaccion.item_id).where(
-                    Interaccion.tipo == "video_support",
-                    Interaccion.actor_id == user_id
+            elif tipo == "video":
+                res_vid = await session.execute(
+                    select(Video)
+                    .where(Video.telegram_id != user_id)
+                    .where(~Video.id.in_(
+                        select(Interaccion.item_id).where(
+                            Interaccion.tipo == "video_support",
+                            Interaccion.actor_id == user_id
+                        )
+                    ))
+                    .order_by(Video.created_at.desc())
                 )
-            ))
-            .order_by(Video.created_at.desc())
-        )
-        rows = res.scalars().all()
+                vid = res_vid.scalars().first()
+                if vid:
+                    await query.edit_message_text(
+                        text=f"📺 Video ({vid.tipo}):\n📌 {vid.titulo}\n📝 {vid.descripcion}\n🗓️ {vid.created_at}\n{vid.link}",
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton("🌐 Abrir video", url=vid.link),
+                             InlineKeyboardButton("➡️ Siguiente", callback_data="ver_contenido")],
+                            [InlineKeyboardButton(
+                                "🔙 Menú principal", callback_data="menu_principal")]
+                        ]),
+                        link_preview_options=LinkPreviewOptions(
+                            is_disabled=False,
+                            url=vid.link,
+                            prefer_large_media=True,
+                            show_above_text=True
+                        )
+                    )
+                    old_job = context.user_data.get("contenido_job")
+                    if old_job:
+                        old_job.schedule_removal()
+                    job = context.job_queue.run_once(
+                        lambda _, vid_id=vid.id: context.bot.edit_message_reply_markup(
+                            chat_id=chat_id,
+                            message_id=query.message.message_id,
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton(
+                                    "⭐ Ya di like y compartí", callback_data=f"confirm_video_{vid_id}")],
+                                [InlineKeyboardButton(
+                                    "🔙 Menú principal", callback_data="menu_principal")]
+                            ])
+                        ),
+                        when=20
+                    )
+                    context.user_data["contenido_job"] = job
+                    context.user_data["ultimo_tipo"] = "video"
+                    return
 
-    if not rows:
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text="⚠️ No hay videos disponibles por ahora.",
-            reply_markup=back_to_menu_keyboard()
-        )
-        return
+                elif tipo == "live":
+                    res_live = await session.execute(
+                        select(Live)
+                        .where(Live.telegram_id != user_id)
+                        .where(Live.tipo == "normal")
+                        .where(~Live.id.in_(
+                            select(Interaccion.item_id).where(
+                                Interaccion.actor_id == user_id,
+                                Interaccion.tipo.in_(
+                                    ["live_view", "live_quiereme"])
+                            )
+                        ))
+                        .where(Live.created_at >= datetime.utcnow() - timedelta(days=1))
+                        .order_by(Live.created_at.desc())
+                    )
+                live = res_live.scalars().first()
+                if live:
+                    await query.edit_message_text(
+                        text=(
+                            f"🔴 Live disponible publicado por {live.alias or 'usuario'}\n\n"
+                            f"⏳ Permanece al menos 2.5 minutos en el live\n{live.link}"
+                        ),
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton(
+                                "👉🚀 Entrar aquí 🔴✨", callback_data=f"abrir_live_{live.id}")],
+                            [InlineKeyboardButton(
+                                "➡️ Siguiente", callback_data="ver_contenido")],
+                            [InlineKeyboardButton(
+                                "🔙 Menú principal", callback_data="menu_principal")]
+                        ]),
+                        link_preview_options=LinkPreviewOptions(
+                            is_disabled=False,
+                            url=live.link,
+                            prefer_large_media=True,
+                            show_above_text=True
+                        )
+                    )
+                    old_job = context.user_data.get("contenido_job")
+                    if old_job:
+                        old_job.schedule_removal()
+                    job = context.job_queue.run_once(
+                        lambda _, lid=live.id: context.bot.edit_message_reply_markup(
+                            chat_id=chat_id,
+                            message_id=query.message.message_id,
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton(
+                                    "👀 Solo vi el live", callback_data=f"confirm_live_{lid}")],
+                                [InlineKeyboardButton(
+                                    "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{lid}")],
+                                [InlineKeyboardButton(
+                                    "🔙 Menú principal", callback_data="menu_principal")]
+                            ])
+                        ),
+                        when=150
+                    )
+                    context.user_data["contenido_job"] = job
+                    context.user_data["ultimo_tipo"] = "live"
+                    return
 
-    vid = rows[0]
-    keyboard = [
-        [InlineKeyboardButton("🟡 Ya apoyé (like/compartir) ⭐",
-                              callback_data=f"video_support_done_{vid.id}")],
-        [InlineKeyboardButton("🔙 Regresar al menú principal",
-                              callback_data="menu_principal")]
-    ]
-    texto = (
-        f"📺 Video ({vid.tipo}):\n"
-        f"📌 {vid.titulo}\n"
-        f"📝 {vid.descripcion}\n"
-        f"🔗 {vid.link}\n"
-        f"🗓️ {vid.created_at}\n\n"
-        "⚠️ Si apoyas y luego dejas de seguir, serás candidato a baneo permanente.\n"
-        "El apoyo es mutuo y el algoritmo del bot detecta y banea a quienes dejan de seguir.\n\n"
-        "❓ Dudas o ayuda: pídelas en el grupo de Telegram.\n\n"
-        "Pulsa el botón si ya apoyaste."
-    )
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text=texto,
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-# --- Ver lives (no propios, solo una vez) ---
-
-
-async def show_lives(update_or_query, context: ContextTypes.DEFAULT_TYPE):
-    if isinstance(update_or_query, Update):
-        chat_id = update_or_query.effective_chat.id
-        user_id = update_or_query.effective_user.id
-    else:
-        query = update_or_query
-        chat_id = query.message.chat.id
-        user_id = query.from_user.id
-
-    async with async_session() as session:
-        res = await session.execute(
-            select(Live)
-            .where(Live.telegram_id != user_id)
-            .order_by(Live.created_at.desc())
-        )
-        rows = res.scalars().all()
-
-    if not rows:
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text="⚠️ No hay lives disponibles por ahora.",
-            reply_markup=back_to_menu_keyboard()
-        )
-        return
-
-    live = rows[0]
-    keyboard = [
-        [InlineKeyboardButton("👀 Solo vi el live",
-                              callback_data=f"live_view_{live.id}")],
-        [InlineKeyboardButton("❤️ Vi el live y di Quiéreme",
-                              callback_data=f"live_quiereme_{live.id}")],
-        [InlineKeyboardButton("🔙 Regresar al menú principal",
-                              callback_data="menu_principal")]
-    ]
-    texto = (
-        f"🔴 Live disponible:\n"
-        f"🔗 {live.link}\n"
-        f"🗓️ {live.created_at}\n\n"
-        f"Recuerda durar {LIVE_VIEW_MINUTES} minutos en el live.\n"
-        "Puedes escoger solo una opción:\n"
-        f"• 👀 Solo vi el live → {PUNTOS_LIVE_SOLO_VER} puntos automáticos\n"
-        f"• ❤️ Vi el live y di 'Quiéreme' → {PUNTOS_LIVE_SOLO_VER} + {PUNTOS_LIVE_QUIEREME_EXTRA} puntos (requiere autorización del dueño)"
-    )
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text=texto,
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-# --- Registrar interacción de seguimiento (notifica con TikTok del actor) ---
-
-
-async def handle_seguimiento_done(query, context: ContextTypes.DEFAULT_TYPE, seg_id: int):
-    user_id = query.from_user.id
-    async with async_session() as session:
-        res_seg = await session.execute(select(Seguimiento).where(Seguimiento.id == seg_id))
-        seg = res_seg.scalars().first()
-        if not seg:
-            await query.edit_message_text("❌ Seguimiento no encontrado.", reply_markup=back_to_menu_keyboard())
-            return
-        if seg.telegram_id == user_id:
-            await query.answer("No puedes apoyar tu propio seguimiento.", show_alert=True)
-            return
-
-        expires = datetime.utcnow() + timedelta(days=AUTO_APPROVE_AFTER_DAYS)
-        inter = Interaccion(
-            tipo="seguimiento",
-            item_id=seg.id,
-            actor_id=user_id,
-            owner_id=seg.telegram_id,
-            status="pending",
-            puntos=PUNTOS_APOYO_SEGUIMIENTO,
-            expires_at=expires
-        )
-        session.add(inter)
-        await session.commit()
-
-        # obtener TikTok del actor
-        res_actor = await session.execute(select(User).where(User.telegram_id == user_id))
-        actor = res_actor.scalars().first()
-
-    await query.edit_message_text("🟡 Tu apoyo fue registrado y está pendiente de aprobación del dueño.", reply_markup=back_to_menu_keyboard())
-    await notify_user(
-        context,
-        chat_id=seg.telegram_id,
-        text=(
-            f"📩 Nuevo apoyo a tu seguimiento:\n"
-            f"Item ID: {seg.id}\n"
-            f"Actor: {user_id}\n"
-            f"Usuario TikTok: {actor.tiktok_user or 'no registrado'}\n"
-            f"Puntos: {PUNTOS_APOYO_SEGUIMIENTO}\n\n"
-            "¿Apruebas?"
-        ),
-        reply_markup=yes_no_keyboard(
-            callback_yes=f"approve_interaction_{inter.id}",
-            callback_no=f"reject_interaction_{inter.id}"
-        )
+    await query.edit_message_text(
+        text="⚠️ No hay contenido disponible por ahora.",
+        reply_markup=back_to_menu_keyboard()
     )
 # --- Aprobar interacción ---
 
@@ -902,14 +1044,20 @@ async def approve_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_i
             await show_main_menu(query, context)
             return
 
+        # 👉 Aprobar interacción
         inter.status = "accepted"
         res_actor = await session.execute(select(User).where(User.telegram_id == inter.actor_id))
         actor = res_actor.scalars().first()
         if actor:
             actor.balance = (actor.balance or 0) + (inter.puntos or 0)
-            mov = Movimiento(telegram_id=inter.actor_id,
-                             detalle=f"Apoyo {inter.tipo} aprobado", puntos=inter.puntos)
+            mov = Movimiento(
+                telegram_id=inter.actor_id,
+                detalle=f"Apoyo {inter.tipo} aprobado",
+                puntos=inter.puntos
+            )
             session.add(mov)
+
+            # 👉 Bonus por referido
             if actor.referrer_id:
                 res_ref = await session.execute(select(User).where(User.telegram_id == actor.referrer_id))
                 referrer = res_ref.scalars().first()
@@ -925,17 +1073,21 @@ async def approve_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_i
                         context,
                         chat_id=referrer.telegram_id,
                         text=f"💸 Recibiste {PUNTOS_REFERIDO_BONUS} puntos por la interacción aceptada de tu referido {actor.telegram_id}.",
-                        reply_markup=back_to_menu_keyboard()   # 👈 Agregado
+                        reply_markup=back_to_menu_keyboard()
                     )
         await session.commit()
 
     await query.edit_message_text("✅ Interacción aprobada. Puntos otorgados.", reply_markup=back_to_menu_keyboard())
     await show_main_menu(query, context)
-    await notify_user(context, chat_id=inter.actor_id, text=f"✅ Tu apoyo en {inter.tipo} fue aprobado. Ganaste {inter.puntos} puntos.", reply_markup=back_to_menu_keyboard())
+    await notify_user(
+        context,
+        chat_id=inter.actor_id,
+        text=f"✅ Tu apoyo en {inter.tipo} fue aprobado. Ganaste {inter.puntos} puntos.",
+        reply_markup=back_to_menu_keyboard()
+    )
+
 
 # --- Rechazar interacción ---
-
-
 async def reject_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_id: int):
     async with async_session() as session:
         res = await session.execute(select(Interaccion).where(Interaccion.id == inter_id))
@@ -953,12 +1105,98 @@ async def reject_interaction(query, context: ContextTypes.DEFAULT_TYPE, inter_id
             await show_main_menu(query, context)
             return
 
+        # 👉 Rechazar interacción
         inter.status = "rejected"
         await session.commit()
 
     await query.edit_message_text("❌ Interacción rechazada.", reply_markup=back_to_menu_keyboard())
     await show_main_menu(query, context)
-    await notify_user(context, chat_id=inter.actor_id, text=f"❌ Tu apoyo en {inter.tipo} fue rechazado.", reply_markup=back_to_menu_keyboard())
+    await notify_user(
+        context,
+        chat_id=inter.actor_id,
+        text=f"❌ Tu apoyo en {inter.tipo} fue rechazado.",
+        reply_markup=back_to_menu_keyboard()
+    )
+
+
+# --- Registrar interacción de seguimiento (notifica con TikTok del actor) ---
+async def handle_seguimiento_done(query, context: ContextTypes.DEFAULT_TYPE, seg_id: int):
+    user_id = query.from_user.id
+    async with async_session() as session:
+        res_seg = await session.execute(select(Seguimiento).where(Seguimiento.id == seg_id))
+        seg = res_seg.scalars().first()
+        if not seg:
+            await query.edit_message_text("❌ Seguimiento no encontrado.", reply_markup=back_to_menu_keyboard())
+            return
+        if seg.telegram_id == user_id:
+            await query.answer("No puedes apoyar tu propio seguimiento.", show_alert=True)
+            return
+
+        # 👉 Verificar duplicados
+        res_inter = await session.execute(
+            select(Interaccion).where(
+                Interaccion.tipo == "seguimiento",
+                Interaccion.item_id == seg.id,
+                Interaccion.actor_id == user_id
+            )
+        )
+        inter = res_inter.scalars().first()
+
+        if inter:
+            if inter.status == "pending":
+                await query.answer("⚠️ Ya habías registrado tu apoyo, está pendiente de aprobación.", show_alert=True)
+            else:
+                await query.answer(f"⚠️ Esta interacción ya está en estado: {inter.status}.", show_alert=True)
+            return
+        else:
+            # 👉 Crear nueva interacción
+            expires = datetime.utcnow() + timedelta(days=AUTO_APPROVE_AFTER_DAYS)
+            inter = Interaccion(
+                tipo="seguimiento",
+                item_id=seg.id,
+                actor_id=user_id,
+                owner_id=seg.telegram_id,
+                status="pending",
+                puntos=PUNTOS_APOYO_SEGUIMIENTO,
+                expires_at=expires
+            )
+            session.add(inter)
+            await session.commit()
+
+        # 👉 Obtener TikTok del actor
+        res_actor = await session.execute(select(User).where(User.telegram_id == user_id))
+        actor = res_actor.scalars().first()
+
+    # 🔧 CAMBIO: cancelar cualquier job pendiente y reiniciar ciclo
+    job = context.user_data.get("contenido_job")
+    if job:
+        job.schedule_removal()
+        context.user_data["contenido_job"] = None
+    context.user_data["ultimo_tipo"] = None
+
+    # 👉 Confirmación al usuario (editando el mensaje original)
+    await query.edit_message_text(
+        "🟡 Tu apoyo fue registrado y está pendiente de aprobación del dueño.",
+        reply_markup=back_to_menu_keyboard()
+    )
+
+    # 👉 Notificar al dueño
+    await notify_user(
+        context,
+        chat_id=seg.telegram_id,
+        text=(
+            f"📩 Nuevo apoyo a tu seguimiento:\n"
+            f"Item ID: {seg.id}\n"
+            f"Actor: {user_id}\n"
+            f"Usuario TikTok: {actor.tiktok_user or 'no registrado'}\n"
+            f"Puntos: {PUNTOS_APOYO_SEGUIMIENTO}\n\n"
+            "¿Apruebas?"
+        ),
+        reply_markup=yes_no_keyboard(
+            callback_yes=f"approve_interaction_{inter.id}",
+            callback_no=f"reject_interaction_{inter.id}"
+        )
+    )
 
 
 # --- Registrar interacción de video (notifica con TikTok del actor) ---
@@ -974,24 +1212,55 @@ async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, v
             await query.answer("No puedes apoyar tu propio video.", show_alert=True)
             return
 
-        expires = datetime.utcnow() + timedelta(days=AUTO_APPROVE_AFTER_DAYS)
-        inter = Interaccion(
-            tipo="video_support",
-            item_id=vid.id,
-            actor_id=user_id,
-            owner_id=vid.telegram_id,
-            status="pending",
-            puntos=PUNTOS_APOYO_VIDEO,
-            expires_at=expires
+        # 👉 Verificar duplicados
+        res_inter = await session.execute(
+            select(Interaccion).where(
+                Interaccion.tipo == "video_support",
+                Interaccion.item_id == vid.id,
+                Interaccion.actor_id == user_id
+            )
         )
-        session.add(inter)
-        await session.commit()
+        inter = res_inter.scalars().first()
 
-        # obtener TikTok del actor
+        if inter:
+            if inter.status == "pending":
+                await query.answer("⚠️ Ya habías registrado tu apoyo, está pendiente de aprobación.", show_alert=True)
+            else:
+                await query.answer(f"⚠️ Esta interacción ya está en estado: {inter.status}.", show_alert=True)
+            return
+        else:
+            # 👉 Crear nueva interacción
+            expires = datetime.utcnow() + timedelta(days=AUTO_APPROVE_AFTER_DAYS)
+            inter = Interaccion(
+                tipo="video_support",
+                item_id=vid.id,
+                actor_id=user_id,
+                owner_id=vid.telegram_id,
+                status="pending",
+                puntos=PUNTOS_APOYO_VIDEO,
+                expires_at=expires
+            )
+            session.add(inter)
+            await session.commit()
+
+        # 👉 Obtener TikTok del actor
         res_actor = await session.execute(select(User).where(User.telegram_id == user_id))
         actor = res_actor.scalars().first()
 
-    await query.edit_message_text("🟡 Tu apoyo fue registrado y está pendiente de aprobación del dueño.", reply_markup=back_to_menu_keyboard())
+    # 🔧 CAMBIO: cancelar cualquier job pendiente y reiniciar ciclo
+    job = context.user_data.get("contenido_job")
+    if job:
+        job.schedule_removal()
+        context.user_data["contenido_job"] = None
+    context.user_data["ultimo_tipo"] = None
+
+    # 👉 Confirmación al usuario (editando el mensaje original)
+    await query.edit_message_text(
+        "🟡 Tu apoyo fue registrado y está pendiente de aprobación del dueño.",
+        reply_markup=back_to_menu_keyboard()
+    )
+
+    # 👉 Notificar al dueño
     await notify_user(
         context,
         chat_id=vid.telegram_id,
@@ -1009,6 +1278,153 @@ async def handle_video_support_done(query, context: ContextTypes.DEFAULT_TYPE, v
         )
     )
 
+# --- Registrar interacción de live (solo ver, automático con 0.25 puntos) ---
+
+
+async def handle_live_view(query, context: ContextTypes.DEFAULT_TYPE, live_id: int):
+    user_id = query.from_user.id
+    async with async_session() as session:
+        res_live = await session.execute(select(Live).where(Live.id == live_id))
+        live = res_live.scalars().first()
+        if not live:
+            await query.edit_message_text("❌ Live no encontrado.", reply_markup=back_to_menu_keyboard())
+            return
+        if live.telegram_id == user_id:
+            await query.answer("No puedes apoyar tu propio live.", show_alert=True)
+            return
+
+        # 👉 Verificar duplicados
+        res_inter = await session.execute(
+            select(Interaccion).where(
+                Interaccion.tipo == "live_view",
+                Interaccion.item_id == live.id,
+                Interaccion.actor_id == user_id
+            )
+        )
+        inter = res_inter.scalars().first()
+
+        if inter:
+            await query.answer("⚠️ Ya habías registrado tu apoyo en este live.", show_alert=True)
+            return
+        else:
+            # 👉 Crear nueva interacción ya aceptada con 0.25 puntos
+            inter = Interaccion(
+                tipo="live_view",
+                item_id=live.id,
+                actor_id=user_id,
+                owner_id=live.telegram_id,
+                status="accepted",   # ✅ directo aceptado
+                puntos=0.25,
+                expires_at=datetime.utcnow()
+            )
+            session.add(inter)
+
+            # 👉 Acreditar puntos al actor
+            res_actor = await session.execute(select(User).where(User.telegram_id == user_id))
+            actor = res_actor.scalars().first()
+            if actor:
+                actor.balance = (actor.balance or 0) + 0.25
+                mov = Movimiento(
+                    telegram_id=user_id,
+                    detalle="Apoyo live (solo ver, automático)",
+                    puntos=0.25
+                )
+                session.add(mov)
+
+            await session.commit()
+
+    # 🔧 CAMBIO: cancelar cualquier job pendiente y reiniciar ciclo
+    job = context.user_data.get("contenido_job")
+    if job:
+        job.schedule_removal()
+        context.user_data["contenido_job"] = None
+    context.user_data["ultimo_tipo"] = None
+
+    # 👉 Confirmación al usuario
+    await query.edit_message_text(
+        "✅ Tu apoyo al live fue registrado automáticamente. Ganaste 0.25 puntos.",
+        reply_markup=back_to_menu_keyboard()
+    )
+
+
+# --- Registrar interacción de live con Quiéreme (requiere aprobación, 2 puntos) ---
+async def handle_live_quiereme(query, context: ContextTypes.DEFAULT_TYPE, live_id: int):
+    user_id = query.from_user.id
+    async with async_session() as session:
+        res_live = await session.execute(select(Live).where(Live.id == live_id))
+        live = res_live.scalars().first()
+        if not live:
+            await query.edit_message_text("❌ Live no encontrado.", reply_markup=back_to_menu_keyboard())
+            return
+        if live.telegram_id == user_id:
+            await query.answer("No puedes apoyar tu propio live.", show_alert=True)
+            return
+
+        # 👉 Verificar duplicados
+        res_inter = await session.execute(
+            select(Interaccion).where(
+                Interaccion.tipo == "live_quiereme",
+                Interaccion.item_id == live.id,
+                Interaccion.actor_id == user_id
+            )
+        )
+        inter = res_inter.scalars().first()
+
+        if inter:
+            if inter.status == "pending":
+                await query.answer("⚠️ Ya habías registrado tu apoyo, está pendiente de aprobación.", show_alert=True)
+            else:
+                await query.answer(f"⚠️ Esta interacción ya está en estado: {inter.status}.", show_alert=True)
+            return
+        else:
+            # 👉 Crear nueva interacción con puntos extra
+            expires = datetime.utcnow() + timedelta(days=AUTO_APPROVE_AFTER_DAYS)
+            inter = Interaccion(
+                tipo="live_quiereme",
+                item_id=live.id,
+                actor_id=user_id,
+                owner_id=live.telegram_id,
+                status="pending",   # ✅ requiere aprobación
+                puntos=2.0,         # ✅ total de puntos por Quiéreme
+                expires_at=expires
+            )
+            session.add(inter)
+            await session.commit()
+
+        # 👉 Obtener TikTok del actor
+        res_actor = await session.execute(select(User).where(User.telegram_id == user_id))
+        actor = res_actor.scalars().first()
+
+    # 🔧 CAMBIO: cancelar cualquier job pendiente y reiniciar ciclo
+    job = context.user_data.get("contenido_job")
+    if job:
+        job.schedule_removal()
+        context.user_data["contenido_job"] = None
+    context.user_data["ultimo_tipo"] = None
+
+    # 👉 Confirmación al usuario
+    await query.edit_message_text(
+        "🟡 Tu apoyo con Quiéreme fue registrado y está pendiente de aprobación del dueño.",
+        reply_markup=back_to_menu_keyboard()
+    )
+
+    # 👉 Notificar al dueño
+    await notify_user(
+        context,
+        chat_id=live.telegram_id,
+        text=(
+            f"📩 Nuevo apoyo a tu live con Quiéreme:\n"
+            f"Item ID: {live.id}\n"
+            f"Actor: {user_id}\n"
+            f"Usuario TikTok: {actor.tiktok_user or 'no registrado'}\n"
+            f"Puntos: 2.0\n\n"
+            "¿Apruebas?"
+        ),
+        reply_markup=yes_no_keyboard(
+            callback_yes=f"approve_interaction_{inter.id}",
+            callback_no=f"reject_interaction_{inter.id}"
+        )
+    )
 # bot.py (Parte 4/5)
 
 # --- Balance e historial ---
@@ -1159,18 +1575,27 @@ async def listar_usuarios(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def subir_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         if not await is_subadmin(update.effective_user.id):
-            await update.message.reply_text("❌ No tienes permiso para crear cupones.")
+            await update.message.reply_text(
+                "❌ No tienes permiso para crear cupones.",
+                reply_markup=back_to_menu_keyboard()   # ✅ botón regresar
+            )
             return
         args = context.args
         if len(args) < 3:
-            await update.message.reply_text("Uso: /subir_cupon <total_puntos> <num_ganadores> <codigo>")
+            await update.message.reply_text(
+                "Uso: /subir_cupon <total_puntos> <num_ganadores> <codigo>",
+                reply_markup=back_to_menu_keyboard()   # ✅ botón regresar
+            )
             return
         try:
             total_points = int(args[0])
             winners_limit = int(args[1])
             code = args[2]
         except:
-            await update.message.reply_text("⚠️ Parámetros inválidos.")
+            await update.message.reply_text(
+                "⚠️ Parámetros inválidos.",
+                reply_markup=back_to_menu_keyboard()   # ✅ botón regresar
+            )
             return
         expires = datetime.utcnow() + timedelta(days=AUTO_APPROVE_AFTER_DAYS)
         async with async_session() as session:
@@ -1186,20 +1611,32 @@ async def subir_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             session.add(action)
             await session.commit()
-        await update.message.reply_text(f"🟡 Cupón propuesto: código {code}, {total_points} puntos, {winners_limit} ganadores. Pendiente de aprobación.")
-        await notify_admin(context, text=f"🟡 Acción pendiente: crear cupón {code} ({total_points} puntos, {winners_limit} ganadores).")
+        await update.message.reply_text(
+            f"🟡 Cupón propuesto: código {code}, {total_points} puntos, {winners_limit} ganadores. Pendiente de aprobación.",
+            reply_markup=back_to_menu_keyboard()   # ✅ botón regresar
+        )
+        await notify_admin(
+            context,
+            text=f"🟡 Acción pendiente: crear cupón {code} ({total_points} puntos, {winners_limit} ganadores)."
+        )
         return
 
     args = context.args
     if len(args) < 3:
-        await update.message.reply_text("Uso: /subir_cupon <total_puntos> <num_ganadores> <codigo>")
+        await update.message.reply_text(
+            "Uso: /subir_cupon <total_puntos> <num_ganadores> <codigo>",
+            reply_markup=back_to_menu_keyboard()   # ✅ botón regresar
+        )
         return
     try:
         total_points = int(args[0])
         winners_limit = int(args[1])
         code = args[2]
     except:
-        await update.message.reply_text("⚠️ Parámetros inválidos.")
+        await update.message.reply_text(
+            "⚠️ Parámetros inválidos.",
+            reply_markup=back_to_menu_keyboard()   # ✅ botón regresar
+        )
         return
     async with async_session() as session:
         coupon = Coupon(
@@ -1211,23 +1648,46 @@ async def subir_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         session.add(coupon)
         await session.commit()
-    await update.message.reply_text(f"✅ Cupón creado: código {code}, {total_points} puntos, {winners_limit} ganadores.")
+    await update.message.reply_text(
+        f"✅ Cupón creado: código {code}, {total_points} puntos, {winners_limit} ganadores.",
+        reply_markup=back_to_menu_keyboard()   # ✅ botón regresar
+    )
 
 
 async def cobrar_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    args = context.args
-    if len(args) < 1:
-        await update.message.reply_text("Uso: /cobrar_cupon <codigo>")
+    # Si viene de comando, args existe
+    args = context.args if context.args else []
+
+    # Detectar si viene de mensaje o de callback
+    message = update.message if update.message else update.callback_query.message
+
+    # Obtener el código según el origen
+    if not args and update.message and update.message.text:
+        code = update.message.text.strip()
+    elif len(args) >= 1:
+        code = args[0].strip()
+    else:
+        await message.reply_text(
+            "Uso: /cobrar_cupon <codigo> o escribe el código después de presionar el botón.",
+            reply_markup=back_to_menu_keyboard()
+        )
         return
-    code = args[0]
+
     user_id = update.effective_user.id
+
     async with async_session() as session:
         res = await session.execute(select(Coupon).where(Coupon.code == code, Coupon.active == 1))
         coupon = res.scalars().first()
         if not coupon:
-            await update.message.reply_text("❌ Cupón no válido o agotado.")
+            await message.reply_text(
+                "❌ Cupón no válido o agotado.",
+                reply_markup=back_to_menu_keyboard()
+            )
             return
+
         reward = coupon.total_points // coupon.winners_limit
+
+        # Verificar cuántos ya cobraron
         res_movs = await session.execute(
             select(Movimiento).where(
                 Movimiento.detalle.like(f"Cobro cupón {code}%"))
@@ -1236,17 +1696,29 @@ async def cobrar_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(winners) >= coupon.winners_limit:
             coupon.active = 0
             await session.commit()
-            await update.message.reply_text("⚠️ Ya no hay recompensas disponibles para este cupón.")
+            await message.reply_text(
+                "⚠️ Ya no hay recompensas disponibles para este cupón.",
+                reply_markup=back_to_menu_keyboard()
+            )
             return
+
+        # Acreditar puntos al usuario
         res_user = await session.execute(select(User).where(User.telegram_id == user_id))
         user = res_user.scalars().first()
         if user:
             user.balance = (user.balance or 0) + reward
-            mov = Movimiento(telegram_id=user_id,
-                             detalle=f"Cobro cupón {code}", puntos=reward)
+            mov = Movimiento(
+                telegram_id=user_id,
+                detalle=f"Cobro cupón {code}",
+                puntos=reward
+            )
             session.add(mov)
             await session.commit()
-        await update.message.reply_text(f"✅ Cupón {code} cobrado. Recibiste {reward} puntos.")
+
+        await message.reply_text(
+            f"✅ Cupón {code} cobrado. Recibiste {reward} puntos.",
+            reply_markup=back_to_menu_keyboard()
+        )
 # --- Gestión de Cupones ---
 
 
@@ -1308,40 +1780,6 @@ async def subir_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"✅ Cupón creado: código {code}, {total_points} puntos, {winners_limit} ganadores.")
 
 
-async def cobrar_cupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    args = context.args
-    if len(args) < 1:
-        await update.message.reply_text("Uso: /cobrar_cupon <codigo>")
-        return
-    code = args[0]
-    user_id = update.effective_user.id
-    async with async_session() as session:
-        res = await session.execute(select(Coupon).where(Coupon.code == code, Coupon.active == 1))
-        coupon = res.scalars().first()
-        if not coupon:
-            await update.message.reply_text("❌ Cupón no válido o agotado.")
-            return
-        reward = coupon.total_points // coupon.winners_limit
-        res_movs = await session.execute(
-            select(Movimiento).where(
-                Movimiento.detalle.like(f"Cobro cupón {code}%"))
-        )
-        winners = res_movs.scalars().all()
-        if len(winners) >= coupon.winners_limit:
-            coupon.active = 0
-            await session.commit()
-            await update.message.reply_text("⚠️ Ya no hay recompensas disponibles para este cupón.")
-            return
-        res_user = await session.execute(select(User).where(User.telegram_id == user_id))
-        user = res_user.scalars().first()
-        if user:
-            user.balance = (user.balance or 0) + reward
-            mov = Movimiento(telegram_id=user_id,
-                             detalle=f"Cobro cupón {code}", puntos=reward)
-            session.add(mov)
-            await session.commit()
-        await update.message.reply_text(f"✅ Cupón {code} cobrado. Recibiste {reward} puntos.")
-
 # --- Acciones administrativas propuestas por subadmin ---
 
 # --- Notificación al admin ---
@@ -1381,7 +1819,7 @@ async def dar_puntos(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         target_id = int(args[0])
-        cantidad = int(args[1])
+        cantidad = float(args[1])   # ✅ corregido: usar float en lugar de int
     except:
         await update.message.reply_text("⚠️ Ambos parámetros deben ser números.")
         return
@@ -1395,7 +1833,7 @@ async def dar_puntos(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 u.balance = (u.balance or 0) + cantidad
                 session.add(Movimiento(
                     telegram_id=u.telegram_id,
-                    detalle=f"🎁 Puntos otorgados por admin",
+                    detalle="🎁 Puntos otorgados por admin",
                     puntos=cantidad
                 ))
                 await session.commit()
@@ -1424,21 +1862,22 @@ async def dar_puntos(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 subadmin_id=user_id,
                 status="pending",
                 expires_at=expires,
-                # 👈 aquí usamos note en lugar de detalle
+                # ✅ usar note para descripción
                 note=f"Dar {cantidad} puntos a {target_id}"
             )
             session.add(action)
             await session.commit()
-            # 👈 para obtener el ID recién creado
-            await session.refresh(action)
+            await session.refresh(action)   # ✅ refrescar para obtener el ID
+
         await update.message.reply_text(
             f"🟡 Acción propuesta: dar {cantidad} puntos a {target_id}. Queda pendiente de aprobación del admin."
         )
 
+        # ✅ Notificar al admin con botones de aprobación/rechazo
         await notify_admin(
             context,
             text=f"🟡 Acción pendiente: dar {cantidad} puntos a {target_id}.",
-            action_id=action.id   # 👈 ahora sí pasamos el ID
+            action_id=action.id
         )
 
     else:
@@ -1473,7 +1912,10 @@ async def handle_action_approve(query, context, action_id: int):
                 await notify_user(
                     context,
                     chat_id=u.telegram_id,
-                    text=f"🎁 Tu acción fue aprobada. Recibiste {action.cantidad} puntos."
+                    text=f"🎁 Tu acción fue aprobada. Recibiste {action.cantidad} puntos.",
+                    reply_markup=back_to_menu_keyboard()   # 👈 AGREGADO
+
+
                 )
 
         action.status = "accepted"
@@ -1635,17 +2077,111 @@ async def reject_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action_
         "❌ Acción administrativa rechazada.",
         reply_markup=back_to_menu_keyboard()
     )
+    # --- Nueva función para aprobar acciones de subadmin ---
 
 
+async def approve_action(query, context: ContextTypes.DEFAULT_TYPE, action_id: int):
+    # Verificamos que solo el ADMIN_ID pueda aprobar
+    if query.from_user.id != ADMIN_ID:
+        await query.answer("❌ Solo el admin puede aprobar.", show_alert=True)
+        return
+
+    async with async_session() as session:
+        # Buscar la acción en la base de datos
+        res = await session.execute(select(AdminAction).where(AdminAction.id == action_id))
+        action = res.scalars().first()
+
+        # Si no existe la acción
+        if not action:
+            await query.edit_message_text(
+                "❌ Acción no encontrada.",
+                reply_markup=back_to_menu_keyboard()
+            )
+            return
+
+        # Si la acción ya no está pendiente
+        if action.status != "pending":
+            await query.edit_message_text(
+                f"⚠️ Acción ya está en estado: {action.status}.",
+                reply_markup=back_to_menu_keyboard()
+            )
+            return
+
+        # Actualizamos el estado a aceptado
+        action.status = "accepted"
+
+        # Ejecutamos la acción según su tipo
+        if action.tipo == "dar_puntos":
+            res_user = await session.execute(select(User).where(User.telegram_id == action.target_id))
+            u = res_user.scalars().first()
+            if u:
+                u.balance = (u.balance or 0) + (action.cantidad or 0)
+                session.add(Movimiento(
+                    telegram_id=u.telegram_id,
+                    detalle="🎁 Puntos otorgados por subadmin (aprobado por admin)",
+                    puntos=action.cantidad
+                ))
+
+        elif action.tipo == "cambiar_tiktok":
+            res_user = await session.execute(select(User).where(User.telegram_id == action.target_id))
+            u = res_user.scalars().first()
+            if u and action.nuevo_alias:
+                u.tiktok_user = action.nuevo_alias
+
+        elif action.tipo == "crear_cupon":
+            winners_limit = int(action.note.replace(
+                "Ganadores: ", "")) if action.note else 1
+            coupon = Coupon(
+                code=action.nuevo_alias,
+                total_points=action.cantidad or 0,
+                winners_limit=winners_limit,
+                created_by=action.subadmin_id,
+                active=1
+            )
+            session.add(coupon)
+
+        await session.commit()
+
+    # Mensaje final al admin
+    await query.edit_message_text(
+        "✅ Acción administrativa aprobada y ejecutada.",
+        reply_markup=back_to_menu_keyboard()
+    )
+
+    # Notificar al subadmin que su acción fue aprobada
+    if action.cantidad is not None:
+        await notify_user(
+            context,
+            chat_id=action.subadmin_id,
+            text=f"🎁 Tu acción '{action.tipo}' fue aprobada y ejecutada por el admin. Recibiste {action.cantidad} puntos.",
+            reply_markup=back_to_menu_keyboard()   # ✅ coma correcta
+        )
+    else:
+        await notify_user(
+            context,
+            chat_id=action.subadmin_id,
+            text=f"🎁 Tu acción '{action.tipo}' fue aprobada y ejecutada por el admin.",
+            reply_markup=back_to_menu_keyboard()
+        )
+
+    # Si la acción fue dar_puntos, notificar también al usuario que recibió los puntos
+    if action.tipo == "dar_puntos":
+        await notify_user(
+            context,
+            chat_id=action.target_id,
+            text=f"🎁 Recibiste {action.cantidad} puntos (aprobado por admin).",
+            reply_markup=back_to_menu_keyboard()
+        )
 # bot.py (Parte 5/5)
+
+# --- Callback principal (menú y acciones) ---
 
 
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    try:
-        await query.answer()
-    except:
-        pass
+
+    # 👉 Siempre responder al callback
+    await query.answer()
 
     data = query.data
 
@@ -1655,7 +2191,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=back_to_menu_keyboard()
         )
         context.user_data["state"] = "seguimiento_link"
-# --- Callback principal (menú y acciones) ---
 
     elif data == "subir_video":
         keyboard = [
@@ -1676,7 +2211,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "📌 ¿Qué tipo de video quieres subir?",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-        context.user_data["state"] = None   # ✅ aquí solo debe ser None
+        context.user_data["state"] = None
 
     elif data.startswith("video_tipo_"):
         tipos = {
@@ -1687,26 +2222,58 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "video_tipo_colaboracion": "Colaboración"
         }
         context.user_data["video_tipo"] = tipos.get(data, "Normal")
-        # ✅ aquí sí se activa el título
         context.user_data["state"] = "video_title"
         await query.edit_message_text(
             f"🎬 Tipo seleccionado: {context.user_data['video_tipo']}\n\nAhora envíame el título de tu video:",
             reply_markup=back_to_menu_keyboard()
         )
 
-    elif data.startswith("approve_action_"):
-        action_id = int(data.split("_")[-1])
-        await handle_action_approve(query, context, action_id)
+    # --- Subir live con dos modalidades ---
+    elif data == "subir_live":
+        keyboard = [
+            [InlineKeyboardButton(
+                "📢 Promoción normal (5 puntos)", callback_data="subir_live_normal")],
+            [InlineKeyboardButton(
+                "💬 Promoción personalizada (10 puntos)", callback_data="subir_live_personalizado")],
+            [InlineKeyboardButton(
+                "🔙 Regresar al menú principal", callback_data="menu_principal")]
+        ]
+        await query.edit_message_text(
+            "🔴 ¿Cómo quieres promocionar tu live?",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        context.user_data["state"] = None
 
-    elif data.startswith("reject_action_"):
-        action_id = int(data.split("_")[-1])
-        await handle_action_reject(query, context, action_id)
+    elif data == "subir_live_normal":
+        await query.edit_message_text(
+            "🔗 Envía el link de tu live de TikTok (costo: 5 puntos).",
+            reply_markup=back_to_menu_keyboard()
+        )
+        context.user_data["state"] = "live_link_normal"
 
-    elif data == "ver_seguimiento":
-        await show_seguimientos(query, context)
+    elif data == "subir_live_personalizado":
+        # ⚠️ Validar saldo antes de permitir subir live personalizado
+        async with async_session() as session:
+            res = await session.execute(select(User).where(User.telegram_id == query.from_user.id))
+            user = res.scalars().first()
 
-    elif data == "ver_video":
-        await show_videos(query, context)
+        if not user or (user.balance or 0) < 10:
+            await query.edit_message_text(
+                "⚠️ No tienes suficientes puntos para subir este live personalizado (costo: 10 puntos).",
+                reply_markup=back_to_menu_keyboard()
+            )
+            return
+
+        await query.edit_message_text(
+            "🔗 Envía el link de tu live de TikTok personalizado (costo: 10 puntos).",
+            reply_markup=back_to_menu_keyboard()
+        )
+        context.user_data["state"] = "live_link_personalizado"
+
+    # --- Unificación de ver contenido ---
+    elif data == "ver_contenido":
+        await show_contenido(query, context)
+        return
 
     elif data == "balance":
         await show_balance(query, context)
@@ -1714,17 +2281,41 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "mi_ref_link":
         await show_my_ref_link(query, context)
 
+    elif data == "resumen_referidos":
+        await referral_weekly_summary(query, context)
+
     elif data == "comandos":
         await comandos(query, context)
 
-    elif data.startswith("seguimiento_done_"):
+    elif data == "cobrar_cupon":
+        await query.edit_message_text(
+            "💳 Ingresa el código del cupón que quieres cobrar:",
+            reply_markup=back_to_menu_keyboard()
+        )
+        context.user_data["state"] = "cobrar_cupon"
+
+    elif data == "menu_principal":
+        await show_main_menu(query, context)
+        return
+
+    # ✅ Confirmaciones de apoyo unificadas
+    elif data.startswith("confirm_seguimiento_"):
         seg_id = int(data.split("_")[-1])
         await handle_seguimiento_done(query, context, seg_id)
 
-    elif data.startswith("video_support_done_"):
+    elif data.startswith("confirm_video_"):
         vid_id = int(data.split("_")[-1])
         await handle_video_support_done(query, context, vid_id)
 
+    elif data.startswith("confirm_live_"):
+        live_id = int(data.split("_")[-1])
+        await handle_live_view(query, context, live_id)
+
+    elif data.startswith("live_quiereme_"):
+        live_id = int(data.split("_")[-1])
+        await handle_live_quiereme(query, context, live_id)
+
+    # ✅ Aprobaciones/Rechazos de dueños
     elif data.startswith("approve_interaction_"):
         inter_id = int(data.split("_")[-1])
         await approve_interaction(query, context, inter_id)
@@ -1733,68 +2324,139 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         inter_id = int(data.split("_")[-1])
         await reject_interaction(query, context, inter_id)
 
-    elif data.startswith("approve_admin_action_"):
+    # ✅ Aprobaciones/Rechazos de acciones de subadmin
+    elif data.startswith("approve_action_"):
         action_id = int(data.split("_")[-1])
-        await approve_admin_action(query, context, action_id)
+        await approve_action(query, context, action_id)
 
-    elif data.startswith("reject_admin_action_"):
+    elif data.startswith("reject_action_"):
         action_id = int(data.split("_")[-1])
         await reject_admin_action(query, context, action_id)
+    # ✅ Nuevo bloque para abrir live y esperar 2.5 minutos
+    elif data.startswith("abrir_live_"):
+        live_id = int(data.split("_")[-1])
 
-    # --- Callback principal (menú y acciones) ---
-    elif data == "menu_principal":
-        await show_main_menu(query, context)
+        async with async_session() as session:
+            res = await session.execute(select(Live).where(Live.id == live_id))
+            live = res.scalars().first()
+
+        if live:
+            # ✅ Mostrar preview del link y botones de abrir/regresar
+            await query.edit_message_text(
+                f"🔴 Live publicado por {live.alias or 'usuario'}\n\n"
+                f"⏳ Permanece al menos 2.5 minutos en el live\n\n"
+                # ⚠️ Esto activa la imagen de previsualización automática
+                f"{live.link}",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🌐 Abrir live", url=live.link)],
+                    [InlineKeyboardButton(
+                        "🔙 Regresar al menú principal", callback_data="menu_principal")]
+                ])
+            )
+
+            # ✅ Después de 2.5 minutos aparecen confirmaciones
+            context.job_queue.run_once(
+                lambda _, lid=live_id: context.bot.edit_message_text(
+                    chat_id=query.message.chat.id,
+                    message_id=query.message.message_id,
+                    text="✅ Ya puedes confirmar tu apoyo en el live:",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton(
+                            "👀 Solo vi el live", callback_data=f"confirm_live_{lid}")],
+                        [InlineKeyboardButton(
+                            "❤️ Vi el live y di Quiéreme", callback_data=f"live_quiereme_{lid}")],
+                        [InlineKeyboardButton(
+                            "🔙 Menú principal", callback_data="menu_principal")]
+                    ])
+                ),
+                when=150
+            )
+
+
+async def reject_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action_id: int):
+    # Verificamos que solo el ADMIN_ID pueda rechazar
+    if query.from_user.id != ADMIN_ID:
+        await query.answer("❌ Solo el admin puede rechazar.", show_alert=True)
         return
 
-    # 👇 Bloques de Live ya corregidos
+    async with async_session() as session:
+        # Buscar la acción en la base de datos
+        res = await session.execute(select(AdminAction).where(AdminAction.id == action_id))
+        action = res.scalars().first()
 
-    elif data == "subir_live":
-        await query.edit_message_text(
-            "🔗 Envía el link de tu live de TikTok (costo: 3 puntos).",
-            reply_markup=back_to_menu_keyboard()   # 👈 botón regresar al menú
-        )
-        context.user_data["state"] = "live_link"
+        # Si no existe la acción
+        if not action:
+            await query.edit_message_text(
+                "❌ Acción no encontrada.",
+                reply_markup=back_to_menu_keyboard()
+            )
+            return
 
-    elif data == "ver_live":
-        await show_lives(query, context)
-        return   # 👈 aquí termina el flujo
+        # Si la acción ya no está pendiente
+        if action.status != "pending":
+            await query.edit_message_text(
+                f"⚠️ Acción ya está en estado: {action.status}.",
+                reply_markup=back_to_menu_keyboard()
+            )
+            return
 
-    elif data.startswith("live_view_"):
-        live_id = int(data.split("_")[-1])
-        await handle_live_view(query, context, live_id)
+        # Actualizamos el estado a rechazado y guardamos
+        action.status = "rejected"
+        await session.commit()
 
-    elif data.startswith("live_quiereme_"):
-        live_id = int(data.split("_")[-1])
-        await handle_live_quiereme(query, context, live_id)
-
-
+    # Mensaje final con botón de regreso al menú principal
+    await query.edit_message_text(
+        "❌ Acción administrativa rechazada.",
+        reply_markup=back_to_menu_keyboard()
+    )
 # --- Handler de texto principal ---
+
+
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
     state = context.user_data.get("state")
+
     if state == "tiktok_user":
         await save_tiktok(update, context)
+
     elif state == "cambiar_tiktok":
         await save_new_tiktok(update, context)
+
     elif state == "seguimiento_link":
         await save_seguimiento(update, context)
-    elif state == "live_link":   # 👈 CORREGIDO, sin espacio extra
-        await save_live_link(update, context)
+
+    # BORRAR:
+    # elif state == "live_link":
+    #     await save_live_link(update, context)
+
+    # AGREGAR:
+    elif state == "live_link_normal":
+        await save_live_link(update, context, tipo="normal")
+
+    elif state == "live_link_personalizado":
+        await save_live_link(update, context, tipo="personalizado")
+
     elif state == "video_title":
         await save_video_title(update, context)
+
     elif state == "video_desc":
         await save_video_desc(update, context)
+
     elif state == "video_link":
         await save_video_link(update, context)
+
+    elif state == "cobrar_cupon":   # ✅ nuevo estado para cobrar cupón
+        await cobrar_cupon(update, context)
+
     else:
         await update.message.reply_text(
             "⚠️ Usa el menú para interactuar con el bot.\n\nSi es tu primera vez, escribe /start.",
             reply_markup=back_to_menu_keyboard()
         )
-
-
 # --- Comando: lista de comandos ---
+
+
 async def comandos(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     texto = (
         "📋 Lista de comandos disponibles:\n\n"
