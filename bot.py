@@ -751,90 +751,84 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = update.effective_user.id
     tipo = context.user_data.get("video_tipo", "Normal")
-    titulo = context.user_data.get("video_title", "")
-    descripcion = context.user_data.get("video_desc", "")
+    titulo = context.user_data.get("video_title", "Sin título")
+    descripcion = context.user_data.get("video_desc", "Sin descripción")
 
     async with async_session() as session:
         res = await session.execute(select(User).where(User.telegram_id == user_id))
         user = res.scalars().first()
+
         if not user:
-            await update.message.reply_text(
-                "❌ No estás registrado. Usa /start primero.",
-                reply_markup=back_to_menu_keyboard()
-            )
-            context.user_data["state"] = None
+            await update.message.reply_text("❌ No estás registrado. Usa /start primero.", reply_markup=back_to_menu_keyboard())
             return
+
         if (user.balance or 0) < 5:
-            await update.message.reply_text(
-                "⚠️ No tienes suficientes puntos para subir video (mínimo 5).",
-                reply_markup=back_to_menu_keyboard()
-            )
-            context.user_data["state"] = None
+            await update.message.reply_text("⚠️ No tienes suficientes puntos.", reply_markup=back_to_menu_keyboard())
             return
 
         # ✅ Guardar video en DB
-        vid = Video(
-            telegram_id=user_id,
-            tipo=tipo,
-            titulo=titulo,
-            descripcion=descripcion,
-            link=link
-        )
+        vid = Video(telegram_id=user_id, tipo=tipo, titulo=titulo,
+                    descripcion=descripcion, link=link)
         session.add(vid)
         user.balance = (user.balance or 0) - 5
-        mov = Movimiento(telegram_id=user_id, detalle="Subir video", puntos=-5)
-        session.add(mov)
+        session.add(Movimiento(telegram_id=user_id,
+                    detalle="Subir video", puntos=-5))
         await session.commit()
 
-    # ✅ Mensaje de confirmación al usuario
+    # --- CONFIGURACIÓN DE VISTA PREVIA ---
+    # Esto es lo que hace que el video "aparezca" visualmente
+    preview_config = LinkPreviewOptions(
+        is_disabled=False,       # Asegura que esté activada
+        # Muestra la miniatura en grande (estilo video)
+        prefer_large_media=True,
+        # La miniatura sale debajo del texto (se ve más limpio)
+        show_above_text=False
+    )
+
     await update.message.reply_text(
-        "✅ Tu video se subió con éxito.\n\n"
-        "⚠️ No olvides aceptar o rechazar las solicitudes de apoyo. "
-        "Si en 2 días no lo haces, regalarás tus puntos automáticamente.",
+        "✅ Tu video se subió con éxito.",
         reply_markup=back_to_menu_keyboard()
     )
-    context.user_data["state"] = None
-    context.user_data["video_title"] = None
-    context.user_data["video_desc"] = None
-    context.user_data["video_tipo"] = None
 
     try:
         alias = user.tiktok_user if user and user.tiktok_user else str(user_id)
 
+        # Formateamos el mensaje una sola vez para evitar repetición
+        base_text = (
+            f"📌 *{titulo}*\n"
+            f"📝 {descripcion}\n\n"
+            f"👤 Publicado por: {alias}\n"
+            f"🔗 {link}"
+        )
+
         if tipo == "TikTok Shop":
-            # 📢 Publicar en canal principal
-            await context.bot.send_message(
-                chat_id=CHANNEL_ID,
-                text=f"📢 Nuevo video TikTok Shop publicado por {alias}\n"
-                     # link en línea independiente
-                     f"📌 {titulo}\n📝 {descripcion}\n\n{link}",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🛍️ Compra ahora", url=link)]
-                ])
-            )
-            # 📢 Publicar también en canal de ofertas
-            await context.bot.send_message(
-                chat_id=CHANNEL_SHOP_ID,
-                text=f"📢 Oferta imperdible de TikTok Shop\n"
-                     # link en línea independiente
-                     f"📌 {titulo}\n📝 {descripcion}\n\n{link}",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🛍️ Compra ahora", url=link)]
-                ])
-            )
+            # 📢 Publicar en canal principal y de ofertas
+            for chat in [CHANNEL_ID, CHANNEL_SHOP_ID]:
+                await context.bot.send_message(
+                    chat_id=chat,
+                    text=f"📢 *NUEVA OFERTA TIKTOK SHOP*\n{base_text}",
+                    parse_mode="Markdown",
+                    link_preview_options=preview_config,
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("🛍️ Compra ahora", url=link)]])
+                )
         else:
             # 🎬 Publicar en canal normal
             await context.bot.send_message(
                 chat_id=CHANNEL_ID,
-                text=f"📢 Nuevo video ({tipo}) publicado por {alias}\n"
-                     # link en línea independiente
-                     f"📌 {titulo}\n📝 {descripcion}\n\n{link}",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🌐 Ver video", url=link)]
-                ])
+                text=f"📢 *NUEVO VIDEO ({tipo})*\n{base_text}",
+                parse_mode="Markdown",
+                link_preview_options=preview_config,
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("🌐 Ver video", url=link)]])
             )
+
     except Exception as e:
-        print("Aviso: no se pudo publicar en el canal:", e)
+        print(f"Error al publicar en canales: {e}")
+
+    # Limpieza de datos
+    for key in ["state", "video_title", "video_desc", "video_tipo"]:
+        context.user_data[key] = None
         # bot.py (Parte 3/5)
 # --- Ver contenido unificado (seguimiento, video, live) ---
 
