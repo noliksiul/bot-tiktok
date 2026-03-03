@@ -859,7 +859,10 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         print("Aviso: no se pudo publicar en el canal:", e)
-        async def handle_uploaded_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+
+# 👇 ESTA FUNCIÓN VA AFUERA, NO DENTRO DEL except
+async def handle_uploaded_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get("state") == "awaiting_image":
         photo = update.message.photo[-1].file_id
         base_text = context.user_data.get("pending_text", "")
