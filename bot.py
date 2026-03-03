@@ -3,7 +3,7 @@ from telegram import (
     Update,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
-    LinkPreviewOptions   # 👈 AGREGA ESTA LÍNEA
+    LinkPreviewOptions   # 👈 ya lo tienes
 )
 import os
 import asyncio
@@ -17,12 +17,15 @@ from telegram.ext import (
 )
 from sqlalchemy import (
     Column, Integer, BigInteger, Text, TIMESTAMP, func,
-    UniqueConstraint, select, text, Float   # 👈 AGREGA Float
+    UniqueConstraint, select, text, Float   # 👈 ya lo tienes
 )
-
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
+
+# 👇 AGREGA ESTOS IMPORTS AQUÍ
+import aiohttp
+from bs4 import BeautifulSoup
 # --- Configuración DB ---
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 if DATABASE_URL.startswith("postgres://"):
@@ -744,6 +747,18 @@ async def save_video_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🔗 Envía el link del video:", reply_markup=back_to_menu_keyboard())
 
 
+async def has_tiktok_metadata(link: str) -> bool:
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(link) as resp:
+                html = await resp.text()
+                soup = BeautifulSoup(html, "html.parser")
+                og_image = soup.find("meta", property="og:image")
+                return og_image is not None
+    except Exception:
+        return False
+
+
 async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     link = update.message.text.strip()
     if not link.startswith("http"):
@@ -751,84 +766,95 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = update.effective_user.id
     tipo = context.user_data.get("video_tipo", "Normal")
-    titulo = context.user_data.get("video_title", "Sin título")
-    descripcion = context.user_data.get("video_desc", "Sin descripción")
+    titulo = context.user_data.get("video_title", "")
+    descripcion = context.user_data.get("video_desc", "")
 
     async with async_session() as session:
         res = await session.execute(select(User).where(User.telegram_id == user_id))
         user = res.scalars().first()
-
         if not user:
-            await update.message.reply_text("❌ No estás registrado. Usa /start primero.", reply_markup=back_to_menu_keyboard())
+            await update.message.reply_text(
+                "❌ No estás registrado. Usa /start primero.",
+                reply_markup=back_to_menu_keyboard()
+            )
+            context.user_data["state"] = None
             return
-
         if (user.balance or 0) < 5:
-            await update.message.reply_text("⚠️ No tienes suficientes puntos.", reply_markup=back_to_menu_keyboard())
+            await update.message.reply_text(
+                "⚠️ No tienes suficientes puntos para subir video (mínimo 5).",
+                reply_markup=back_to_menu_keyboard()
+            )
+            context.user_data["state"] = None
             return
 
         # ✅ Guardar video en DB
-        vid = Video(telegram_id=user_id, tipo=tipo, titulo=titulo,
-                    descripcion=descripcion, link=link)
+        vid = Video(
+            telegram_id=user_id,
+            tipo=tipo,
+            titulo=titulo,
+            descripcion=descripcion,
+            link=link
+        )
         session.add(vid)
         user.balance = (user.balance or 0) - 5
-        session.add(Movimiento(telegram_id=user_id,
-                    detalle="Subir video", puntos=-5))
+        mov = Movimiento(telegram_id=user_id, detalle="Subir video", puntos=-5)
+        session.add(mov)
         await session.commit()
 
-    # --- CONFIGURACIÓN DE VISTA PREVIA ---
-    # Esto es lo que hace que el video "aparezca" visualmente
-    preview_config = LinkPreviewOptions(
-        is_disabled=False,       # Asegura que esté activada
-        # Muestra la miniatura en grande (estilo video)
-        prefer_large_media=True,
-        # La miniatura sale debajo del texto (se ve más limpio)
-        show_above_text=False
-    )
-
+    # ✅ Mensaje de confirmación al usuario
     await update.message.reply_text(
-        "✅ Tu video se subió con éxito.",
+        "✅ Tu video se subió con éxito.\n\n"
+        "⚠️ No olvides aceptar o rechazar las solicitudes de apoyo. "
+        "Si en 2 días no lo haces, regalarás tus puntos automáticamente.",
         reply_markup=back_to_menu_keyboard()
     )
+    context.user_data["state"] = None
+    context.user_data["video_title"] = None
+    context.user_data["video_desc"] = None
+    context.user_data["video_tipo"] = None
 
     try:
         alias = user.tiktok_user if user and user.tiktok_user else str(user_id)
-
-        # Formateamos el mensaje una sola vez para evitar repetición
         base_text = (
-            f"📌 *{titulo}*\n"
-            f"📝 {descripcion}\n\n"
+            f"📌 {titulo}\n📝 {descripcion}\n\n"
             f"👤 Publicado por: {alias}\n"
             f"🔗 {link}"
         )
 
-        if tipo == "TikTok Shop":
-            # 📢 Publicar en canal principal y de ofertas
-            for chat in [CHANNEL_ID, CHANNEL_SHOP_ID]:
+        # 🔎 Detectar si TikTok entrega metadatos
+        if await has_tiktok_metadata(link):
+            # Telegram intentará mostrar preview automática
+            if tipo == "TikTok Shop":
+                for chat in [CHANNEL_ID, CHANNEL_SHOP_ID]:
+                    await context.bot.send_message(
+                        chat_id=chat,
+                        text=f"📢 Nuevo video TikTok Shop\n{base_text}",
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton("🛍️ Compra ahora", url=link)]
+                        ])
+                    )
+            else:
                 await context.bot.send_message(
-                    chat_id=chat,
-                    text=f"📢 *NUEVA OFERTA TIKTOK SHOP*\n{base_text}",
-                    parse_mode="Markdown",
-                    link_preview_options=preview_config,
-                    reply_markup=InlineKeyboardMarkup(
-                        [[InlineKeyboardButton("🛍️ Compra ahora", url=link)]])
+                    chat_id=CHANNEL_ID,
+                    text=f"📢 Nuevo video ({tipo})\n{base_text}",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🌐 Ver video", url=link)]
+                    ])
                 )
         else:
-            # 🎬 Publicar en canal normal
-            await context.bot.send_message(
+            # Enviar miniatura manual si no hay metadatos
+            thumbnail_url = "https://ruta-a-miniatura.jpg"  # pon aquí tu imagen
+            await context.bot.send_photo(
                 chat_id=CHANNEL_ID,
-                text=f"📢 *NUEVO VIDEO ({tipo})*\n{base_text}",
-                parse_mode="Markdown",
-                link_preview_options=preview_config,
-                reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("🌐 Ver video", url=link)]])
+                photo=thumbnail_url,
+                caption=f"📢 Nuevo video ({tipo})\n{base_text}",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🌐 Ver video", url=link)]
+                ])
             )
 
     except Exception as e:
-        print(f"Error al publicar en canales: {e}")
-
-    # Limpieza de datos
-    for key in ["state", "video_title", "video_desc", "video_tipo"]:
-        context.user_data[key] = None
+        print("Aviso: no se pudo publicar en el canal:", e)
         # bot.py (Parte 3/5)
 # --- Ver contenido unificado (seguimiento, video, live) ---
 
