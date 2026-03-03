@@ -842,19 +842,45 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     ])
                 )
         else:
-            # Enviar miniatura manual si no hay metadatos
-            thumbnail_url = "https://ruta-a-miniatura.jpg"  # pon aquí tu imagen
-            await context.bot.send_photo(
-                chat_id=CHANNEL_ID,
-                photo=thumbnail_url,
-                caption=f"📢 Nuevo video ({tipo})\n{base_text}",
+            # ⚠️ No hay metadatos → pedir al usuario que suba una imagen
+            await update.message.reply_text(
+                "⚠️ No se encontró miniatura en TikTok.\n"
+                "Por favor sube una imagen para acompañar tu video.\n"
+                "Puede ser captura del video, foto de perfil o banner de live.",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🌐 Ver video", url=link)]
+                    [InlineKeyboardButton(
+                        "📷 Subir imagen", callback_data="upload_image")]
                 ])
             )
+            context.user_data["state"] = "awaiting_image"
+            context.user_data["pending_text"] = base_text
+            context.user_data["pending_tipo"] = tipo
+            context.user_data["pending_link"] = link
 
     except Exception as e:
         print("Aviso: no se pudo publicar en el canal:", e)
+        async def handle_uploaded_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get("state") == "awaiting_image":
+        photo = update.message.photo[-1].file_id
+        base_text = context.user_data.get("pending_text", "")
+        tipo = context.user_data.get("pending_tipo", "Normal")
+        link = context.user_data.get("pending_link", "")
+
+        await context.bot.send_photo(
+            chat_id=CHANNEL_ID,
+            photo=photo,
+            caption=f"📢 Nuevo video ({tipo})\n{base_text}",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🌐 Ver video", url=link)]
+            ])
+        )
+
+        context.user_data.clear()
+
+        await update.message.reply_text(
+            "✅ Tu imagen fue recibida y el video se publicó con éxito.",
+            reply_markup=back_to_menu_keyboard()
+        )
         # bot.py (Parte 3/5)
 # --- Ver contenido unificado (seguimiento, video, live) ---
 
@@ -2468,6 +2494,8 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif state == "cobrar_cupon":   # ✅ nuevo estado para cobrar cupón
         await cobrar_cupon(update, context)
+    elif state == "awaiting_image":
+        await handle_uploaded_image(update, context)
 
     else:
         await update.message.reply_text(
