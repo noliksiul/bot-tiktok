@@ -2301,7 +2301,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["state"] = "live_link_normal"
 
     elif data == "subir_live_personalizado":
-        # ⚠️ Validar saldo antes de permitir subir live personalizado
         async with async_session() as session:
             res = await session.execute(select(User).where(User.telegram_id == query.from_user.id))
             user = res.scalars().first()
@@ -2318,6 +2317,14 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=back_to_menu_keyboard()
         )
         context.user_data["state"] = "live_link_personalizado"
+
+    # --- Nuevo bloque: manejar botón de subir imagen ---
+    elif data == "upload_image":
+        await query.edit_message_text(
+            "📷 Envía ahora la foto que acompañará tu video:",
+            reply_markup=back_to_menu_keyboard()
+        )
+        context.user_data["state"] = "awaiting_image"
 
     # --- Unificación de ver contenido ---
     elif data == "ver_contenido":
@@ -2381,6 +2388,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("reject_action_"):
         action_id = int(data.split("_")[-1])
         await reject_admin_action(query, context, action_id)
+
     # ✅ Nuevo bloque para abrir live y esperar 2.5 minutos
     elif data.startswith("abrir_live_"):
         live_id = int(data.split("_")[-1])
@@ -2390,11 +2398,9 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             live = res.scalars().first()
 
         if live:
-            # ✅ Mostrar preview del link y botones de abrir/regresar
             await query.edit_message_text(
                 f"🔴 Live publicado por {live.alias or 'usuario'}\n\n"
                 f"⏳ Permanece al menos 2.5 minutos en el live\n\n"
-                # ⚠️ Esto activa la imagen de previsualización automática
                 f"{live.link}",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🌐 Abrir live", url=live.link)],
@@ -2403,7 +2409,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ])
             )
 
-            # ✅ Después de 2.5 minutos aparecen confirmaciones
             context.job_queue.run_once(
                 lambda _, lid=live_id: context.bot.edit_message_text(
                     chat_id=query.message.chat.id,
