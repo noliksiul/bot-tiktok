@@ -889,6 +889,50 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # 👇 ESTA FUNCIÓN VA AFUERA, NO DENTRO DEL except
 async def handle_uploaded_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get("state") == "awaiting_image":
+        if not update.message.photo:
+            await update.message.reply_text(
+                "⚠️ No se recibió una foto válida. Intenta nuevamente.",
+                reply_markup=back_to_menu_keyboard()
+            )
+            return
+
+        photo = update.message.photo[-1].file_id
+        base_text = context.user_data.get("pending_text", "")
+        tipo = context.user_data.get("pending_tipo", "Normal")
+        link = context.user_data.get("pending_link", "")
+
+        try:
+            # Publicar en el canal con la foto subida
+            await context.bot.send_photo(
+                chat_id=CHANNEL_ID,
+                photo=photo,
+                caption=f"📢 Nuevo video ({tipo})\n{base_text}",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🌐 Ver video", url=link)]
+                ])
+            )
+
+            # Confirmar al usuario
+            await update.message.reply_text(
+                "✅ Tu imagen fue recibida y el video se publicó con éxito.",
+                reply_markup=back_to_menu_keyboard()
+            )
+
+        except Exception as e:
+            print("Error al publicar en el canal:", e)
+            await update.message.reply_text(
+                "❌ Hubo un error al publicar tu video en el canal. Intenta nuevamente.",
+                reply_markup=back_to_menu_keyboard()
+            )
+
+        # 🔄 Resetear estado y datos
+        context.user_data.clear()
+        context.user_data["state"] = None
+
+
+# 👇 ESTA FUNCIÓN VA AFUERA, NO DENTRO DEL except
+async def handle_uploaded_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get("state") == "awaiting_image":
         photo = update.message.photo[-1].file_id
         base_text = context.user_data.get("pending_text", "")
         tipo = context.user_data.get("pending_tipo", "Normal")
