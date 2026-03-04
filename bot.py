@@ -1,4 +1,4 @@
-# bot.py (Parte 1/5)
+# bot.py (Parte 1/5)l
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -945,7 +945,6 @@ async def handle_uploaded_image(update: Update, context: ContextTypes.DEFAULT_TY
         # 🔄 Resetear estado y datos
         context.user_data.clear()
         context.user_data["state"] = None
-
         # bot.py (Parte 3/5)
 # --- Ver contenido unificado (seguimiento, video, live) ---
 
