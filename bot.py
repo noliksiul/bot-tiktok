@@ -742,9 +742,22 @@ async def save_video_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def save_video_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Guardar la descripción
     context.user_data["video_desc"] = update.message.text.strip()
-    context.user_data["state"] = "video_link"
-    await update.message.reply_text("🔗 Envía el link del video:", reply_markup=back_to_menu_keyboard())
+
+    # Pedir imagen opcional antes del link
+    await update.message.reply_text(
+        "📷 Ahora envíame una imagen para acompañar tu video.\n"
+        "Puede ser captura del video, banner o foto de perfil.\n\n"
+        "Si no quieres, pulsa '⏭️ Saltar imagen'.",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("⏭️ Saltar imagen",
+                                  callback_data="skip_image")]
+        ])
+    )
+
+    # Cambiar estado a esperar imagen
+    context.user_data["state"] = "video_image"
 
 
 async def has_tiktok_metadata(link: str) -> bool:
@@ -821,8 +834,20 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🔗 {link}"
         )
 
-        # 🔎 Detectar si TikTok entrega metadatos
-        if await has_tiktok_metadata(link):
+        # 🔎 Revisar si el usuario subió imagen manual
+        img = context.user_data.get("video_image")
+
+        if img:
+            # Usar la imagen subida por el usuario
+            await context.bot.send_photo(
+                chat_id=CHANNEL_ID,
+                photo=img,
+                caption=f"📢 Nuevo video ({tipo})\n{base_text}",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🌐 Ver video", url=link)]
+                ])
+            )
+        elif await has_tiktok_metadata(link):
             # Telegram intentará mostrar preview automática
             if tipo == "TikTok Shop":
                 for chat in [CHANNEL_ID, CHANNEL_SHOP_ID]:
@@ -2467,7 +2492,7 @@ async def reject_admin_action(query, context: ContextTypes.DEFAULT_TYPE, action_
 
 
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.text:
+    if not update.message:
         return
     state = context.user_data.get("state")
 
@@ -2497,11 +2522,30 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif state == "video_desc":
         await save_video_desc(update, context)
 
+    elif state == "video_image":
+        # Manejar imagen opcional después de descripción
+        if update.message.photo:
+            context.user_data["video_image"] = update.message.photo[-1].file_id
+            await update.message.reply_text(
+                "✅ Imagen recibida. Ahora envíame el link del video:",
+                reply_markup=back_to_menu_keyboard()
+            )
+            context.user_data["state"] = "video_link"
+        else:
+            await update.message.reply_text(
+                "⚠️ Por favor envía una foto o pulsa '⏭️ Saltar imagen'.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton(
+                        "⏭️ Saltar imagen", callback_data="skip_image")]
+                ])
+            )
+
     elif state == "video_link":
         await save_video_link(update, context)
 
     elif state == "cobrar_cupon":   # ✅ nuevo estado para cobrar cupón
         await cobrar_cupon(update, context)
+
     elif state == "awaiting_image":
         await handle_uploaded_image(update, context)
 
