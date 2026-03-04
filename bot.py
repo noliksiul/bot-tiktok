@@ -886,8 +886,28 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # 👇 ESTA FUNCIÓN VA AFUERA, NO DENTRO DEL except
+
 async def handle_uploaded_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if context.user_data.get("state") == "awaiting_image":
+    # Caso 1: imagen opcional después de descripción
+    if context.user_data.get("state") == "video_image":
+        if update.message.photo:
+            context.user_data["video_image"] = update.message.photo[-1].file_id
+            await update.message.reply_text(
+                "✅ Imagen recibida. Ahora envíame el link del video:",
+                reply_markup=back_to_menu_keyboard()
+            )
+            context.user_data["state"] = "video_link"
+        else:
+            await update.message.reply_text(
+                "⚠️ Por favor envía una foto o pulsa '⏭️ Saltar imagen'.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton(
+                        "⏭️ Saltar imagen", callback_data="skip_image")]
+                ])
+            )
+
+    # Caso 2: imagen obligatoria porque no había miniatura
+    elif context.user_data.get("state") == "awaiting_image":
         if not update.message.photo:
             await update.message.reply_text(
                 "⚠️ No se recibió una foto válida. Intenta nuevamente.",
@@ -925,6 +945,7 @@ async def handle_uploaded_image(update: Update, context: ContextTypes.DEFAULT_TY
         # 🔄 Resetear estado y datos
         context.user_data.clear()
         context.user_data["state"] = None
+
         # bot.py (Parte 3/5)
 # --- Ver contenido unificado (seguimiento, video, live) ---
 
