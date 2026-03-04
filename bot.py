@@ -790,14 +790,14 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "❌ No estás registrado. Usa /start primero.",
                 reply_markup=back_to_menu_keyboard()
             )
-            context.user_data["state"] = None
+            context.user_data.clear()
             return
         if (user.balance or 0) < 5:
             await update.message.reply_text(
                 "⚠️ No tienes suficientes puntos para subir video (mínimo 5).",
                 reply_markup=back_to_menu_keyboard()
             )
-            context.user_data["state"] = None
+            context.user_data.clear()
             return
 
         # ✅ Guardar video en DB
@@ -822,9 +822,6 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=back_to_menu_keyboard()
     )
     context.user_data["state"] = None
-    context.user_data["video_title"] = None
-    context.user_data["video_desc"] = None
-    context.user_data["video_tipo"] = None
 
     try:
         alias = user.tiktok_user if user and user.tiktok_user else str(user_id)
@@ -838,7 +835,6 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         img = context.user_data.get("video_image")
 
         if img:
-            # Usar la imagen subida por el usuario
             await context.bot.send_photo(
                 chat_id=CHANNEL_ID,
                 photo=img,
@@ -847,8 +843,9 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("🌐 Ver video", url=link)]
                 ])
             )
+            await show_main_menu(update, context)
+
         elif await has_tiktok_metadata(link):
-            # Telegram intentará mostrar preview automática
             if tipo == "TikTok Shop":
                 for chat in [CHANNEL_ID, CHANNEL_SHOP_ID]:
                     await context.bot.send_message(
@@ -866,6 +863,8 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         [InlineKeyboardButton("🌐 Ver video", url=link)]
                     ])
                 )
+            await show_main_menu(update, context)
+
         else:
             # ⚠️ No hay metadatos → pedir al usuario que suba una imagen
             await update.message.reply_text(
@@ -902,7 +901,6 @@ async def handle_uploaded_image(update: Update, context: ContextTypes.DEFAULT_TY
         link = context.user_data.get("pending_link", "")
 
         try:
-            # Publicar en el canal con la foto subida
             await context.bot.send_photo(
                 chat_id=CHANNEL_ID,
                 photo=photo,
@@ -911,12 +909,11 @@ async def handle_uploaded_image(update: Update, context: ContextTypes.DEFAULT_TY
                     [InlineKeyboardButton("🌐 Ver video", url=link)]
                 ])
             )
-
-            # Confirmar al usuario
             await update.message.reply_text(
                 "✅ Tu imagen fue recibida y el video se publicó con éxito.",
                 reply_markup=back_to_menu_keyboard()
             )
+            await show_main_menu(update, context)
 
         except Exception as e:
             print("Error al publicar en el canal:", e)
@@ -928,31 +925,6 @@ async def handle_uploaded_image(update: Update, context: ContextTypes.DEFAULT_TY
         # 🔄 Resetear estado y datos
         context.user_data.clear()
         context.user_data["state"] = None
-
-
-# 👇 ESTA FUNCIÓN VA AFUERA, NO DENTRO DEL except
-async def handle_uploaded_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if context.user_data.get("state") == "awaiting_image":
-        photo = update.message.photo[-1].file_id
-        base_text = context.user_data.get("pending_text", "")
-        tipo = context.user_data.get("pending_tipo", "Normal")
-        link = context.user_data.get("pending_link", "")
-
-        await context.bot.send_photo(
-            chat_id=CHANNEL_ID,
-            photo=photo,
-            caption=f"📢 Nuevo video ({tipo})\n{base_text}",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🌐 Ver video", url=link)]
-            ])
-        )
-
-        context.user_data.clear()
-
-        await update.message.reply_text(
-            "✅ Tu imagen fue recibida y el video se publicó con éxito.",
-            reply_markup=back_to_menu_keyboard()
-        )
         # bot.py (Parte 3/5)
 # --- Ver contenido unificado (seguimiento, video, live) ---
 
