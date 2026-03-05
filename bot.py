@@ -2,7 +2,7 @@ import os
 import asyncio
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, MessageHandler, ContextTypes, filters
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
 import aiohttp
 from bs4 import BeautifulSoup
 
@@ -64,7 +64,7 @@ async def publish_with_thumbnail(context: ContextTypes.DEFAULT_TYPE, link: str):
     else:
         await context.bot.send_message(chat_id=CHANNEL_ID, text=f"⚠️ No se encontró miniatura.\n{link}")
 
-# --- Handler principal ---
+# --- Handler principal para links ---
 
 
 async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -74,8 +74,33 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await publish_with_thumbnail(context, link)
     await update.message.reply_text("✅ Se probaron las 3 formas en el canal.")
 
+# --- Handler para /start ---
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📥 Enviar link de TikTok",
+                              callback_data="send_link")]
+    ])
+    await update.message.reply_text(
+        "👋 Bienvenido al bot COMUNIDAD Wuampira 🦇\n\n"
+        "Pulsa el botón para enviarme un link de TikTok y lo publicaré en el canal en varias formas.",
+        reply_markup=keyboard
+    )
+
+# --- Callback del botón ---
+
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.data == "send_link":
+        await query.message.reply_text("📌 Por favor envíame el link de TikTok:")
+
 # --- Configuración de Telegram Application ---
 application = Application.builder().token(BOT_TOKEN).build()
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CallbackQueryHandler(button_handler))
 application.add_handler(MessageHandler(
     filters.TEXT & ~filters.COMMAND, handle_link))
 
@@ -94,7 +119,6 @@ def webhook():
 async def init_webhook():
     await application.bot.set_webhook(WEBHOOK_URL)
 
-# Ejecutar inicialización antes de levantar Flask
 asyncio.get_event_loop().run_until_complete(init_webhook())
 
 if __name__ == "__main__":
