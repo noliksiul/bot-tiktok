@@ -1,4 +1,5 @@
 import os
+import asyncio
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, MessageHandler, ContextTypes, filters
@@ -82,10 +83,14 @@ def webhook():
     application.update_queue.put_nowait(update)
     return "OK", 200
 
-
 # --- Inicializar webhook ANTES de arrancar Flask ---
-with application:
-    application.bot.set_webhook(WEBHOOK_URL)
+
+
+async def init_webhook():
+    await application.bot.set_webhook(WEBHOOK_URL)
+
+# Ejecutar inicialización antes de levantar Flask
+asyncio.run(init_webhook())
 
 if __name__ == "__main__":
     app_flask.run(host="0.0.0.0", port=int(os.getenv("PORT", "8080")))
