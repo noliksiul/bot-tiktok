@@ -6,9 +6,14 @@ from telegram.ext import Application, MessageHandler, ContextTypes, filters
 import aiohttp
 from bs4 import BeautifulSoup
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+# ⚠️ Token de tu bot COMUNIDAD Wuampira
+BOT_TOKEN = "6564290496:AAFfyjhNUHMQaryJgMxK-gBNGkJX41Cay0A"
+
+# ⚠️ ID de tu canal principal (reemplázalo con el real)
 CHANNEL_ID = int(os.getenv("CHANNEL_ID", "-1001234567890"))
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # ej: https://tuapp.onrender.com
+
+# ⚠️ URL pública de Render (ejemplo: https://comunidadcw.onrender.com)
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
 app_flask = Flask(__name__)
 
@@ -90,7 +95,7 @@ async def init_webhook():
     await application.bot.set_webhook(WEBHOOK_URL)
 
 # Ejecutar inicialización antes de levantar Flask
-asyncio.run(init_webhook())
+asyncio.get_event_loop().run_until_complete(init_webhook())
 
 if __name__ == "__main__":
     app_flask.run(host="0.0.0.0", port=int(os.getenv("PORT", "8080")))
