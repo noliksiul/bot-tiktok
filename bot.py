@@ -5,7 +5,6 @@ from telegram.ext import Application, MessageHandler, ContextTypes, filters
 import aiohttp
 from bs4 import BeautifulSoup
 
-# Variables de entorno en Render
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_ID = int(os.getenv("CHANNEL_ID", "-1001234567890"))
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # ej: https://tuapp.onrender.com
@@ -83,13 +82,10 @@ def webhook():
     application.update_queue.put_nowait(update)
     return "OK", 200
 
-# --- Inicializar webhook al arrancar ---
 
-
-@app_flask.before_first_request
-def init_webhook():
+# --- Inicializar webhook ANTES de arrancar Flask ---
+with application:
     application.bot.set_webhook(WEBHOOK_URL)
-
 
 if __name__ == "__main__":
     app_flask.run(host="0.0.0.0", port=int(os.getenv("PORT", "8080")))
