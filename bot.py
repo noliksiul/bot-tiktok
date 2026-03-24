@@ -2497,24 +2497,12 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif state == "video_desc":
         await save_video_desc(update, context)
-
-    elif state == "video_image":
-        # Manejar imagen opcional después de descripción
-        if update.message.photo:
-            context.user_data["video_image"] = update.message.photo[-1].file_id
-            await update.message.reply_text(
-                "✅ Imagen recibida. Ahora envíame el link del video:",
-                reply_markup=back_to_menu_keyboard()
-            )
-            context.user_data["state"] = "video_link"
-        else:
-            await update.message.reply_text(
-                "⚠️ Por favor envía una foto o pulsa '⏭️ Saltar imagen'.",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton(
-                        "⏭️ Saltar imagen", callback_data="skip_image")]
-                ])
-            )
+        # 👇 CAMBIO: después de la descripción, pedir directamente el link
+        await update.message.reply_text(
+            "🔗 Ahora envíame el link del video:",
+            reply_markup=back_to_menu_keyboard()
+        )
+        context.user_data["state"] = "video_link"
 
     elif state == "video_link":
         await save_video_link(update, context)
