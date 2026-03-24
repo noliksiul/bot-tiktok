@@ -781,7 +781,7 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tipo = context.user_data.get("video_tipo", "Normal")
     titulo = context.user_data.get("video_title", "")
     descripcion = context.user_data.get("video_desc", "")
-    img = context.user_data.get("video_image")  # ✅ siempre esperamos imagen
+    img = context.user_data.get("video_image")  # opcional
 
     async with async_session() as session:
         res = await session.execute(select(User).where(User.telegram_id == user_id))
@@ -833,7 +833,7 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         if img:
-            # ✅ Siempre usar la imagen subida por el usuario
+            # ✅ Si el usuario subió imagen, se usa como portada
             await context.bot.send_photo(
                 chat_id=CHANNEL_ID,
                 photo=img,
@@ -842,14 +842,23 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("🌐 Ver video", url=link)]
                 ])
             )
-            await show_main_menu(update, context)
         else:
-            # ⚠️ Si no subió imagen, avisar y no publicar
-            await update.message.reply_text(
-                "⚠️ Debes subir una imagen para acompañar tu video.",
-                reply_markup=back_to_menu_keyboard()
+            # ✅ Si no hay imagen, enviar el link directamente con preview
+            await context.bot.send_message(
+                chat_id=CHANNEL_ID,
+                text=f"📢 Nuevo video ({tipo})\n{base_text}",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🌐 Ver video", url=link)]
+                ]),
+                link_preview_options=LinkPreviewOptions(
+                    is_disabled=False,
+                    url=link,
+                    prefer_large_media=True,
+                    show_above_text=True
+                )
             )
-            return
+
+        await show_main_menu(update, context)
 
     except Exception as e:
         print("Aviso: no se pudo publicar en el canal:", e)
@@ -857,9 +866,9 @@ async def save_video_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 🔄 Resetear estado y datos
     context.user_data.clear()
     context.user_data["state"] = None
-
-
 # 👇 ESTA FUNCIÓN VA AFUERA, NO DENTRO DEL except
+
+
 async def handle_uploaded_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get("state") == "video_image":
         if update.message.photo:
