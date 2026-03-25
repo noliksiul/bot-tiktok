@@ -929,8 +929,7 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                 )
                 seg = res_seg.scalars().first()
                 if seg:
-                    # 👇 CAMBIO: usar send_message en vez de edit_message_text
-                    await context.bot.send_message(
+                    msg = await context.bot.send_message(
                         chat_id=chat_id,
                         text=f"👀 Seguimiento disponible:\n🗓️ {seg.created_at}\n{seg.link}",
                         reply_markup=InlineKeyboardMarkup([
@@ -946,14 +945,13 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                             show_above_text=True
                         )
                     )
-                    # Mantener la lógica de jobs
                     old_job = context.user_data.get("contenido_job")
                     if old_job:
                         old_job.schedule_removal()
                     job = context.job_queue.run_once(
                         lambda _, sid=seg.id: context.bot.edit_message_reply_markup(
                             chat_id=chat_id,
-                            message_id=query.message.message_id,
+                            message_id=msg.message_id,
                             reply_markup=InlineKeyboardMarkup([
                                 [InlineKeyboardButton(
                                     "🟡 Ya lo seguí ✅", callback_data=f"confirm_seguimiento_{sid}")],
@@ -982,7 +980,7 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                 )
                 vid = res_vid.scalars().first()
                 if vid:
-                    await context.bot.send_message(
+                    msg = await context.bot.send_message(
                         chat_id=chat_id,
                         text=f"📺 Video ({vid.tipo}):\n📌 {vid.titulo}\n📝 {vid.descripcion}\n🗓️ {vid.created_at}\n{vid.link}",
                         reply_markup=InlineKeyboardMarkup([
@@ -1004,7 +1002,7 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                     job = context.job_queue.run_once(
                         lambda _, vid_id=vid.id: context.bot.edit_message_reply_markup(
                             chat_id=chat_id,
-                            message_id=query.message.message_id,
+                            message_id=msg.message_id,
                             reply_markup=InlineKeyboardMarkup([
                                 [InlineKeyboardButton(
                                     "⭐ Ya di like y compartí", callback_data=f"confirm_video_{vid_id}")],
@@ -1035,7 +1033,7 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                 )
                 live = res_live.scalars().first()
                 if live:
-                    await context.bot.send_message(
+                    msg = await context.bot.send_message(
                         chat_id=chat_id,
                         text=(
                             f"🔴 Live disponible publicado por {live.alias or 'usuario'}\n\n"
@@ -1062,7 +1060,7 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                     job = context.job_queue.run_once(
                         lambda _, lid=live.id: context.bot.edit_message_reply_markup(
                             chat_id=chat_id,
-                            message_id=query.message.message_id,
+                            message_id=msg.message_id,
                             reply_markup=InlineKeyboardMarkup([
                                 [InlineKeyboardButton(
                                     "👀 Solo vi el live", callback_data=f"confirm_live_{lid}")],
@@ -1079,10 +1077,17 @@ async def show_contenido(update_or_query, context: ContextTypes.DEFAULT_TYPE):
                     return
 
     # --- MENSAJE FINAL SI NO HAY CONTENIDO ---
-    await query.edit_message_text(
-        text="⚠️ No hay contenido disponible por ahora.",
-        reply_markup=back_to_menu_keyboard()
-    )
+    if query:
+        await query.edit_message_text(
+            text="⚠️ No hay contenido disponible por ahora.",
+            reply_markup=back_to_menu_keyboard()
+        )
+    else:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="⚠️ No hay contenido disponible por ahora.",
+            reply_markup=back_to_menu_keyboard()
+        )
 # --- Aprobar interacción ---
 
 
