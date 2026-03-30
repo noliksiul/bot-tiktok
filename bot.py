@@ -5,7 +5,6 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 flask_app = Flask(__name__)
-
 BOT_TOKEN = "6564290496:AAFfyjhNUHMQaryJgMxK-gBNGkJX41Cay0A"
 
 # Handler para /start
@@ -30,7 +29,7 @@ async def main():
     def webhook():
         try:
             data = request.get_json(force=True)
-            print("📥 Payload recibido:", data)
+            print("📥 Payload recibido:", data)  # <-- imprime siempre el JSON
             update = Update.de_json(data, application.bot)
             application.update_queue.put_nowait(update)
             print("📩 Update encolado correctamente")
