@@ -776,7 +776,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- Main con Webhook ---
 
 
-def main():
+async def main():
     application = Application.builder().token(BOT_TOKEN).build()
 
     # Handlers principales
@@ -834,10 +834,10 @@ def main():
     application.job_queue.run_repeating(
         lambda _: auto_approve_loop(application), interval=3600, first=10)
 
-    # Configurar webhook
+    # Configurar webhook con await
     port = int(os.environ.get("PORT", 5000))
     webhook_url = f"https://{RENDER_EXTERNAL_HOSTNAME}/webhook"
-    application.bot.set_webhook(url=webhook_url)
+    await application.bot.set_webhook(url=webhook_url)
 
     # Endpoint Flask para recibir updates
     @flask_app.route("/webhook", methods=["POST"])
@@ -849,7 +849,6 @@ def main():
     # Levantar Flask
     flask_app.run(host="0.0.0.0", port=port)
 
-
 # --- Ejecución ---
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
