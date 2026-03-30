@@ -4,10 +4,9 @@ from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-# Flask app
 flask_app = Flask(__name__)
 
-# Tu token de bot (lo ideal es ponerlo como variable de entorno en Render)
+# Usa tu token directamente (aunque lo ideal es variable de entorno)
 BOT_TOKEN = "6564290496:AAFfyjhNUHMQaryJgMxK-gBNGkJX41Cay0A"
 
 # Handler de /start
@@ -19,8 +18,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def main():
     application = Application.builder().token(BOT_TOKEN).build()
-
-    # Registrar handler
     application.add_handler(CommandHandler("start", start))
 
     # Endpoint Flask para recibir updates
@@ -28,14 +25,15 @@ async def main():
     def webhook():
         update = Update.de_json(request.get_json(force=True), application.bot)
         application.update_queue.put_nowait(update)
+        print("📩 Update recibido:", update.to_dict())  # logging extra
         return "ok", 200
 
     # Configurar webhook explícito con tu dominio de Render
-    port = int(os.environ.get("PORT", 5000))
     webhook_url = "https://bot-tiktok-8d3y.onrender.com/webhook"
     await application.bot.set_webhook(url=webhook_url)
 
     # Levantar Flask
+    port = int(os.environ.get("PORT", 5000))
     flask_app.run(host="0.0.0.0", port=port)
 
 if __name__ == "__main__":
