@@ -672,67 +672,7 @@ async def save_live_link(update: Update, context: ContextTypes.DEFAULT_TYPE, tip
         )
         session.add(live)
 
-        # ✅ Descontar puntos solo si hay saldo suficiente
-        u.balance = (u.balance or 0) - costo
-        mov = Movimiento(
-            telegram_id=user_id,
-            detalle=f"Subir live ({tipo})",
-            puntos=-costo
-        )
-        session.add(mov)
-
-        await session.commit()
-
-    # ✅ Publicar en el canal con preview + botón llamativo
-    try:
-        await context.bot.send_message(
-            chat_id=CHANNEL_ID,
-            text=(
-                f"🔴 Nuevo live publicado por {u.tiktok_user}\n\n"
-                f"⏳ Permanece al menos 2.5 minutos en el live\n\n"
-                f"{link}"   # ⚠️ Esto activa la imagen de previsualización automática
-            ),
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(
-                    "👉🚀 Entrar aquí 🔴✨", callback_data=f"abrir_live_{live.id}")],
-                [InlineKeyboardButton(
-                    "🔙 Regresar al menú principal", callback_data="menu_principal")]
-            ])
-        )
-    except Exception as e:
-        print("No se pudo publicar en el canal:", e)
-    # ✅ Si es personalizado, notificar a todos los usuarios
-    if tipo == "personalizado":
-        async with async_session() as session:
-            res = await session.execute(select(User.telegram_id).where(User.telegram_id != user_id))
-            todos = res.scalars().all()
-            for uid in todos:
-                try:
-                    live_link = link.strip()
-                    if not live_link.startswith("http"):
-                        live_link = "https://" + live_link
-
-                    await context.bot.send_message(
-                        chat_id=uid,
-                        text=(
-                            f"📢 Mensaje personalizado de {u.tiktok_user}:\n\n"
-                            f"⏳ Permanece al menos 2.5 minutos en el live\n\n"
-                            # ⚠️ Link en línea sola para activar la imagen de previsualización
-                            f"{live_link}\n"
-                        ),
-                        reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton(
-                                "👉🚀 Entrar aquí 🔴✨", callback_data=f"abrir_live_{live.id}")],
-                            [InlineKeyboardButton(
-                                "🔙 Regresar al menú principal", callback_data="menu_principal")]
-                        ])
-                    )
-                except Exception as e:
-                    print(f"No se pudo notificar a {uid}: {e}")
-
-    # ✅ Confirmación al dueño del live y reset de estado
-    await update.message.reply_text("✅ Live registrado y notificado.", reply_markup=back_to_menu_keyboard())
-    context.user_data["state"] = None
+        # ✅ Descontar puntos
 # --- Subir video: flujo por pasos ---
 
 
