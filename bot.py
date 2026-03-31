@@ -1,9 +1,23 @@
 import os
 import requests
 from flask import Flask, request
+from bs4 import BeautifulSoup
 
 flask_app = Flask(__name__)
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
+
+
+def get_tiktok_thumbnail(url):
+    """Intenta extraer la miniatura real del video desde og:image"""
+    try:
+        resp = requests.get(url, timeout=10)
+        soup = BeautifulSoup(resp.text, "html.parser")
+        og_image = soup.find("meta", property="og:image")
+        if og_image and og_image["content"]:
+            return og_image["content"]
+    except Exception as e:
+        print("❌ Error extrayendo miniatura:", e)
+    return None
 
 
 @flask_app.route("/webhook", methods=["POST"])
@@ -17,8 +31,10 @@ def webhook():
 
         if text == "/link":
             url_link = "https://vt.tiktok.com/ZSmvnSQDg/"
+            reply_markup = {"inline_keyboard": [
+                [{"text": "Entrar al link 🔗", "url": url_link}]]}
 
-            # Forma 1: Link directo (Telegram intenta mostrar miniatura automática)
+            # Forma 1: Link directo (Telegram intenta preview automática)
             requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={
                 "chat_id": chat_id,
                 "text": f"🔗 Link directo:\n{url_link}",
@@ -26,9 +42,6 @@ def webhook():
             })
 
             # Forma 2: Texto + botón
-            reply_markup = {
-                "inline_keyboard": [[{"text": "Entrar al link 🔗", "url": url_link}]]
-            }
             requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={
                 "chat_id": chat_id,
                 "text": "👉 Con botón al enlace",
@@ -36,7 +49,7 @@ def webhook():
                 "disable_web_page_preview": False
             })
 
-            # Forma 3: Foto personalizada como miniatura
+            # Forma 3: Foto personalizada (miniatura fija)
             photo_url = "https://upload.wikimedia.org/wikipedia/commons/0/08/TikTok_logo.png"
             requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto", json={
                 "chat_id": chat_id,
@@ -45,7 +58,7 @@ def webhook():
                 "reply_markup": reply_markup
             })
 
-            # Forma 4: Texto con título y descripción manual
+            # Forma 4: Título + descripción manual
             requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={
                 "chat_id": chat_id,
                 "text": f"🎬 Video destacado\nTítulo: Mimo\nDescripción: Prueba de miniatura\n{url_link}",
@@ -53,7 +66,17 @@ def webhook():
                 "disable_web_page_preview": False
             })
 
-            # Forma 5: Usar sendMediaGroup (varias fotos con el mismo link)
+            # Forma 5: Scraping og:image (miniatura real si se logra extraer)
+            thumb = get_tiktok_thumbnail(url_link)
+            if thumb:
+                requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto", json={
+                    "chat_id": chat_id,
+                    "photo": thumb,
+                    "caption": f"🎬 Miniatura real extraída\n{url_link}",
+                    "reply_markup": reply_markup
+                })
+
+            # Forma 6: MediaGroup (álbum con varias imágenes)
             requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMediaGroup", json={
                 "chat_id": chat_id,
                 "media": [
