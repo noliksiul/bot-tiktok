@@ -18,7 +18,7 @@ def webhook():
         if text == "/link":
             url_link = "https://vt.tiktok.com/ZSmvnSQDg/"
 
-            # Forma 1: Enviar el link directo (Telegram intenta mostrar miniatura)
+            # Forma 1: Link directo (Telegram intenta mostrar miniatura automática)
             requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={
                 "chat_id": chat_id,
                 "text": f"🔗 Link directo:\n{url_link}",
@@ -36,20 +36,30 @@ def webhook():
                 "disable_web_page_preview": False
             })
 
-            # Forma 3: Usar sendPhoto con el link como caption
-            # aquí puedes poner una imagen fija
-            photo_url = "https://p16-sign-va.tiktokcdn.com/tos-maliva-p-0068/..."
+            # Forma 3: Foto personalizada como miniatura
+            photo_url = "https://upload.wikimedia.org/wikipedia/commons/0/08/TikTok_logo.png"
             requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto", json={
                 "chat_id": chat_id,
                 "photo": photo_url,
-                "caption": f"🎬 Vista previa personalizada\n{url_link}"
+                "caption": f"🎬 Miniatura personalizada\n{url_link}",
+                "reply_markup": reply_markup
             })
 
             # Forma 4: Texto con título y descripción manual
             requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={
                 "chat_id": chat_id,
                 "text": f"🎬 Video destacado\nTítulo: Mimo\nDescripción: Prueba de miniatura\n{url_link}",
+                "reply_markup": reply_markup,
                 "disable_web_page_preview": False
+            })
+
+            # Forma 5: Usar sendMediaGroup (varias fotos con el mismo link)
+            requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMediaGroup", json={
+                "chat_id": chat_id,
+                "media": [
+                    {"type": "photo", "media": photo_url,
+                        "caption": f"📸 Grupo de medios\n{url_link}"}
+                ]
             })
 
     return "ok", 200
