@@ -5,32 +5,24 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 flask_app = Flask(__name__)
-BOT_TOKEN = "6564290496:AAFfyjhNUHMQaryJgMxK-gBNGkJX41Cay0A"
-
-# Handler para /start
+BOT_TOKEN = "TU_TOKEN_AQUI"
 
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("✅ Handler /start activado")
-
-    # URL que quieres mostrar
+async def link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = "https://vt.tiktok.com/ZSmTVyyLR/"
-
-    # Botón con el link
     keyboard = [[InlineKeyboardButton("Entrar al link 🔗", url=url)]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # Mensaje con vista previa y botón
     await update.message.reply_text(
-        f"👉 Aquí está tu enlace:\n{url}",
+        f"Aquí está tu enlace:\n{url}",
         reply_markup=reply_markup,
-        disable_web_page_preview=False  # esto activa la miniatura/vista previa
+        disable_web_page_preview=False  # intenta mostrar miniatura si Telegram lo permite
     )
 
 
 async def main():
     application = Application.builder().token(BOT_TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("link", link))
 
     @flask_app.route("/webhook", methods=["POST"])
     def webhook():
