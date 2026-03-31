@@ -1,32 +1,50 @@
 import os
-import requests
+import asyncio
 from flask import Flask, request
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, ContextTypes
 
 flask_app = Flask(__name__)
 BOT_TOKEN = "6564290496:AAFfyjhNUHMQaryJgMxK-gBNGkJX41Cay0A"
 
-# Endpoint para recibir updates
+# Handler para /start
 
 
-@flask_app.route("/webhook", methods=["POST"])
-def webhook():
-    data = request.get_json(force=True)
-    print("📥 Payload recibido:", data)  # imprime todo el JSON
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("✅ Handler /start activado")
 
-    # Si el update contiene un mensaje
-    if "message" in data and "text" in data["message"]:
-        chat_id = data["message"]["chat"]["id"]
-        text = data["message"]["text"]
-        print(f"📩 Mensaje recibido: {text}")
+    # URL que quieres mostrar
+    url = "https://vt.tiktok.com/ZSmTVyyLR/"
 
-        # Responder al usuario
-        reply = "✅ ¡Webhook directo funcionando en Render!"
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        requests.post(url, json={"chat_id": chat_id, "text": reply})
+    # Botón con el link
+    keyboard = [[InlineKeyboardButton("Entrar al link 🔗", url=url)]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
-    return "ok", 200
+    # Mensaje con vista previa y botón
+    await update.message.reply_text(
+        f"👉 Aquí está tu enlace:\n{url}",
+        reply_markup=reply_markup,
+        disable_web_page_preview=False  # esto activa la miniatura/vista previa
+    )
 
 
-if __name__ == "__main__":
+async def main():
+    application = Application.builder().token(BOT_TOKEN).build()
+    application.add_handler(CommandHandler("start", start))
+
+    @flask_app.route("/webhook", methods=["POST"])
+    def webhook():
+        update = Update.de_json(request.get_json(force=True), application.bot)
+        application.update_queue.put_nowait(update)
+        print("📩 Update recibido:", update.to_dict())
+        return "ok", 200
+
+    webhook_url = "https://bot-tiktok-8d3y.onrender.com/webhook"
+    await application.bot.set_webhook(url=webhook_url)
+    print(f"🔗 Webhook configurado en: {webhook_url}")
+
     port = int(os.environ.get("PORT", 5000))
     flask_app.run(host="0.0.0.0", port=port)
+
+if __name__ == "__main__":
+    asyncio.run(main())
