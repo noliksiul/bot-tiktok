@@ -1,42 +1,33 @@
 import os
-import asyncio
+import requests
 from flask import Flask, request
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, ContextTypes
 
 flask_app = Flask(__name__)
-BOT_TOKEN = "TU_TOKEN_AQUI"
+BOT_TOKEN = os.environ.get("BOT_TOKEN")  # usa variable de entorno en Render
+
+# Handler para /start
 
 
-async def link(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    url = "https://vt.tiktok.com/ZSmTVyyLR/"
-    keyboard = [[InlineKeyboardButton("Entrar al link 🔗", url=url)]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+@flask_app.route("/webhook", methods=["POST"])
+def webhook():
+    data = request.get_json(force=True)
+    print("📥 Payload recibido:", data)
 
-    await update.message.reply_text(
-        f"Aquí está tu enlace:\n{url}",
-        reply_markup=reply_markup,
-        disable_web_page_preview=False  # intenta mostrar miniatura si Telegram lo permite
-    )
+    if "message" in data and "text" in data["message"]:
+        chat_id = data["message"]["chat"]["id"]
+        text = data["message"]["text"]
 
+        if text == "/start":
+            reply = "✅ ¡Webhook directo funcionando en Render!"
+        else:
+            reply = f"Echo: {text}"
 
-async def main():
-    application = Application.builder().token(BOT_TOKEN).build()
-    application.add_handler(CommandHandler("link", link))
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        requests.post(url, json={"chat_id": chat_id, "text": reply})
 
-    @flask_app.route("/webhook", methods=["POST"])
-    def webhook():
-        update = Update.de_json(request.get_json(force=True), application.bot)
-        application.update_queue.put_nowait(update)
-        print("📩 Update recibido:", update.to_dict())
-        return "ok", 200
+    return "ok", 200
 
-    webhook_url = "https://bot-tiktok-8d3y.onrender.com/webhook"
-    await application.bot.set_webhook(url=webhook_url)
-    print(f"🔗 Webhook configurado en: {webhook_url}")
-
-    port = int(os.environ.get("PORT", 5000))
-    flask_app.run(host="0.0.0.0", port=port)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    port = int(os.environ.get("PORT", 5000))
+    flask_app.run(host="0.0.0.0", port=port)
