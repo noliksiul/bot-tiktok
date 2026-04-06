@@ -6,10 +6,10 @@ from bs4 import BeautifulSoup
 flask_app = Flask(__name__)
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
-# Intenta extraer miniatura real del video (og:image)
+# Extrae miniatura real de un enlace (si tiene og:image)
 
 
-def get_tiktok_thumbnail(url):
+def get_thumbnail(url):
     try:
         resp = requests.get(url, timeout=10)
         soup = BeautifulSoup(resp.text, "html.parser")
@@ -33,70 +33,83 @@ def webhook():
         if text == "/start":
             requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={
                 "chat_id": chat_id,
-                "text": "✅ ¡Webhook directo funcionando en Render!"
+                "text": "✅ ¡Webhook funcionando en Render!"
             })
 
         elif text == "/link":
-            url_link = "https://vt.tiktok.com/ZSmvnSQDg/"
-            reply_markup = {"inline_keyboard": [
-                [{"text": "Entrar al link 🔗", "url": url_link}]]}
+            # Enlaces a probar
+            tiktok_link = "https://vt.tiktok.com/ZSmvnSQDg/"
+            youtube_link = "https://www.youtube.com/watch?v=MDHfHuynUnE&list=RDMDHfHuynUnE&start_radio=1"
 
-            # Forma 1: Link directo (Telegram intenta preview, casi nunca funciona)
+            # Botón común
+            def button(url):
+                return {"inline_keyboard": [[{"text": "Entrar al link 🔗", "url": url}]]}
+
+            # --- TikTok ---
+            # Forma 1: Link directo
             requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={
                 "chat_id": chat_id,
-                "text": f"1️⃣ Link directo:\n{url_link}",
+                "text": f"1️⃣ TikTok Link directo:\n{tiktok_link}",
                 "disable_web_page_preview": False,
-                "reply_markup": reply_markup
+                "reply_markup": button(tiktok_link)
             })
 
             # Forma 2: Texto + botón
             requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={
                 "chat_id": chat_id,
-                "text": "2️⃣ Texto con botón al enlace",
-                "reply_markup": reply_markup
+                "text": "2️⃣ TikTok Texto con botón",
+                "reply_markup": button(tiktok_link)
             })
 
             # Forma 3: Foto personalizada fija
-            photo_url = "https://upload.wikimedia.org/wikipedia/commons/0/08/TikTok_logo.png"
             requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto", json={
                 "chat_id": chat_id,
-                "photo": photo_url,
-                "caption": f"3️⃣ Miniatura personalizada\n{url_link}",
-                "reply_markup": reply_markup
+                "photo": "https://upload.wikimedia.org/wikipedia/commons/0/08/TikTok_logo.png",
+                "caption": f"3️⃣ TikTok Miniatura personalizada\n{tiktok_link}",
+                "reply_markup": button(tiktok_link)
             })
 
-            # Forma 4: Scraping og:image (si TikTok lo permite)
-            thumb = get_tiktok_thumbnail(url_link)
-            if thumb:
+            # Forma 4: Scraping og:image
+            thumb_tiktok = get_thumbnail(tiktok_link)
+            if thumb_tiktok:
                 requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto", json={
                     "chat_id": chat_id,
-                    "photo": thumb,
-                    "caption": f"4️⃣ Miniatura real extraída\n{url_link}",
-                    "reply_markup": reply_markup
+                    "photo": thumb_tiktok,
+                    "caption": f"4️⃣ TikTok Miniatura real extraída\n{tiktok_link}",
+                    "reply_markup": button(tiktok_link)
                 })
             else:
                 requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={
                     "chat_id": chat_id,
-                    "text": "4️⃣ No se pudo extraer miniatura real",
-                    "reply_markup": reply_markup
+                    "text": "4️⃣ TikTok no permitió extraer miniatura",
+                    "reply_markup": button(tiktok_link)
                 })
 
-            # Forma 5: Imagen servida desde tu servidor (Render)
-            requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto", json={
+            # --- YouTube ---
+            # Forma 1: Link directo (Telegram sí genera preview)
+            requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={
                 "chat_id": chat_id,
-                "photo": "https://tu-app.onrender.com/static/miniatura.jpg",
-                "caption": f"5️⃣ Miniatura desde servidor\n{url_link}",
-                "reply_markup": reply_markup
+                "text": f"1️⃣ YouTube Link directo:\n{youtube_link}",
+                "disable_web_page_preview": False,
+                "reply_markup": button(youtube_link)
             })
 
-            # Forma 6: MediaGroup (álbum con varias imágenes)
-            requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMediaGroup", json={
+            # Forma 2: Texto + botón
+            requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={
                 "chat_id": chat_id,
-                "media": [
-                    {"type": "photo", "media": photo_url,
-                        "caption": f"6️⃣ Grupo de medios\n{url_link}"}
-                ]
+                "text": "2️⃣ YouTube Texto con botón",
+                "reply_markup": button(youtube_link)
             })
+
+            # Forma 3: Scraping og:image (miniatura real del video)
+            thumb_youtube = get_thumbnail(youtube_link)
+            if thumb_youtube:
+                requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto", json={
+                    "chat_id": chat_id,
+                    "photo": thumb_youtube,
+                    "caption": f"3️⃣ YouTube Miniatura real extraída\n{youtube_link}",
+                    "reply_markup": button(youtube_link)
+                })
 
     return "ok", 200
 
