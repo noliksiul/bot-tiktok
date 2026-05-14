@@ -488,7 +488,6 @@ def main():
         decision_arbitraje, pattern="^(aprobar|rechazar)$"))
 
     # Arranca Flask en paralelo
-    from threading import Thread
     Thread(target=lambda: app.run(host="0.0.0.0",
            port=int(os.environ.get("PORT", 10000)))).start()
 
@@ -499,3 +498,7 @@ def main():
         url_path=TOKEN,
         webhook_url=f"https://bot-tiktok-8d3y.onrender.com/{TOKEN}"
     )
+
+
+if __name__ == "__main__":
+    main()
