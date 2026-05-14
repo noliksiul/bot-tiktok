@@ -488,11 +488,7 @@ def main():
     application.add_handler(CallbackQueryHandler(
         decision_arbitraje, pattern="^(aprobar|rechazar)$"))
 
-    # Arranca Flask en paralelo
-    Thread(target=lambda: app.run(host="0.0.0.0",
-           port=int(os.environ.get("PORT", 10000)))).start()
-
-    # Arranca el bot con webhook
+    # Arranca el bot con webhook (sin Flask)
     application.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 10000)),
