@@ -17,7 +17,7 @@ import psycopg2.extras
 
 # Token y conexión a PostgreSQL (fijos)
 TOKEN = "6564290496:AAFfyjhNUHMQaryJgMxK-gBNGkJX41Cay0A"
-DATABASE_URL = "postgresql://base1_ufc1_user:GJ1zrLRgzKzGepMpHzsYBPrvPm8hcAus@dpg-d82gkghj2pic73ah6m70-a/base1_ufc1"
+DATABASE_URL = "postgresql://base1_ufc1_user:GJ1zrLRgzKzGepMpHzsYBPrvPm8hcAus@dpg-d82gkghj2pic73ah6m70-a/base1_ufc1?sslmode=require"
 
 # --- Canal y grupo ---
 CHANNEL_ID = -1003468913370   # 👈 Canal principal de videos
