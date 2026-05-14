@@ -15,9 +15,18 @@ from telegram.ext import (
 import psycopg2
 import psycopg2.extras
 
-# Variables de entorno (Render)
-TOKEN = os.getenv("TOKEN")
-DATABASE_URL = os.getenv("DATABASE_URL")
+# Token y conexión a PostgreSQL (fijos)
+TOKEN = "6564290496:AAFfyjhNUHMQaryJgMxK-gBNGkJX41Cay0A"
+DATABASE_URL = "postgresql://base1_ufc1_user:GJ1zrLRgzKzGepMpHzsYBPrvPm8hcAus@dpg-d82gkghj2pic73ah6m70-a/base1_ufc1"
+
+# --- Canal y grupo ---
+CHANNEL_ID = -1003468913370   # 👈 Canal principal de videos
+GROUP_URL = "https://t.me/+9sy0_CwwjnxlOTJh"
+CHANNEL_URL = "https://t.me/apoyotiktok002"
+
+# --- Canal de ofertas TikTok Shop ---
+CHANNEL_SHOP_ID = -1003664738296   # 👈 Canal secundario para ofertas TikTok Shop
+CHANNEL_SHOP_URL = "https://t.me/ofertasimperdiblestiktokshop"
 
 # Backup / Rescate
 CONTEO_RESCATE_DATA = """
@@ -26,7 +35,6 @@ CONTEO_RESCATE_DATA = """
 
 # Flask para servidor HTTP embebido
 app = Flask(__name__)
-
 # =========================
 # MÓDULO 1b - CONEXIÓN A POSTGRESQL
 # =========================
