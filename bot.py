@@ -1,12 +1,9 @@
 # -*- coding: utf-8 -*-
 # =====================================================================
-# 📋 BOT DE APOYO MUTUO - LORD NOLIK (EDICIÓN SUPREMA COMPLETA)
-# 🔹 ARCHIVO ÚNICO: bot.py
-# 🔹 ESTATUS: PARTE 1 (Bloque 0 - Infraestructura y Datos)
+# 📋 BOT DE APOYO MUTUO - LORD NOLIK (EDICIÓN SUPREMA)
+# 🔹 ARCHIVO: bot.py | PARTE 1: Infraestructura
 # =====================================================================
 
-from telegram import Update
-from aiohttp import web
 import os
 import asyncio
 import json
@@ -24,23 +21,22 @@ from telegram.ext import (
 from telegram.request import HTTPXRequest
 
 # 🗄️ LIBRERÍAS DE BASE DE DATOS
-from sqlalchemy import Column, Integer, BigInteger, String, Text, text, UniqueConstraint, DateTime, Boolean, Float
+from sqlalchemy import Column, Integer, BigInteger, String, Text, text, UniqueConstraint, DateTime, Boolean
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
 
 # =====================================================================
-# ⚙️ CREDENCIALES Y CONFIGURACIÓN (INYECTADAS)
+# ⚙️ CREDENCIALES Y CONFIGURACIÓN (TUS DATOS)
 # =====================================================================
 TOKEN = "6564290496:AAFfyjhNUHMQaryJgMxK-gBNGkJX41Cay0A"
 DATABASE_URL = "postgresql+asyncpg://base1_ufc1_user:GJ1zrLRgzKzGepMpHzsYBPrvPm8hcAus@dpg-d82gkghj2pic73ah6m70-a/base1_ufc1"
 
-# 🔄 BLOQUE DE RESCATE (Para pegar el JSON de la base anterior si te mudas)
-CONTEO_RESCATE_DATA = """
-[]
-"""
+# 💰 VARIABLES DE ECONOMÍA (Importante para que no falle el Status 1)
+COSTO_VIDEO = 5
+PUNTOS_POR_VIDEO = 3
 
 # =====================================================================
-# 🗄️ MODELOS DE LAS TABLAS (ESTRUCTURA RENDER)
+# 🗄️ MODELOS DE LAS TABLAS (ESTRUCTURA POSTGRESQL)
 # =====================================================================
 Base = declarative_base()
 
@@ -48,7 +44,6 @@ Base = declarative_base()
 class Usuario(Base):
     __tablename__ = "users"
     telegram_id = Column(BigInteger, primary_key=True)
-    # Unicidad: 1 TikTok = 1 Telegram
     tiktok_user = Column(String(100), unique=True, nullable=True)
     balance = Column(Integer, default=10)
     es_vip = Column(Boolean, default=False)
@@ -56,9 +51,8 @@ class Usuario(Base):
     rol = Column(String(30), default="usuario")
     contador_ingresos = Column(Integer, default=1)
     referido_por = Column(BigInteger, nullable=True)
-    # Link WhatsApp/Telegram del VIP
     contacto_vip = Column(String(255), nullable=True)
-    porcentaje_regalo_vip = Column(Integer, default=0)  # 5, 10, 15, 50%
+    porcentaje_regalo_vip = Column(Integer, default=0)
     creado_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -75,39 +69,29 @@ class CampanaVideo(Base):
     __tablename__ = "videos"
     id = Column(Integer, primary_key=True, autoincrement=True)
     telegram_id = Column(BigInteger, nullable=False)
-    tipo = Column(String(50))  # normal, shop, live, evento
+    tipo = Column(String(50))
     titulo = Column(String(150))
     descripcion = Column(Text)
     link = Column(Text)
     es_propio = Column(Boolean, default=True)
-    meta_apoyo = Column(String(50))  # solo_vistas o completo
-    file_id_flyer = Column(String(255), nullable=True)  # Vista previa
+    meta_apoyo = Column(String(50))
+    file_id_flyer = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class Interaccion(Base):
     __tablename__ = "interacciones"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    tipo = Column(String(50))  # seguimiento o video
+    tipo = Column(String(50))
     item_id = Column(Integer)
     actor_id = Column(BigInteger)
     owner_id = Column(BigInteger)
-    # pending, accepted, rejected, completed
     status = Column(String(30), default="pending")
     puntos = Column(Integer)
     file_id_evidencia = Column(String(255), nullable=True)
-    token_web_terceros = Column(String(100), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     __table_args__ = (UniqueConstraint('tipo', 'item_id',
                       'actor_id', name='uix_interaccion'),)
-
-
-class Cupon(Base):
-    __tablename__ = "cupones"
-    codigo = Column(String(50), primary_key=True)
-    puntos_totales = Column(Integer)
-    cantidad_personas = Column(Integer)
-    usos_actuales = Column(Integer, default=0)
 
 
 # =====================================================================
@@ -119,19 +103,9 @@ AsyncSessionLocal = async_sessionmaker(
 
 
 async def inicializar_base_de_datos():
-    """ Crea las tablas y procesa inyección de rescate si existe """
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-
-    # Lógica de inyección de rescate (Bloque 0)
-    data_rescate = json.loads(CONTEO_RESCATE_DATA)
-    if data_rescate:
-        async with AsyncSessionLocal() as session:
-            # Aquí iría el bucle de inserción masiva de los datos rescatados
-            print("📦 Datos de rescate detectados. Procesando inyección...")
-            # (Lógica simplificada para el ejemplo)
-            await session.commit()
-    print("✅ Base de datos de Render conectada y lista.")
+    print("✅ Base de datos conectada.")
     # =====================================================================
 # 📋 BOT DE APOYO MUTUO - LORD NOLIK
 # 🔹 BLOQUE EN CURSO: PARTE 2 (Seguridad, Registro y Filtros de Comunidad)
@@ -249,7 +223,7 @@ async def manejador_mensajes(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text(f"✅ ¡TikTok `@{texto}` registrado con éxito!")
         await start(update, context)  # Re-lanzar para verificar comunidad
 
-       # =====================================================================
+        # =====================================================================
 # 📋 BOT DE APOYO MUTUO - LORD NOLIK
 # 🔹 BLOQUE EN CURSO: PARTE 3 (Menú Principal, Billetera e Historial)
 # =====================================================================
@@ -258,21 +232,16 @@ async def manejador_mensajes(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def enviar_menu_principal(update, context, tg_id):
     """ Genera el menú táctil según el rango del usuario (Admin, VIP, Regular) """
     async with AsyncSessionLocal() as session:
-        # Consultamos los datos frescos del usuario en PostgreSQL
         res = await session.execute(
             text("SELECT balance, es_vip, rol, tiktok_user, contador_ingresos FROM users WHERE telegram_id = :tid"),
             {"tid": tg_id}
         )
         user_db = res.fetchone()
-
-        if not user_db:
-            return  # Seguridad por si el usuario no existe
-
         balance, es_vip, rol, tk_user, visitas = user_db
 
-    # Estética del Menú
+    # Personalización estética
     corona = "⭐ " if es_vip else ""
-    rango_txt = str(rol).upper()
+    rango_txt = rol.upper()
 
     mensaje = (
         f"📱 **PANEL DE CONTROL {corona}**\n"
@@ -282,13 +251,13 @@ async def enviar_menu_principal(update, context, tg_id):
         f"💰 **Saldo:** `{balance}` Nolik Coins\n"
         f"📈 **Visitas al Bot:** `{visitas}`\n"
         f"━━━━━━━━━━━━━━━━━━\n"
-        "Selecciona una opción para continuar:"
+        "Selecciona una opción del menú:"
     )
 
-    # Definición de Botones Táctiles
+    # Botones Base
     botones = [
-        [InlineKeyboardButton("➕ Publicar Campaña",
-                              callback_data="crear_campana")],
+        [InlineKeyboardButton(
+            "➕ Publicar Campaña (Video/Live)", callback_data="crear_campana")],
         [InlineKeyboardButton("👀 Tareas Disponibles",
                               callback_data="ver_tareas")],
         [InlineKeyboardButton("💰 Mi Billetera e Historial",
@@ -297,32 +266,32 @@ async def enviar_menu_principal(update, context, tg_id):
             "🔗 Mis Referidos", callback_data="ver_referidos")]
     ]
 
-    # Botones para VIP
+    # Botones Exclusivos VIP
     if es_vip:
         botones.insert(2, [InlineKeyboardButton(
-            "⚙️ Configuración VIP", callback_data="config_vip")])
+            "⚙️ Configuración VIP (Regalos/Contacto)", callback_data="config_vip")])
 
-    # Botones para Staff (Admin y Subadmin)
+    # Botones Exclusivos ADMIN / SUBADMIN
     if rol in ["admin", "subadmin"]:
         botones.append([InlineKeyboardButton(
             "🛠️ Panel de Soporte / Admin", callback_data="panel_admin")])
 
-    # Enviar o Editar mensaje
+    # Responder si es mensaje nuevo o edición (callback)
     if update.callback_query:
         await update.callback_query.edit_message_text(mensaje, reply_markup=InlineKeyboardMarkup(botones), parse_mode="Markdown")
     else:
         await update.message.reply_text(mensaje, reply_markup=InlineKeyboardMarkup(botones), parse_mode="Markdown")
 
-# --- SECCIÓN DE BILLETERA (ÚLTIMOS 5 MOVIMIENTOS) ---
+# --- LÓGICA DE LA BILLETERA (ÚLTIMOS 5 MOVIMIENTOS) ---
 
 
 async def mostrar_billetera(query, tg_id):
     async with AsyncSessionLocal() as session:
-        # Obtener saldo
+        # 1. Obtener saldo actual
         res_user = await session.execute(text("SELECT balance FROM users WHERE telegram_id = :tid"), {"tid": tg_id})
         balance = res_user.scalar()
 
-        # Obtener historial filtrado por el usuario (Límite 5)
+        # 2. Obtener últimos 5 movimientos
         res_movs = await session.execute(
             text("SELECT detalle, puntos, created_at FROM movimientos WHERE telegram_id = :tid ORDER BY created_at DESC LIMIT 5"),
             {"tid": tg_id}
@@ -331,17 +300,17 @@ async def mostrar_billetera(query, tg_id):
 
     historial_txt = ""
     if not movimientos:
-        historial_txt = "_Aún no tienes movimientos registrados._"
+        historial_txt = "_No hay transacciones recientes._"
     else:
         for m in movimientos:
-            emoji = "🟢" if m[1] > 0 else "🔴"
-            fecha = m[2].strftime("%d/%m/%Y")
-            historial_txt += f"{emoji} `{m[1]}` | {m[0]} | _{fecha}_\n"
+            simbolo = "🟢" if m[1] > 0 else "🔴"
+            fecha = m[2].strftime("%d/%m/%Y %H:%M")
+            historial_txt += f"{simbolo} `{m[1]}` | {m[0]} | _{fecha}_\n"
 
     mensaje_bill = (
-        "💰 **MI BILLETERA DE NOLIK COINS**\n"
+        "💰 **MI BILLETERA E HISTORIAL**\n"
         "━━━━━━━━━━━━━━━━━━\n"
-        f"💵 **Saldo Actual:** `{balance}` coins\n\n"
+        f"💵 **Saldo Total:** `{balance}` Nolik Coins\n\n"
         "📋 **Últimos 5 Movimientos:**\n"
         f"{historial_txt}\n"
         "━━━━━━━━━━━━━━━━━━"
@@ -351,27 +320,42 @@ async def mostrar_billetera(query, tg_id):
         "🔙 Regresar al Menú", callback_data="volver_menu")]]
     await query.edit_message_text(mensaje_bill, reply_markup=InlineKeyboardMarkup(botones), parse_mode="Markdown")
 
-# --- MANEJADOR DE REFERIDOS ---
+# --- MANEJADOR DE CALLBACKS (BOTONES) ---
 
 
-async def mostrar_referidos(query, tg_id):
-    async with AsyncSessionLocal() as session:
-        res = await session.execute(text("SELECT COUNT(*) FROM users WHERE referido_por = :tid"), {"tid": tg_id})
-        total_ref = res.scalar()
+async def manejador_botones(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    tg_id = update.effective_user.id
+    data = query.data
 
-    # Feedback rápido
-    bot_obj = await query.message.edit_text("Generando link...")
-    bot_info = await query.bot.get_me()
-    link = f"https://t.me/{bot_info.username}?startapp={tg_id}"
+    if data == "ver_billetera":
+        await mostrar_billetera(query, tg_id)
 
-    txt_ref = (
-        "🔗 **SISTEMA DE AFILIADOS**\n\n"
-        f"Comparte tu link para ganar monedas de forma pasiva:\n`{link}`\n\n"
-        f"👥 **Invitados totales:** `{total_ref}`\n"
-        "🎁 *Ganas el 10% de lo que tus invitados generen.*"
-    )
-    await query.edit_message_text(txt_ref, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Volver", callback_data="volver_menu")]]), parse_mode="Markdown")
-    # =====================================================================
+    elif data == "volver_menu":
+        await enviar_menu_principal(update, context, tg_id)
+
+    elif data == "verificar_union":
+        # Re-verifica si ya se unió a los grupos
+        if await es_miembro_comunidad(context.bot, tg_id):
+            await enviar_menu_principal(update, context, tg_id)
+        else:
+            await query.answer("❌ Aún no te has unido a todos los grupos.", show_alert=True)
+
+    elif data == "ver_referidos":
+        link = f"https://t.me/{(await context.bot.get_me()).username}?startapp={tg_id}"
+        async with AsyncSessionLocal() as session:
+            res = await session.execute(text("SELECT COUNT(*) FROM users WHERE referido_por = :tid"), {"tid": tg_id})
+            total_ref = res.scalar()
+
+        txt_ref = (
+            "🔗 **SISTEMA DE REFERIDOS**\n\n"
+            f"Tu link de invitación:\n`{link}`\n\n"
+            f"👥 **Invitados totales:** `{total_ref}`\n"
+            "🎁 *Ganas el 10% de lo que ellos generen (20% si eres VIP).*"
+        )
+        await query.edit_message_text(txt_ref, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Volver", callback_data="volver_menu")]]), parse_mode="Markdown")
+        # =====================================================================
 # 📋 BOT DE APOYO MUTUO - LORD NOLIK
 # 🔹 BLOQUE EN CURSO: PARTE 4 (Creación de Campañas y Filtros de Video)
 # =====================================================================
