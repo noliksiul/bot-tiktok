@@ -5,9 +5,8 @@
 import os
 import json
 import logging
-from threading import Thread
 from datetime import datetime
-from flask import Flask, request
+from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, filters,
@@ -16,9 +15,9 @@ from telegram.ext import (
 import psycopg2
 import psycopg2.extras
 
-# Token y conexión a PostgreSQL (fijos)
+# Token y conexión a PostgreSQL (Render)
 TOKEN = "6564290496:AAFfyjhNUHMQaryJgMxK-gBNGkJX41Cay0A"
-DATABASE_URL = "postgresql://base1_ufc1_user:GJ1zrLRgzKzGepMpHzsYBPrvPm8hcAus@dpg-d82gkghj2pic73ah6m70-a.virginia-postgres.render.com/base1_ufc1"
+DATABASE_URL = "postgresql://base1_ufc1_user:GJ1zrLRgzKzGepMpHzsYBPrvPm8hcAus@dpg-d82gkghj2pic73ah6m70-a.virginia-postgres.render.com/base1_ufc1?sslmode=require"
 
 # --- Canal y grupo ---
 CHANNEL_ID = -1003468913370   # 👈 Canal principal de videos
@@ -34,8 +33,9 @@ CONTEO_RESCATE_DATA = """
 [AQUÍ SE PEGA EL JSON RECUPERADO SI MIGRAS]
 """
 
-# Flask para servidor HTTP embebido
+# Flask solo para endpoints extra (no usa el mismo puerto del webhook)
 app = Flask(__name__)
+
 # =========================
 # MÓDULO 1b - CONEXIÓN A POSTGRESQL
 # =========================
