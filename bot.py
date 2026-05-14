@@ -472,7 +472,7 @@ def nomina_staff():
 
 def main():
     logging.basicConfig(level=logging.INFO)
-    init_tables()  # Inicializa las tablas en PostgreSQL
+    init_tables()
 
     application = Application.builder().token(TOKEN).build()
 
@@ -481,22 +481,21 @@ def main():
     application.add_handler(CommandHandler("billetera", billetera))
     application.add_handler(CommandHandler("tareas", listar_tareas))
     application.add_handler(CommandHandler("soporte", panel_subadmin))
-
-    # Conversación de publicación de videos
     application.add_handler(publicar_handler)
-
-    # Evidencias y arbitraje
     application.add_handler(MessageHandler(filters.PHOTO, recibir_evidencia))
     application.add_handler(CommandHandler("arbitraje", arbitraje))
     application.add_handler(CallbackQueryHandler(
         decision_arbitraje, pattern="^(aprobar|rechazar)$"))
 
-    # Arranca Flask y Bot en paralelo
+    # Arranca Flask en paralelo
     from threading import Thread
-    Thread(target=lambda: app.run(host="0.0.0.0", port=10000)).start()
+    Thread(target=lambda: app.run(host="0.0.0.0",
+           port=int(os.environ.get("PORT", 10000)))).start()
 
-    application.run_polling()
-
-
-if __name__ == "__main__":
-    main()
+    # Arranca el bot con webhook
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.environ.get("PORT", 10000)),
+        url_path=TOKEN,
+        webhook_url=f"https://bot-tiktok-8d3y.onrender.com/{TOKEN}"
+    )
