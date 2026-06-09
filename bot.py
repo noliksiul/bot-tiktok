@@ -196,12 +196,16 @@ def webhook():
     return "ok"
 
 
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(init_db())  # crea tablas al iniciar
-    application.run_webhook(
+async def main():
+    # Inicializa DB
+    await init_db()
+    # Arranca webhook
+    await application.run_webhook(
         listen="0.0.0.0",
         port=int(os.getenv("PORT", 5000)),
         url_path=TOKEN,
         webhook_url=f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
     )
+
+if __name__ == "__main__":
+    asyncio.run(main())
