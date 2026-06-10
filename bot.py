@@ -6,7 +6,7 @@ from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, filters
 
-# Configuración desde variables de entorno
+# Variables de entorno
 TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_APOYO_ID = int(os.getenv("CHANNEL_APOYO_ID"))
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.INFO)
 app = Flask(__name__)
 application = Application.builder().token(TOKEN).build()
 
-# Inicializar tablas al arrancar
+# Crear tablas
 
 
 async def init_db():
@@ -62,8 +62,6 @@ async def init_db():
     );
     """)
     await conn.close()
-
-# Conexión rápida
 
 
 async def get_db():
@@ -166,10 +164,8 @@ async def mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     INSERT INTO videos (user_id, link)
                     VALUES ($1, $2)
                 """, user["id"], texto)
-                # Publicar en canal
                 await application.bot.send_message(chat_id=CHANNEL_APOYO_ID, text=f"🎥 Nuevo video subido: {texto}")
                 await update.message.reply_text("🎥 Video guardado y enviado al canal.")
-                # Registrar movimiento
                 await conn.execute("""
                     INSERT INTO movimientos (user_id, descripcion, puntos)
                     VALUES ($1, $2, $3)
@@ -198,5 +194,5 @@ def webhook():
 
 
 if __name__ == "__main__":
-    asyncio.run(init_db())  # crea tablas al iniciar
+    asyncio.run(init_db())
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
