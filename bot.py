@@ -22,23 +22,25 @@ application = Application.builder().token(TOKEN).build()
 async def init_db():
     conn = await asyncpg.connect(DATABASE_URL)
     await conn.execute("""
-    CREATE TABLE IF NOT EXISTS users (
+    DROP TABLE IF EXISTS movimientos CASCADE;
+    DROP TABLE IF EXISTS videos CASCADE;
+    DROP TABLE IF EXISTS users CASCADE;
+
+    CREATE TABLE users (
         id BIGSERIAL PRIMARY KEY,
         telegram_id BIGINT UNIQUE NOT NULL,
         tiktok_user TEXT UNIQUE NOT NULL,
         puntos NUMERIC DEFAULT 0
     );
-    """)
-    await conn.execute("""
-    CREATE TABLE IF NOT EXISTS videos (
+
+    CREATE TABLE videos (
         id BIGSERIAL PRIMARY KEY,
         user_id BIGINT REFERENCES users(id),
         link TEXT NOT NULL,
         fecha TIMESTAMP DEFAULT NOW()
     );
-    """)
-    await conn.execute("""
-    CREATE TABLE IF NOT EXISTS movimientos (
+
+    CREATE TABLE movimientos (
         id BIGSERIAL PRIMARY KEY,
         user_id BIGINT REFERENCES users(id),
         descripcion TEXT,
@@ -154,7 +156,7 @@ application.add_handler(MessageHandler(
     filters.TEXT & ~filters.COMMAND, mensaje))
 application.add_handler(CallbackQueryHandler(button))
 
-# 🔑 Flask endpoint para WebApp "Ganar Monedas"
+# Flask endpoint para WebApp "Ganar Monedas"
 
 
 @app.route("/")
@@ -178,7 +180,7 @@ def index():
     return render_template_string(html)
 
 
-# 🔑 Bloque main
+# Bloque main
 if __name__ == "__main__":
     asyncio.get_event_loop().run_until_complete(init_db())
 
