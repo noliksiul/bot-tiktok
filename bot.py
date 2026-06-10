@@ -200,7 +200,7 @@ def webhook():
 async def main():
     # Inicializa las tablas
     await init_db()
-    # Arranca el webhook
+    # Arranca el webhook (este método es asíncrono en v20+)
     await application.run_webhook(
         listen="0.0.0.0",
         port=int(os.getenv("PORT", 5000)),
@@ -209,4 +209,5 @@ async def main():
     )
 
 if __name__ == "__main__":
+    # Aquí sí usamos asyncio.run() UNA sola vez
     asyncio.run(main())
