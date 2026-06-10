@@ -201,13 +201,16 @@ async def main():
     # Inicializa las tablas
     await init_db()
     # Arranca el webhook (este método es asíncrono en v20+)
-    await application.run_webhook(
+    await application.initialize()
+    await application.start()
+    await application.updater.start_webhook(
         listen="0.0.0.0",
         port=int(os.getenv("PORT", 5000)),
         url_path=TOKEN,
         webhook_url=f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
     )
+    # Mantener el loop corriendo
+    await application.updater.idle()
 
 if __name__ == "__main__":
-    # Aquí sí usamos asyncio.run() UNA sola vez
     asyncio.run(main())
