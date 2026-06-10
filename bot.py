@@ -1,4 +1,3 @@
-import os
 import logging
 import asyncpg
 import asyncio
@@ -6,15 +5,10 @@ from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, CommandHandler, filters
 
-# Variables de entorno con valores por defecto
-TOKEN = os.getenv("BOT_TOKEN", "")
-CHANNEL_APOYO_ID = int(os.getenv("CHANNEL_APOYO_ID", "-1001234567890"))
-DATABASE_URL = os.getenv("DATABASE_URL", "")
-
-if not TOKEN:
-    raise RuntimeError("⚠️ Debes definir BOT_TOKEN en Render")
-if not DATABASE_URL:
-    raise RuntimeError("⚠️ Debes definir DATABASE_URL en Render")
+# 🔑 Credenciales integradas
+TOKEN = "6564290496:AAFfyjhNUHMQaryJgMxK-gBNGkJX41Cay0A"
+CHANNEL_APOYO_ID = -1001234567890
+DATABASE_URL = "postgresql://base1_ufc1_user:GJ1zrLRgzKzGepMpHzsYBPrvPm8hcAus@dpg-d82gkghj2pic73ah6m70-a.virginia-postgres.render.com/base1_ufc1?sslmode=require"
 
 logging.basicConfig(level=logging.INFO)
 
@@ -166,14 +160,19 @@ def webhook():
     return "ok"
 
 
-# 🔑 Bloque main con webhook
+# 🔑 Bloque main
 if __name__ == "__main__":
     asyncio.run(init_db())  # crea tablas al iniciar
 
-    # Arrancar el bot en modo webhook
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.getenv("PORT", 5000)),
-        url_path=TOKEN,
-        webhook_url=f"https://bot-tiktok-8d3y.onrender.com/{TOKEN}"
-    )
+    # Arrancar Flask en un hilo paralelo
+    import threading
+
+    def run_flask():
+        app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
+    threading.Thread(target=run_flask).start()
+
+    # Arrancar el bot
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(application.start())
+    loop.run_forever()
