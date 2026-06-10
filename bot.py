@@ -1,8 +1,6 @@
-import os
 import logging
 import asyncpg
 import asyncio
-import threading
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, CommandHandler, filters
@@ -14,7 +12,6 @@ DATABASE_URL = "postgresql://base1_ufc1_user:GJ1zrLRgzKzGepMpHzsYBPrvPm8hcAus@dp
 
 logging.basicConfig(level=logging.INFO)
 
-app = Flask(__name__)
 application = Application.builder().token(TOKEN).build()
 
 # Crear tablas
@@ -152,28 +149,14 @@ application.add_handler(MessageHandler(
     filters.TEXT & ~filters.COMMAND, mensaje))
 application.add_handler(CallbackQueryHandler(button))
 
-# Webhook Flask
-
-
-@app.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
-    application.update_queue.put_nowait(update)
-    return "ok"
-
-
 # 🔑 Bloque main
 if __name__ == "__main__":
     asyncio.run(init_db())  # crea tablas al iniciar
 
-    # Arrancar Flask en un hilo paralelo
-    def run_flask():
-        app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
-
-    threading.Thread(target=run_flask).start()
-
-    # Crear un loop nuevo para el bot
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(application.start())
-    loop.run_forever()
+    # Arrancar el bot en modo webhook (sin Flask extra)
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.getenv("PORT", 5000)),
+        url_path=TOKEN,
+        webhook_url=f"https://bot-tiktok-8d3y.onrender.com/{TOKEN}"
+    )
