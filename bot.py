@@ -6,18 +6,14 @@ from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, filters
 
-# Variables de entorno
 TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_APOYO_ID = int(os.getenv("CHANNEL_APOYO_ID"))
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 logging.basicConfig(level=logging.INFO)
 
-# Flask para webhook
 app = Flask(__name__)
 application = Application.builder().token(TOKEN).build()
-
-# Crear tablas
 
 
 async def init_db():
@@ -36,19 +32,6 @@ async def init_db():
         id BIGSERIAL PRIMARY KEY,
         user_id BIGINT REFERENCES users(id),
         link TEXT NOT NULL,
-        titulo TEXT,
-        descripcion TEXT,
-        fecha TIMESTAMP DEFAULT NOW()
-    );
-    """)
-    await conn.execute("""
-    CREATE TABLE IF NOT EXISTS interacciones (
-        id BIGSERIAL PRIMARY KEY,
-        user_id BIGINT REFERENCES users(id),
-        video_id BIGINT REFERENCES videos(id),
-        tipo TEXT,
-        estado TEXT DEFAULT 'pendiente',
-        puntos NUMERIC DEFAULT 0,
         fecha TIMESTAMP DEFAULT NOW()
     );
     """)
@@ -67,8 +50,6 @@ async def init_db():
 async def get_db():
     return await asyncpg.connect(DATABASE_URL)
 
-# Menú principal
-
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -82,8 +63,6 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
                               callback_data="movimientos")]
     ]
     await update.message.reply_text("Menú principal:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-# Botones
 
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -133,8 +112,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("⚠️ No estás registrado.")
         await conn.close()
 
-# Guardar usuario TikTok y videos
-
 
 async def mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = update.message.from_user.id
@@ -142,48 +119,31 @@ async def mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if context.user_data.get("esperando_tiktok"):
         conn = await get_db()
-        try:
-            await conn.execute("""
-                INSERT INTO users (telegram_id, tiktok_user)
-                VALUES ($1, $2)
-                ON CONFLICT (telegram_id) DO NOTHING
-            """, telegram_id, texto)
-            await update.message.reply_text(f"✅ Registrado como {texto}")
-        except Exception as e:
-            await update.message.reply_text(f"⚠️ Error: {e}")
-        finally:
-            await conn.close()
+        await conn.execute("""
+            INSERT INTO users (telegram_id, tiktok_user)
+            VALUES ($1, $2)
+            ON CONFLICT (telegram_id) DO NOTHING
+        """, telegram_id, texto)
+        await update.message.reply_text(f"✅ Registrado como {texto}")
+        await conn.close()
         context.user_data["esperando_tiktok"] = False
 
     elif context.user_data.get("esperando_video"):
         conn = await get_db()
-        try:
-            user = await conn.fetchrow("SELECT id FROM users WHERE telegram_id=$1", telegram_id)
-            if user:
-                await conn.execute("""
-                    INSERT INTO videos (user_id, link)
-                    VALUES ($1, $2)
-                """, user["id"], texto)
-                await application.bot.send_message(chat_id=CHANNEL_APOYO_ID, text=f"🎥 Nuevo video subido: {texto}")
-                await update.message.reply_text("🎥 Video guardado y enviado al canal.")
-                await conn.execute("""
-                    INSERT INTO movimientos (user_id, descripcion, puntos)
-                    VALUES ($1, $2, $3)
-                """, user["id"], "Subida de video", 0)
-            else:
-                await update.message.reply_text("⚠️ Primero regístrate con tu usuario de TikTok.")
-        except Exception as e:
-            await update.message.reply_text(f"⚠️ Error: {e}")
-        finally:
-            await conn.close()
+        user = await conn.fetchrow("SELECT id FROM users WHERE telegram_id=$1", telegram_id)
+        if user:
+            await conn.execute("INSERT INTO videos (user_id, link) VALUES ($1, $2)", user["id"], texto)
+            await application.bot.send_message(chat_id=CHANNEL_APOYO_ID, text=f"🎥 Nuevo video subido: {texto}")
+            await update.message.reply_text("🎥 Video guardado y enviado al canal.")
+            await conn.execute("INSERT INTO movimientos (user_id, descripcion, puntos) VALUES ($1, $2, $3)", user["id"], "Subida de video", 0)
+        else:
+            await update.message.reply_text("⚠️ Primero regístrate con tu usuario de TikTok.")
+        await conn.close()
         context.user_data["esperando_video"] = False
 
-# Handlers
 application.add_handler(MessageHandler(
     filters.TEXT & ~filters.COMMAND, mensaje))
 application.add_handler(CallbackQueryHandler(button))
-
-# Endpoint Flask para webhook
 
 
 @app.route(f"/{TOKEN}", methods=["POST"])
