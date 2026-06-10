@@ -7,17 +7,18 @@ from flask import Flask, request, render_template_string
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, CommandHandler, filters
 
-# 🔑 Credenciales
-TOKEN = "6564290496:AAFfyjhNUHMQaryJgMxK-gBNGkJX41Cay0A"
-CHANNEL_APOYO_ID = -1001234567890
-DATABASE_URL = os.getenv("DATABASE_URL")
+# 🔑 Configuración
+TOKEN = "6564290496:AAFfyjhNUHMQaryJgMxK-gBNGkJX41Cay0A"   # pon tu token real del bot
+CHANNEL_APOYO_ID = -1003468913370  # ID de tu canal
+DATABASE_URL = os.getenv(
+    "postgresql://base1_ufc1_user:GJ1zrLRgzKzGepMpHzsYBPrvPm8hcAus@dpg-d82gkghj2pic73ah6m70-a.virginia-postgres.render.com/base1_ufc1?sslmode=require")
 
 logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
 application = Application.builder().token(TOKEN).build()
 
-# Crear tablas
+# Crear tablas si no existen
 
 
 async def init_db():
@@ -61,7 +62,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📋 Registrar TikTok", callback_data="registro")],
         [InlineKeyboardButton("🎥 Subir Video", callback_data="subir_video")],
         [InlineKeyboardButton("💰 Ganar Monedas", web_app=WebAppInfo(
-            "https://bot-tiktok-8d3y.onrender.com/?id="+str(update.effective_user.id)))],
+            "https://bot-tiktok.onrender.com/?id="+str(update.effective_user.id)))],
         [InlineKeyboardButton("💳 Saldo", callback_data="saldo")],
         [InlineKeyboardButton("📜 Últimos 5 Movimientos",
                               callback_data="movimientos")]
