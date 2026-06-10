@@ -7,8 +7,13 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppI
 from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, filters
 
 TOKEN = os.getenv("BOT_TOKEN")
-CHANNEL_APOYO_ID = int(os.getenv("CHANNEL_APOYO_ID"))
+CHANNEL_APOYO_ID = os.getenv("CHANNEL_APOYO_ID")
 DATABASE_URL = os.getenv("DATABASE_URL")
+
+if CHANNEL_APOYO_ID is None:
+    raise RuntimeError("⚠️ Debes definir CHANNEL_APOYO_ID en Render")
+
+CHANNEL_APOYO_ID = int(CHANNEL_APOYO_ID)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -23,8 +28,7 @@ async def init_db():
         id BIGSERIAL PRIMARY KEY,
         telegram_id BIGINT UNIQUE NOT NULL,
         tiktok_user TEXT UNIQUE NOT NULL,
-        puntos NUMERIC DEFAULT 0,
-        referido_id BIGINT REFERENCES users(id)
+        puntos NUMERIC DEFAULT 0
     );
     """)
     await conn.execute("""
@@ -57,7 +61,6 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🎥 Subir Video", callback_data="subir_video")],
         [InlineKeyboardButton("💰 Ganar Monedas", web_app=WebAppInfo(
             "https://TU_WEBAPP_URL.onrender.com/?id="+str(update.effective_user.id)))],
-        [InlineKeyboardButton("👥 Referidos", callback_data="referidos")],
         [InlineKeyboardButton("💳 Saldo", callback_data="saldo")],
         [InlineKeyboardButton("📜 Últimos 5 Movimientos",
                               callback_data="movimientos")]
@@ -77,9 +80,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "subir_video":
         await query.edit_message_text("Envíame el link del video de TikTok:")
         context.user_data["esperando_video"] = True
-
-    elif query.data == "referidos":
-        await query.edit_message_text(f"Tu código de referido es: {telegram_id}")
 
     elif query.data == "saldo":
         conn = await get_db()
