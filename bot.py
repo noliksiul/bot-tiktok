@@ -2,13 +2,14 @@ import os
 import logging
 import asyncpg
 import asyncio
+import threading
 from flask import Flask, request, render_template_string
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, CommandHandler, filters
 
 # 🔑 Credenciales
 TOKEN = "6564290496:AAFfyjhNUHMQaryJgMxK-gBNGkJX41Cay0A"
-CHANNEL_APOYO_ID = -1003468913370
+CHANNEL_APOYO_ID = -1001234567890
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 logging.basicConfig(level=logging.INFO)
@@ -138,13 +139,12 @@ def index():
     telegram_id = request.args.get("id")
 
     async def fetch_videos():
-        conn = await asyncpg.connect(DATABASE_URL)
-        rows = await conn.fetch("SELECT link FROM videos ORDER BY fecha DESC LIMIT 5")
-        await conn.close()
+        conn = asyncio.get_event_loop().run_until_complete(asyncpg.connect(DATABASE_URL))
+        rows = asyncio.get_event_loop().run_until_complete(
+            conn.fetch("SELECT link FROM videos ORDER BY fecha DESC LIMIT 5"))
+        asyncio.get_event_loop().run_until_complete(conn.close())
         return rows
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    videos = loop.run_until_complete(fetch_videos())
+    videos = fetch_videos()
     if not videos:
         return f"<h1>Bienvenido usuario {telegram_id}</h1><p>No hay videos disponibles para ti.</p>"
     html = f"<h1>Bienvenido usuario {telegram_id}</h1><h2>Últimos videos subidos:</h2><ul>"
@@ -162,8 +162,17 @@ def webhook():
     application.update_queue.put_nowait(update)
     return "OK"
 
+# Arrancar bot en hilo separado
 
-# Main
+
+def run_bot():
+    asyncio.run(application.initialize())
+    asyncio.run(application.start())
+    asyncio.run(application.updater.start_polling())
+    asyncio.run(application.run_until_disconnected())
+
+
 if __name__ == "__main__":
     asyncio.get_event_loop().run_until_complete(init_db())
+    threading.Thread(target=run_bot, daemon=True).start()
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
