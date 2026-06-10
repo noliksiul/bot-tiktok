@@ -2,19 +2,21 @@ import os
 import logging
 import asyncpg
 import asyncio
+from flask import Flask, request, render_template_string
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, CommandHandler, filters
 
-# 🔑 Credenciales integradas
+# 🔑 Credenciales
 TOKEN = "6564290496:AAFfyjhNUHMQaryJgMxK-gBNGkJX41Cay0A"
 CHANNEL_APOYO_ID = -1001234567890
-DATABASE_URL = "postgresql://base1_ufc1_user:GJ1zrLRgzKzGepMpHzsYBPrvPm8hcAus@dpg-d82gkghj2pic73ah6m70-a.virginia-postgres.render.com/base1_ufc1?sslmode=require"
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 logging.basicConfig(level=logging.INFO)
 
+app = Flask(__name__)
 application = Application.builder().token(TOKEN).build()
 
-# Crear tablas
+# Crear tablas con columna id
 
 
 async def init_db():
@@ -135,8 +137,11 @@ async def mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = await conn.fetchrow("SELECT id FROM users WHERE telegram_id=$1", telegram_id)
         if user:
             await conn.execute("INSERT INTO videos (user_id, link) VALUES ($1, $2)", user["id"], texto)
-            await application.bot.send_message(chat_id=CHANNEL_APOYO_ID, text=f"🎥 Nuevo video subido: {texto}")
-            await update.message.reply_text("🎥 Video guardado y enviado al canal.")
+            try:
+                await application.bot.send_message(chat_id=CHANNEL_APOYO_ID, text=f"🎥 Nuevo video subido: {texto}")
+                await update.message.reply_text("✅ Tu video se guardó y se envió al canal.")
+            except Exception as e:
+                await update.message.reply_text(f"⚠️ Error al enviar al canal: {e}")
             await conn.execute("INSERT INTO movimientos (user_id, descripcion, puntos) VALUES ($1, $2, $3)", user["id"], "Subida de video", 0)
         else:
             await update.message.reply_text("⚠️ Primero regístrate con tu usuario de TikTok.")
@@ -149,12 +154,34 @@ application.add_handler(MessageHandler(
     filters.TEXT & ~filters.COMMAND, mensaje))
 application.add_handler(CallbackQueryHandler(button))
 
+# 🔑 Flask endpoint para WebApp "Ganar Monedas"
+
+
+@app.route("/")
+def index():
+    telegram_id = request.args.get("id")
+
+    async def fetch_videos():
+        conn = await asyncpg.connect(DATABASE_URL)
+        rows = await conn.fetch("SELECT link FROM videos ORDER BY fecha DESC LIMIT 5")
+        await conn.close()
+        return rows
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    videos = loop.run_until_complete(fetch_videos())
+
+    html = f"<h1>Bienvenido usuario {telegram_id}</h1><h2>Últimos videos subidos:</h2><ul>"
+    for v in videos:
+        html += f"<li><a href='{v['link']}' target='_blank'>{v['link']}</a></li>"
+    html += "</ul>"
+    return render_template_string(html)
+
+
 # 🔑 Bloque main
 if __name__ == "__main__":
-    # Inicializar DB antes de arrancar el bot
     asyncio.get_event_loop().run_until_complete(init_db())
 
-    # Arrancar el bot en modo webhook
     application.run_webhook(
         listen="0.0.0.0",
         port=int(os.getenv("PORT", 5000)),
