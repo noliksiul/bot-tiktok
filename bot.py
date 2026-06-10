@@ -1,7 +1,7 @@
+import os
 import logging
 import asyncpg
 import asyncio
-from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, CommandHandler, filters
 
@@ -153,7 +153,7 @@ application.add_handler(CallbackQueryHandler(button))
 if __name__ == "__main__":
     asyncio.run(init_db())  # crea tablas al iniciar
 
-    # Arrancar el bot en modo webhook (sin Flask extra)
+    # Arrancar el bot en modo webhook
     application.run_webhook(
         listen="0.0.0.0",
         port=int(os.getenv("PORT", 5000)),
