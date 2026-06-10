@@ -6,14 +6,15 @@ from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, filters
 
-TOKEN = os.getenv("BOT_TOKEN")
-CHANNEL_APOYO_ID = os.getenv("CHANNEL_APOYO_ID")
-DATABASE_URL = os.getenv("DATABASE_URL")
+# Variables de entorno con valores por defecto
+TOKEN = os.getenv("BOT_TOKEN", "")
+CHANNEL_APOYO_ID = int(os.getenv("CHANNEL_APOYO_ID", "-1001234567890"))
+DATABASE_URL = os.getenv("DATABASE_URL", "")
 
-if CHANNEL_APOYO_ID is None:
-    raise RuntimeError("⚠️ Debes definir CHANNEL_APOYO_ID en Render")
-
-CHANNEL_APOYO_ID = int(CHANNEL_APOYO_ID)
+if not TOKEN:
+    raise RuntimeError("⚠️ Debes definir BOT_TOKEN en Render")
+if not DATABASE_URL:
+    raise RuntimeError("⚠️ Debes definir DATABASE_URL en Render")
 
 logging.basicConfig(level=logging.INFO)
 
@@ -137,22 +138,4 @@ async def mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("🎥 Video guardado y enviado al canal.")
             await conn.execute("INSERT INTO movimientos (user_id, descripcion, puntos) VALUES ($1, $2, $3)", user["id"], "Subida de video", 0)
         else:
-            await update.message.reply_text("⚠️ Primero regístrate con tu usuario de TikTok.")
-        await conn.close()
-        context.user_data["esperando_video"] = False
-
-application.add_handler(MessageHandler(
-    filters.TEXT & ~filters.COMMAND, mensaje))
-application.add_handler(CallbackQueryHandler(button))
-
-
-@app.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
-    application.update_queue.put_nowait(update)
-    return "ok"
-
-
-if __name__ == "__main__":
-    asyncio.run(init_db())
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+            await update.message.reply_text("⚠️ Primero
