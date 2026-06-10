@@ -1,6 +1,8 @@
+import os
 import logging
 import asyncpg
 import asyncio
+import threading
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, CommandHandler, filters
@@ -165,14 +167,13 @@ if __name__ == "__main__":
     asyncio.run(init_db())  # crea tablas al iniciar
 
     # Arrancar Flask en un hilo paralelo
-    import threading
-
     def run_flask():
         app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
 
     threading.Thread(target=run_flask).start()
 
-    # Arrancar el bot
-    loop = asyncio.get_event_loop()
+    # Crear un loop nuevo para el bot
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     loop.run_until_complete(application.start())
     loop.run_forever()
