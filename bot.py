@@ -5,7 +5,7 @@ import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, CommandHandler, filters
 
-# 🔑 Credenciales integradas
+# 🔑 Credenciales integradasl
 TOKEN = "6564290496:AAFfyjhNUHMQaryJgMxK-gBNGkJX41Cay0A"
 CHANNEL_APOYO_ID = -1001234567890
 DATABASE_URL = "postgresql://base1_ufc1_user:GJ1zrLRgzKzGepMpHzsYBPrvPm8hcAus@dpg-d82gkghj2pic73ah6m70-a.virginia-postgres.render.com/base1_ufc1?sslmode=require"
@@ -153,10 +153,13 @@ application.add_handler(CallbackQueryHandler(button))
 if __name__ == "__main__":
     asyncio.run(init_db())  # crea tablas al iniciar
 
-    # Arrancar el bot en modo webhook
-    application.run_webhook(
+    # Crear un loop nuevo y arrancar el webhook
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(application.start_webhook(
         listen="0.0.0.0",
         port=int(os.getenv("PORT", 5000)),
         url_path=TOKEN,
         webhook_url=f"https://bot-tiktok-8d3y.onrender.com/{TOKEN}"
-    )
+    ))
+    loop.run_forever()
