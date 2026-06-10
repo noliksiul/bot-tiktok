@@ -3,13 +3,13 @@ import logging
 import asyncpg
 import asyncio
 from flask import Flask, request
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, filters
 
-# Configuración fija
-TOKEN = "6564290496:AAFfyjhNUHMQaryJgMxK-gBNGkJX41Cay0A"
-CHANNEL_APOYO_ID = -1001234567890
-DATABASE_URL = "postgresql://base1_5t6z_user:91oGVipwRNCO95hKH1cJzqHL86Bt3rEN@dpg-d8k9r6ernols739dukjg-a.virginia-postgres.render.com/base1_5t6z?sslmode=require"
+# Configuración desde variables de entorno
+TOKEN = os.getenv("BOT_TOKEN")
+CHANNEL_APOYO_ID = int(os.getenv("CHANNEL_APOYO_ID"))
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 logging.basicConfig(level=logging.INFO)
 
@@ -76,7 +76,8 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("📋 Registrar TikTok", callback_data="registro")],
         [InlineKeyboardButton("🎥 Subir Video", callback_data="subir_video")],
-        [InlineKeyboardButton("💰 Ganar Monedas", callback_data="ganar")],
+        [InlineKeyboardButton("💰 Ganar Monedas", web_app=WebAppInfo(
+            "https://TU_WEBAPP_URL.onrender.com/?id="+str(update.effective_user.id)))],
         [InlineKeyboardButton("👥 Referidos", callback_data="referidos")],
         [InlineKeyboardButton("💳 Saldo", callback_data="saldo")],
         [InlineKeyboardButton("📜 Últimos 5 Movimientos",
@@ -99,9 +100,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "subir_video":
         await query.edit_message_text("Envíame el link del video de TikTok:")
         context.user_data["esperando_video"] = True
-
-    elif query.data == "ganar":
-        await query.edit_message_text("👉 Aquí se abriría la mini WebApp con contador.")
 
     elif query.data == "referidos":
         await query.edit_message_text(f"Tu código de referido es: {telegram_id}")
@@ -189,6 +187,8 @@ application.add_handler(MessageHandler(
     filters.TEXT & ~filters.COMMAND, mensaje))
 application.add_handler(CallbackQueryHandler(button))
 
+# Endpoint Flask para webhook
+
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
@@ -197,20 +197,6 @@ def webhook():
     return "ok"
 
 
-async def main():
-    # Inicializa las tablas
-    await init_db()
-    # Arranca el webhook (este método es asíncrono en v20+)
-    await application.initialize()
-    await application.start()
-    await application.updater.start_webhook(
-        listen="0.0.0.0",
-        port=int(os.getenv("PORT", 5000)),
-        url_path=TOKEN,
-        webhook_url=f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
-    )
-    # Mantener el loop corriendo
-    await application.updater.idle()
-
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(init_db())  # crea tablas al iniciar
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
