@@ -65,7 +65,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📋 Registrar TikTok", callback_data="registro")],
         [InlineKeyboardButton("🎥 Subir Video", callback_data="subir_video")],
         [InlineKeyboardButton("💰 Ganar Monedas", web_app=WebAppInfo(
-            "https://TU_WEBAPP_URL.onrender.com/?id="+str(update.effective_user.id)))],
+            "https://bot-tiktok-8d3y.onrender.com/?id="+str(update.effective_user.id)))],
         [InlineKeyboardButton("💳 Saldo", callback_data="saldo")],
         [InlineKeyboardButton("📜 Últimos 5 Movimientos",
                               callback_data="movimientos")]
@@ -166,7 +166,14 @@ def webhook():
     return "ok"
 
 
-# 🔑 Bloque main
+# 🔑 Bloque main con webhook
 if __name__ == "__main__":
     asyncio.run(init_db())  # crea tablas al iniciar
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
+    # Arrancar el bot en modo webhook
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.getenv("PORT", 5000)),
+        url_path=TOKEN,
+        webhook_url=f"https://bot-tiktok-8d3y.onrender.com/{TOKEN}"
+    )
