@@ -2,13 +2,14 @@ import os
 import logging
 import asyncpg
 import asyncio
+import threading
 from flask import Flask, request, render_template_string
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, CommandHandler, filters
 
 # 🔑 Credenciales
 TOKEN = "6564290496:AAFfyjhNUHMQaryJgMxK-gBNGkJX41Cay0A"
-CHANNEL_APOYO_ID = -1001234567890
+CHANNEL_APOYO_ID = -1003468913370
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 logging.basicConfig(level=logging.INFO)
@@ -22,25 +23,23 @@ application = Application.builder().token(TOKEN).build()
 async def init_db():
     conn = await asyncpg.connect(DATABASE_URL)
     await conn.execute("""
-    DROP TABLE IF EXISTS movimientos CASCADE;
-    DROP TABLE IF EXISTS videos CASCADE;
-    DROP TABLE IF EXISTS users CASCADE;
-
-    CREATE TABLE users (
+    CREATE TABLE IF NOT EXISTS users (
         id BIGSERIAL PRIMARY KEY,
         telegram_id BIGINT UNIQUE NOT NULL,
         tiktok_user TEXT UNIQUE NOT NULL,
         puntos NUMERIC DEFAULT 0
     );
-
-    CREATE TABLE videos (
+    """)
+    await conn.execute("""
+    CREATE TABLE IF NOT EXISTS videos (
         id BIGSERIAL PRIMARY KEY,
         user_id BIGINT REFERENCES users(id),
         link TEXT NOT NULL,
         fecha TIMESTAMP DEFAULT NOW()
     );
-
-    CREATE TABLE movimientos (
+    """)
+    await conn.execute("""
+    CREATE TABLE IF NOT EXISTS movimientos (
         id BIGSERIAL PRIMARY KEY,
         user_id BIGINT REFERENCES users(id),
         descripcion TEXT,
@@ -173,20 +172,30 @@ def index():
     asyncio.set_event_loop(loop)
     videos = loop.run_until_complete(fetch_videos())
 
+    if not videos:
+        return f"<h1>Bienvenido usuario {telegram_id}</h1><p>No hay videos disponibles para ti.</p>"
+
     html = f"<h1>Bienvenido usuario {telegram_id}</h1><h2>Últimos videos subidos:</h2><ul>"
     for v in videos:
         html += f"<li><a href='{v['link']}' target='_blank'>{v['link']}</a></li>"
     html += "</ul>"
     return render_template_string(html)
 
+# Arrancar bot en hilo separado
 
-# Bloque main
-if __name__ == "__main__":
-    asyncio.get_event_loop().run_until_complete(init_db())
 
+def run_bot():
+    asyncio.run(init_db())
     application.run_webhook(
         listen="0.0.0.0",
-        port=int(os.getenv("PORT", 5000)),
+        port=8443,  # puerto interno para webhook
         url_path=TOKEN,
         webhook_url=f"https://bot-tiktok-8d3y.onrender.com/{TOKEN}"
     )
+
+
+if __name__ == "__main__":
+    # Hilo para el bot
+    threading.Thread(target=run_bot, daemon=True).start()
+    # Flask como servidor principal
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
