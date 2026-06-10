@@ -4,7 +4,7 @@ import asyncpg
 import asyncio
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
-from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, filters
+from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, CommandHandler, filters
 
 # Variables de entorno con valores por defecto
 TOKEN = os.getenv("BOT_TOKEN", "")
@@ -20,6 +20,8 @@ logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
 application = Application.builder().token(TOKEN).build()
+
+# Crear tablas
 
 
 async def init_db():
@@ -55,6 +57,8 @@ async def init_db():
 async def get_db():
     return await asyncpg.connect(DATABASE_URL)
 
+# Menú principal
+
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -67,6 +71,8 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
                               callback_data="movimientos")]
     ]
     await update.message.reply_text("Menú principal:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+# Botones
 
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -113,6 +119,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("⚠️ No estás registrado.")
         await conn.close()
 
+# Mensajes
+
 
 async def mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = update.message.from_user.id
@@ -142,9 +150,13 @@ async def mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await conn.close()
         context.user_data["esperando_video"] = False
 
+# Handlers
+application.add_handler(CommandHandler("start", menu))
 application.add_handler(MessageHandler(
     filters.TEXT & ~filters.COMMAND, mensaje))
 application.add_handler(CallbackQueryHandler(button))
+
+# Webhook Flask
 
 
 @app.route(f"/{TOKEN}", methods=["POST"])
@@ -154,7 +166,7 @@ def webhook():
     return "ok"
 
 
-# 🔑 Bloque main para arrancar
+# 🔑 Bloque main
 if __name__ == "__main__":
     asyncio.run(init_db())  # crea tablas al iniciar
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
