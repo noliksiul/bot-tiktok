@@ -139,14 +139,16 @@ def index():
     telegram_id = request.args.get("id")
 
     async def fetch_videos():
-        conn = asyncio.get_event_loop().run_until_complete(asyncpg.connect(DATABASE_URL))
-        rows = asyncio.get_event_loop().run_until_complete(
-            conn.fetch("SELECT link FROM videos ORDER BY fecha DESC LIMIT 5"))
-        asyncio.get_event_loop().run_until_complete(conn.close())
+        conn = await asyncpg.connect(DATABASE_URL)
+        rows = await conn.fetch("SELECT link FROM videos ORDER BY fecha DESC LIMIT 5")
+        await conn.close()
         return rows
-    videos = fetch_videos()
+
+    videos = asyncio.run(fetch_videos())
+
     if not videos:
         return f"<h1>Bienvenido usuario {telegram_id}</h1><p>No hay videos disponibles para ti.</p>"
+
     html = f"<h1>Bienvenido usuario {telegram_id}</h1><h2>Últimos videos subidos:</h2><ul>"
     for v in videos:
         html += f"<li><a href='{v['link']}' target='_blank'>{v['link']}</a></li>"
@@ -168,7 +170,6 @@ def webhook():
 def run_bot():
     asyncio.run(application.initialize())
     asyncio.run(application.start())
-    asyncio.run(application.updater.start_polling())
     asyncio.run(application.run_until_disconnected())
 
 
