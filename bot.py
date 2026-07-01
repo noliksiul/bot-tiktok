@@ -108,5 +108,7 @@ if __name__ == "__main__":
         application.bot.set_webhook(
             "https://bot-tiktok-8d3y.onrender.com/" + TOKEN)
     )
+    # 🚀 Arrancar el dispatcher en segundo plano
+    application.run_async()
     # Correr Flask
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
