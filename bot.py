@@ -8,12 +8,10 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppI
 from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, CommandHandler, filters
 
 # 🔑 Configuración
-# pon tu token real en Render como variable BOT_TOKEN
-TOKEN = os.getenv("BOT_TOKEN", "TU_TOKEN_AQUI")
-CHANNEL_APOYO_ID = int(
-    os.getenv("CHANNEL_APOYO_ID", "-1003468913370"))  # ID de tu canal
+TOKEN = "6564290496:AAFfyjhNUHMQaryJgMxK-gBNGkJX41Cay0A"   # Token real de tu bot
+CHANNEL_APOYO_ID = -1003468913370  # ID de tu canal
 
-# Conexión a tu base en Render (usa la External Database URL con sslmode=require)
+# Conexión a tu base en Render (External Database URL + sslmode=require)
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql://bot_db_928z_user:JKnN8ksdWPLL2SjFjdJYJpbStVObMQY1@dpg-d9060b9o3t8c73bv09ig-a.oregon-postgres.render.com/bot_db_928z?sslmode=require"
@@ -72,7 +70,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📋 Registrar TikTok", callback_data="registro")],
         [InlineKeyboardButton("🎥 Subir Video", callback_data="subir_video")],
         [InlineKeyboardButton("💰 Ganar Monedas", web_app=WebAppInfo(
-            "https://bot-tiktok.onrender.com/?id="+str(update.effective_user.id)))],
+            "https://bot-tiktok-8d3y.onrender.com/?id="+str(update.effective_user.id)))],
         [InlineKeyboardButton("💳 Saldo", callback_data="saldo")],
         [InlineKeyboardButton("📜 Últimos 5 Movimientos",
                               callback_data="movimientos")]
@@ -184,7 +182,11 @@ def run_bot():
     asyncio.run(application.run_until_disconnected())
 
 
+async def set_webhook():
+    await application.bot.set_webhook("https://bot-tiktok-8d3y.onrender.com/" + TOKEN)
+
 if __name__ == "__main__":
     asyncio.get_event_loop().run_until_complete(init_db())
+    asyncio.get_event_loop().run_until_complete(set_webhook())
     threading.Thread(target=run_bot, daemon=True).start()
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
