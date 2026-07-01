@@ -8,12 +8,16 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppI
 from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, CommandHandler, filters
 
 # 🔑 Configuración
-# pon aquí tu token real del bot
-TOKEN = "6564290496:AAFfyjhNUHMQaryJgMxK-gBNGkJX41Cay0A"
-CHANNEL_APOYO_ID = -1003468913370  # ID de tu canal
+# pon tu token real en Render como variable BOT_TOKEN
+TOKEN = os.getenv("BOT_TOKEN", "TU_TOKEN_AQUI")
+CHANNEL_APOYO_ID = int(
+    os.getenv("CHANNEL_APOYO_ID", "-1003468913370"))  # ID de tu canal
 
-# Conexión directa a tu base en Render (External Database URL + sslmode=require)
-DATABASE_URL = "postgresql://base1_ufc1_user:GJ1zrLRgzKzGepMpHzsYBPrvPm8hcAus@dpg-d82gkghj2pic73ah6m70-a.virginia-postgres.render.com/base1_ufc1?sslmode=require"
+# Conexión a tu base en Render (usa la External Database URL con sslmode=require)
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://bot_db_928z_user:JKnN8ksdWPLL2SjFjdJYJpbStVObMQY1@dpg-d9060b9o3t8c73bv09ig-a.oregon-postgres.render.com/bot_db_928z?sslmode=require"
+)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -24,33 +28,37 @@ application = Application.builder().token(TOKEN).build()
 
 
 async def init_db():
-    conn = await asyncpg.connect(DATABASE_URL)
-    await conn.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-        id BIGSERIAL PRIMARY KEY,
-        telegram_id BIGINT UNIQUE NOT NULL,
-        tiktok_user TEXT UNIQUE NOT NULL,
-        puntos NUMERIC DEFAULT 0
-    );
-    """)
-    await conn.execute("""
-    CREATE TABLE IF NOT EXISTS videos (
-        id BIGSERIAL PRIMARY KEY,
-        user_id BIGINT REFERENCES users(id),
-        link TEXT NOT NULL,
-        fecha TIMESTAMP DEFAULT NOW()
-    );
-    """)
-    await conn.execute("""
-    CREATE TABLE IF NOT EXISTS movimientos (
-        id BIGSERIAL PRIMARY KEY,
-        user_id BIGINT REFERENCES users(id),
-        descripcion TEXT,
-        puntos NUMERIC,
-        fecha TIMESTAMP DEFAULT NOW()
-    );
-    """)
-    await conn.close()
+    try:
+        conn = await asyncpg.connect(DATABASE_URL)
+        await conn.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id BIGSERIAL PRIMARY KEY,
+            telegram_id BIGINT UNIQUE NOT NULL,
+            tiktok_user TEXT UNIQUE NOT NULL,
+            puntos NUMERIC DEFAULT 0
+        );
+        """)
+        await conn.execute("""
+        CREATE TABLE IF NOT EXISTS videos (
+            id BIGSERIAL PRIMARY KEY,
+            user_id BIGINT REFERENCES users(id),
+            link TEXT NOT NULL,
+            fecha TIMESTAMP DEFAULT NOW()
+        );
+        """)
+        await conn.execute("""
+        CREATE TABLE IF NOT EXISTS movimientos (
+            id BIGSERIAL PRIMARY KEY,
+            user_id BIGINT REFERENCES users(id),
+            descripcion TEXT,
+            puntos NUMERIC,
+            fecha TIMESTAMP DEFAULT NOW()
+        );
+        """)
+        await conn.close()
+        print("✅ Base inicializada correctamente")
+    except Exception as e:
+        print(f"⚠️ Error al conectar a la base: {e}")
 
 
 async def get_db():
