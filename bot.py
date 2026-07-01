@@ -2,7 +2,7 @@ import os
 import logging
 import asyncpg
 import asyncio
-from flask import Flask, request, render_template_string
+from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, CommandHandler, filters
 
@@ -101,9 +101,10 @@ def webhook():
 
 # Main
 if __name__ == "__main__":
-    asyncio.get_event_loop().run_until_complete(init_db())
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(init_db())
     # Configurar webhook
-    asyncio.get_event_loop().run_until_complete(
+    loop.run_until_complete(
         application.bot.set_webhook(
             "https://bot-tiktok-8d3y.onrender.com/" + TOKEN)
     )
