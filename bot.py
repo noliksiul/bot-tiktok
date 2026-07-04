@@ -7,7 +7,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppI
 from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, CommandHandler, filters
 
 # 🔑 Configuración
-TOKEN = os.getenv("TOKEN", "TU_TOKEN_AQUI")
+TOKEN = os.getenv("TOKEN")  # Usa el token desde variables de entorno en Render
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 logging.basicConfig(level=logging.INFO)
@@ -95,7 +95,6 @@ async def seguir(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """, query.from_user.id)
     await conn.close()
     await query.message.reply_text("🎉 Ganaste 2 puntos. Regresando al menú principal...")
-    # Mostrar menú principal
     await menu(update, context)
 
 # Mostrar saldo
@@ -106,7 +105,7 @@ async def saldo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     conn = await asyncpg.connect(DATABASE_URL)
     puntos = await conn.fetchval("SELECT puntos FROM users WHERE telegram_id=$1", query.from_user.id)
-    conn.close()
+    await conn.close()
     await query.message.reply_text(f"💳 Tu saldo actual: {puntos} puntos")
 
 # Mostrar últimos 5 movimientos
@@ -122,7 +121,7 @@ async def movimientos(update: Update, context: ContextTypes.DEFAULT_TYPE):
         WHERE user_id=(SELECT id FROM users WHERE telegram_id=$1)
         ORDER BY fecha DESC LIMIT 5
     """, query.from_user.id)
-    conn.close()
+    await conn.close()
     texto = "📜 Últimos movimientos:\n"
     for r in rows:
         texto += f"- {r['descripcion']} (+{r['puntos']} puntos)\n"
