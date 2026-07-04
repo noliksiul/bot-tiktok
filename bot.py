@@ -106,5 +106,5 @@ if __name__ == "__main__":
     # Inicializar y arrancar dispatcher
     loop.run_until_complete(application.initialize())
     loop.run_until_complete(application.start())
-    # Correr Flask
+    # Mantener Flask corriendo
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
