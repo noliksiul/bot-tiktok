@@ -7,7 +7,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppI
 from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, CommandHandler, filters
 
 # 🔑 Configuración
-TOKEN = os.getenv("BOT_TOKEN")  # en Render la variable se llama BOT_TOKEN
+TOKEN = os.getenv("TOKEN")  # en Render la variable se llama BOT_TOKEN
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not TOKEN:
