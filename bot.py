@@ -24,7 +24,7 @@ async def init_db():
     await conn.execute("""CREATE TABLE IF NOT EXISTS users (
         id BIGSERIAL PRIMARY KEY,
         telegram_id BIGINT UNIQUE NOT NULL,
-        tiktok_user TEXT UNIQUE NOT NULL,
+        tiktok_user TEXT UNIQUE,
         puntos NUMERIC DEFAULT 0
     );""")
     await conn.execute("""CREATE TABLE IF NOT EXISTS videos (
@@ -59,19 +59,58 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Menú principal:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 
-async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def subir_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Guardar video de ejemplo en BD
+    conn = await asyncpg.connect(DATABASE_URL)
+    await conn.execute("INSERT INTO videos (user_id, link) VALUES ($1, $2)",
+                       update.effective_user.id, "https://example.com/video.mp4")
+    await conn.close()
+
+    # Enviar mensaje inicial
+    msg = await update.callback_query.message.reply_text("🎥 Video de ejemplo, espera 20 segundos...")
+
+    # Esperar 20 segundos
+    await asyncio.sleep(20)
+
+    # Mostrar botón "Visto"
+    keyboard = [[InlineKeyboardButton("✅ Visto", callback_data="visto")]]
+    await msg.edit_text("🎥 Video terminado, marca como visto:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+async def visto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text("⚙️ Acción recibida")
+
+    # Sumar 2 puntos al usuario
+    conn = await asyncpg.connect(DATABASE_URL)
+    await conn.execute("UPDATE users SET puntos = puntos + 2 WHERE telegram_id = $1", query.from_user.id)
+    await conn.execute("""
+        INSERT INTO movimientos (user_id, descripcion, puntos)
+        VALUES ((SELECT id FROM users WHERE telegram_id=$1), 'Video visto', 2)
+    """, query.from_user.id)
+    await conn.close()
+
+    await query.edit_message_text("✅ Has ganado 2 puntos por ver el video")
+
+
+async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if query.data == "subir_video":
+        await subir_video(update, context)
+    else:
+        await query.answer()
+        await query.edit_message_text("⚙️ Acción recibida")
 
 
 async def mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ Mensaje recibido")
 
+# Registro de handlers
 application.add_handler(CommandHandler("start", menu))
 application.add_handler(MessageHandler(
     filters.TEXT & ~filters.COMMAND, mensaje))
 application.add_handler(CallbackQueryHandler(button))
+application.add_handler(CallbackQueryHandler(visto, pattern="visto"))
 
 # Flask endpoint miniapp
 
@@ -87,7 +126,6 @@ def index():
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-    # Ejecutar la corrutina de forma síncrona
     asyncio.run(application.process_update(update))
     return "OK"
 
@@ -101,7 +139,6 @@ if __name__ == "__main__":
         await application.bot.set_webhook(
             f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
         )
-        # Mantener Flask corriendo
         app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
 
     asyncio.run(main())
