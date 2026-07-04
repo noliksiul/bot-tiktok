@@ -3,12 +3,16 @@ import logging
 import asyncpg
 import asyncio
 from flask import Flask, request
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, CommandHandler, filters
 
 # 🔑 Configuración
-TOKEN = os.getenv("TOKEN")  # Usa el token desde variables de entorno en Render
+TOKEN = os.getenv("TOKEN")  # Debe estar configurado en Render
 DATABASE_URL = os.getenv("DATABASE_URL")
+
+if not TOKEN:
+    raise ValueError(
+        "❌ No se encontró la variable TOKEN. Configúrala en Render con tu token real de BotFather.")
 
 logging.basicConfig(level=logging.INFO)
 
@@ -50,8 +54,6 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     await update.message.reply_text("Menú principal:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-# Registrar usuario TikTok
-
 
 async def registrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -70,8 +72,6 @@ async def guardar_usuario(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await conn.close()
     await update.message.reply_text(f"✅ Usuario TikTok registrado: {tiktok_user}")
 
-# Video de ejemplo con cuenta regresiva
-
 
 async def video_ejemplo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -80,8 +80,6 @@ async def video_ejemplo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await asyncio.sleep(20)
     keyboard = [[InlineKeyboardButton("✅ Seguir", callback_data="seguir")]]
     await msg.edit_text("🎥 Video terminado, presiona seguir:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-# Botón seguir → sumar puntos y regresar al menú
 
 
 async def seguir(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -97,8 +95,6 @@ async def seguir(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.message.reply_text("🎉 Ganaste 2 puntos. Regresando al menú principal...")
     await menu(update, context)
 
-# Mostrar saldo
-
 
 async def saldo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -107,8 +103,6 @@ async def saldo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     puntos = await conn.fetchval("SELECT puntos FROM users WHERE telegram_id=$1", query.from_user.id)
     await conn.close()
     await query.message.reply_text(f"💳 Tu saldo actual: {puntos} puntos")
-
-# Mostrar últimos 5 movimientos
 
 
 async def movimientos(update: Update, context: ContextTypes.DEFAULT_TYPE):
