@@ -2,18 +2,16 @@ import os
 import logging
 import asyncpg
 import asyncio
-from flask import Flask, request
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from flask import Flask, request, send_from_directory
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, CommandHandler, filters
 
 # 🔑 Configuración
-# Debe estar configurado en Render como BOT_TOKEN o TOKEN
-TOKEN = os.getenv("TOKEN")
+TOKEN = os.getenv("BOT_TOKEN")  # en Render la variable se llama BOT_TOKEN
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not TOKEN:
-    raise ValueError(
-        "❌ No se encontró la variable TOKEN. Configúrala en Render con tu token real de BotFather.")
+    raise ValueError("❌ No se encontró BOT_TOKEN en Render")
 
 logging.basicConfig(level=logging.INFO)
 
@@ -39,7 +37,6 @@ async def init_db():
         fecha TIMESTAMP DEFAULT NOW()
     );""")
     await conn.close()
-    print("✅ Base inicializada correctamente")
 
 # Handlers
 
@@ -48,7 +45,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("📋 Registrar TikTok", callback_data="registro")],
         [InlineKeyboardButton("🎥 Video de ejemplo",
-                              callback_data="video_ejemplo")],
+                              web_app=WebAppInfo(f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/index.html"))],
         [InlineKeyboardButton("💳 Saldo", callback_data="saldo")],
         [InlineKeyboardButton("📜 Últimos 5 Movimientos",
                               callback_data="movimientos")]
@@ -57,8 +54,6 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Menú principal:", reply_markup=InlineKeyboardMarkup(keyboard))
     elif update.callback_query:
         await update.callback_query.message.reply_text("Menú principal:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-# Registrar usuario TikTok
 
 
 async def registrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -78,35 +73,20 @@ async def guardar_usuario(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await conn.close()
     await update.message.reply_text(f"✅ Usuario TikTok registrado: {tiktok_user}")
 
-# Video de ejemplo con cuenta regresiva
+# Recibir datos de la miniapp
 
 
-async def video_ejemplo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    msg = await query.message.reply_text("🎥 Video de ejemplo... espera 20 segundos ⏳")
-    await asyncio.sleep(20)
-    keyboard = [[InlineKeyboardButton(
-        "✅ Continuar", callback_data="continuar")]]
-    await msg.edit_text("🎥 Video terminado, presiona continuar:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-# Botón continuar → sumar puntos y regresar al menú
-
-
-async def continuar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    conn = await asyncpg.connect(DATABASE_URL)
-    await conn.execute("UPDATE users SET puntos = puntos + 2 WHERE telegram_id = $1", query.from_user.id)
-    await conn.execute("""
-        INSERT INTO movimientos (user_id, descripcion, puntos)
-        VALUES ((SELECT id FROM users WHERE telegram_id=$1), 'Video visto', 2)
-    """, query.from_user.id)
-    await conn.close()
-    await query.message.reply_text("🎉 Ganaste 2 puntos. Regresando al menú principal...")
-    await menu(update, context)
-
-# Mostrar saldo
+async def recibir_webapp(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.web_app_data and update.message.web_app_data.data == "continuar":
+        conn = await asyncpg.connect(DATABASE_URL)
+        await conn.execute("UPDATE users SET puntos = puntos + 2 WHERE telegram_id=$1", update.effective_user.id)
+        await conn.execute("""
+            INSERT INTO movimientos (user_id, descripcion, puntos)
+            VALUES ((SELECT id FROM users WHERE telegram_id=$1), 'Video visto', 2)
+        """, update.effective_user.id)
+        await conn.close()
+        await update.message.reply_text("🎉 Ganaste 2 puntos. Regresando al menú principal...")
+        await menu(update, context)
 
 
 async def saldo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -116,8 +96,6 @@ async def saldo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     puntos = await conn.fetchval("SELECT puntos FROM users WHERE telegram_id=$1", query.from_user.id)
     await conn.close()
     await query.message.reply_text(f"💳 Tu saldo actual: {puntos} puntos")
-
-# Mostrar últimos 5 movimientos
 
 
 async def movimientos(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -141,20 +119,18 @@ application.add_handler(CommandHandler("start", menu))
 application.add_handler(MessageHandler(
     filters.TEXT & ~filters.COMMAND, guardar_usuario))
 application.add_handler(CallbackQueryHandler(registrar, pattern="registro"))
-application.add_handler(CallbackQueryHandler(
-    video_ejemplo, pattern="video_ejemplo"))
-application.add_handler(CallbackQueryHandler(continuar, pattern="continuar"))
 application.add_handler(CallbackQueryHandler(saldo, pattern="saldo"))
 application.add_handler(CallbackQueryHandler(
     movimientos, pattern="movimientos"))
+application.add_handler(MessageHandler(
+    filters.StatusUpdate.WEB_APP_DATA, recibir_webapp))
 
 # Flask endpoints
 
 
-@app.route("/")
-def index():
-    telegram_id = request.args.get("id")
-    return f"<h1>Bienvenido usuario {telegram_id}</h1><p>Miniapp funcionando ✅</p>"
+@app.route("/index.html")
+def serve_index():
+    return send_from_directory("webapp", "index.html")
 
 
 @app.route(f"/{TOKEN}", methods=["POST"])
