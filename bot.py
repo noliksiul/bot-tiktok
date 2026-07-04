@@ -47,10 +47,6 @@ async def init_db():
     await conn.close()
     print("✅ Base inicializada correctamente")
 
-
-async def get_db():
-    return await asyncpg.connect(DATABASE_URL)
-
 # Handlers
 
 
@@ -93,22 +89,22 @@ def index():
 
 
 @app.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
+async def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-    application.update_queue.put_nowait(update)
+    await application.process_update(update)
     return "OK"
-
 
 # Main
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.run_until_complete(init_db())
-    # Configurar webhook
+    # Configurar webhook en Telegram
     loop.run_until_complete(
         application.bot.set_webhook(
             "https://bot-tiktok-8d3y.onrender.com/" + TOKEN)
     )
-    # 🚀 Arrancar el dispatcher para procesar la cola
-    loop.create_task(application.start())
+    # Inicializar y arrancar dispatcher
+    loop.run_until_complete(application.initialize())
+    loop.run_until_complete(application.start())
     # Correr Flask
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
