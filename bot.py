@@ -7,7 +7,8 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, CommandHandler, filters
 
 # 🔑 Configuración
-TOKEN = os.getenv("TOKEN")  # Debe estar configurado en Render
+# Debe estar configurado en Render como BOT_TOKEN o TOKEN
+TOKEN = os.getenv("TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not TOKEN:
@@ -52,7 +53,12 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📜 Últimos 5 Movimientos",
                               callback_data="movimientos")]
     ]
-    await update.message.reply_text("Menú principal:", reply_markup=InlineKeyboardMarkup(keyboard))
+    if update.message:
+        await update.message.reply_text("Menú principal:", reply_markup=InlineKeyboardMarkup(keyboard))
+    elif update.callback_query:
+        await update.callback_query.message.reply_text("Menú principal:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+# Registrar usuario TikTok
 
 
 async def registrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -72,17 +78,22 @@ async def guardar_usuario(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await conn.close()
     await update.message.reply_text(f"✅ Usuario TikTok registrado: {tiktok_user}")
 
+# Video de ejemplo con cuenta regresiva
+
 
 async def video_ejemplo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     msg = await query.message.reply_text("🎥 Video de ejemplo... espera 20 segundos ⏳")
     await asyncio.sleep(20)
-    keyboard = [[InlineKeyboardButton("✅ Seguir", callback_data="seguir")]]
-    await msg.edit_text("🎥 Video terminado, presiona seguir:", reply_markup=InlineKeyboardMarkup(keyboard))
+    keyboard = [[InlineKeyboardButton(
+        "✅ Continuar", callback_data="continuar")]]
+    await msg.edit_text("🎥 Video terminado, presiona continuar:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+# Botón continuar → sumar puntos y regresar al menú
 
 
-async def seguir(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def continuar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     conn = await asyncpg.connect(DATABASE_URL)
@@ -95,6 +106,8 @@ async def seguir(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.message.reply_text("🎉 Ganaste 2 puntos. Regresando al menú principal...")
     await menu(update, context)
 
+# Mostrar saldo
+
 
 async def saldo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -103,6 +116,8 @@ async def saldo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     puntos = await conn.fetchval("SELECT puntos FROM users WHERE telegram_id=$1", query.from_user.id)
     await conn.close()
     await query.message.reply_text(f"💳 Tu saldo actual: {puntos} puntos")
+
+# Mostrar últimos 5 movimientos
 
 
 async def movimientos(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -128,7 +143,7 @@ application.add_handler(MessageHandler(
 application.add_handler(CallbackQueryHandler(registrar, pattern="registro"))
 application.add_handler(CallbackQueryHandler(
     video_ejemplo, pattern="video_ejemplo"))
-application.add_handler(CallbackQueryHandler(seguir, pattern="seguir"))
+application.add_handler(CallbackQueryHandler(continuar, pattern="continuar"))
 application.add_handler(CallbackQueryHandler(saldo, pattern="saldo"))
 application.add_handler(CallbackQueryHandler(
     movimientos, pattern="movimientos"))
