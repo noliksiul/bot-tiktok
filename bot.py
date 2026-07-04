@@ -1,6 +1,7 @@
 import os
 import logging
 import asyncpg
+import asyncio
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, CommandHandler, filters
@@ -91,12 +92,14 @@ async def webhook():
 
 # Main
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(init_db())
-    # 🚀 Arrancar el bot con webhook integrado
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.getenv("PORT", 5000)),
-        url_path=TOKEN,
-        webhook_url=f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
-    )
+    async def main():
+        await init_db()
+        await application.initialize()
+        await application.start()
+        await application.bot.set_webhook(
+            f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
+        )
+        # Mantener Flask corriendo
+        app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
+    asyncio.run(main())
