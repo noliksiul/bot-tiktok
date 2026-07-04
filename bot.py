@@ -81,14 +81,16 @@ def index():
     telegram_id = request.args.get("id")
     return f"<h1>Bienvenido usuario {telegram_id}</h1><p>Miniapp funcionando ✅</p>"
 
-# Flask endpoint webhook
+# Flask endpoint webhook (síncrono)
 
 
 @app.route(f"/{TOKEN}", methods=["POST"])
-async def webhook():
+def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-    await application.process_update(update)
+    # Ejecutar la corrutina de forma síncrona
+    asyncio.run(application.process_update(update))
     return "OK"
+
 
 # Main
 if __name__ == "__main__":
