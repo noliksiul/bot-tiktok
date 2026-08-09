@@ -2,6 +2,7 @@ import os
 import logging
 import asyncpg
 import asyncio
+import threading
 from flask import Flask, request, send_from_directory
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, CommandHandler, filters
@@ -42,7 +43,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("📋 Registrar TikTok", callback_data="registro")],
         [InlineKeyboardButton("🎥 Video de ejemplo",
-                              web_app=WebAppInfo(f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/index.html"))],
+          web_app=WebAppInfo(f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/index.html"))],
         [InlineKeyboardButton("💳 Saldo", callback_data="saldo")],
         [InlineKeyboardButton("📜 Últimos 5 Movimientos",
                               callback_data="movimientos")]
@@ -128,20 +129,4 @@ def serve_index():
     return send_from_directory("webapp", "index.html")
 
 
-@app.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
-    asyncio.run(application.process_update(update))
-    return "OK"
-
-# Inicialización del bot al arrancar Flask (Flask 3 usa before_serving)
-
-
-@app.before_serving
-async def startup():
-    await init_db()
-    await application.initialize()
-    await application.start()
-    await application.bot.set_webhook(
-        f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
-    )
+@app.route(f"/{TOKEN}", methods=["POST
