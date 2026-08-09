@@ -43,7 +43,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("📋 Registrar TikTok", callback_data="registro")],
         [InlineKeyboardButton("🎥 Video de ejemplo",
-          web_app=WebAppInfo(f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/index.html"))],
+                              web_app=WebAppInfo(f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/index.html"))],
         [InlineKeyboardButton("💳 Saldo", callback_data="saldo")],
         [InlineKeyboardButton("📜 Últimos 5 Movimientos",
                               callback_data="movimientos")]
@@ -129,4 +129,25 @@ def serve_index():
     return send_from_directory("webapp", "index.html")
 
 
-@app.route(f"/{TOKEN}", methods=["POST
+@app.route(f"/{TOKEN}", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    asyncio.run(application.process_update(update))
+    return "OK"
+
+# Inicialización del bot en un hilo separado
+
+
+def start_bot():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(init_db())
+    loop.run_until_complete(application.initialize())
+    loop.run_until_complete(application.start())
+    loop.run_until_complete(application.bot.set_webhook(
+        f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
+    ))
+    loop.run_forever()
+
+
+threading.Thread(target=start_bot, daemon=True).start()
