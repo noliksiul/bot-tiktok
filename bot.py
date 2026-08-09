@@ -134,15 +134,14 @@ def webhook():
     asyncio.run(application.process_update(update))
     return "OK"
 
-# Inicialización del bot al arrancar Flask
+# Inicialización del bot al arrancar Flask (Flask 3 usa before_serving)
 
 
-@app.before_first_request
-def startup():
-    loop = asyncio.get_event_loop()
-    loop.create_task(init_db())
-    loop.create_task(application.initialize())
-    loop.create_task(application.start())
-    loop.create_task(application.bot.set_webhook(
+@app.before_serving
+async def startup():
+    await init_db()
+    await application.initialize()
+    await application.start()
+    await application.bot.set_webhook(
         f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
-    ))
+    )
