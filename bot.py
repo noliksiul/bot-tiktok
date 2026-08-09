@@ -103,4 +103,47 @@ async def movimientos(update: Update, context: ContextTypes.DEFAULT_TYPE):
         WHERE user_id=(SELECT id FROM users WHERE telegram_id=$1)
         ORDER BY fecha DESC LIMIT 5
     """, query.from_user.id)
-    await conn.close
+    await conn.close()
+    texto = "📜 Últimos movimientos:\n"
+    for r in rows:
+        texto += f"- {r['descripcion']} (+{r['puntos']} puntos)\n"
+    await query.message.reply_text(texto)
+
+# Dispatcher
+application.add_handler(CommandHandler("start", menu))
+application.add_handler(MessageHandler(
+    filters.TEXT & ~filters.COMMAND, guardar_usuario))
+application.add_handler(CallbackQueryHandler(registrar, pattern="registro"))
+application.add_handler(CallbackQueryHandler(saldo, pattern="saldo"))
+application.add_handler(CallbackQueryHandler(
+    movimientos, pattern="movimientos"))
+application.add_handler(MessageHandler(
+    filters.StatusUpdate.WEB_APP_DATA, recibir_webapp))
+
+# Flask endpoints
+
+
+@app.route("/index.html")
+def serve_index():
+    return send_from_directory("webapp", "index.html")
+
+
+@app.route(f"/{TOKEN}", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    asyncio.run(application.process_update(update))
+    return "OK"
+
+
+# Main
+if __name__ == "__main__":
+    async def main():
+        await init_db()
+        await application.initialize()
+        await application.start()
+        await application.bot.set_webhook(
+            f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
+        )
+        app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
+    asyncio.run(main())
