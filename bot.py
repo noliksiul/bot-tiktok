@@ -34,7 +34,6 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif update.callback_query:
         await update.callback_query.message.reply_text("Menú principal:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-# Dispatcher
 application.add_handler(CommandHandler("start", menu))
 # … tus otros handlers …
 
@@ -49,7 +48,6 @@ def serve_index():
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-    # Usar el loop del bot para procesar el update
     if bot_loop:
         bot_loop.call_soon_threadsafe(
             asyncio.create_task, application.process_update(update))
