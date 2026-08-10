@@ -1,4 +1,3 @@
-import os
 import logging
 import asyncpg
 import asyncio
@@ -12,12 +11,15 @@ DATABASE_URL = "postgresql://bot_db1_user:B2y3STMCDTW1HB7adfk2TBYzB10GyaAL@dpg-d
 
 logging.basicConfig(level=logging.INFO)
 
+# Flask app para Gunicorn
 app = Flask(__name__)
 
 
 @app.route("/")
 def index():
     return "Bot Telegram activo ✅"
+
+# Crear tablas
 
 
 async def init_db():
@@ -37,6 +39,8 @@ async def init_db():
     );""")
     await conn.close()
 
+# Handler /start
+
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -50,8 +54,11 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message:
         await update.message.reply_text("Menú principal:", reply_markup=InlineKeyboardMarkup(keyboard))
 
+# Bot
 application = Application.builder().token(TOKEN).build()
 application.add_handler(CommandHandler("start", menu))
+
+# Inicialización del bot con polling
 
 
 async def main():
@@ -65,4 +72,5 @@ def run_bot():
     asyncio.run(main())
 
 
+# Lanzar el bot en un hilo separado al importar el módulo
 threading.Thread(target=run_bot, daemon=True).start()
