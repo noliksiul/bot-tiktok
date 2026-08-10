@@ -7,7 +7,6 @@ from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, ContextTypes, CommandHandler
 
-# Datos reales
 TOKEN = "6564290496:AAFfyjhNUHMQaryJgMxK-gBNGkJX41Cay0A"
 DATABASE_URL = "postgresql://bot_db1_user:B2y3STMCDTW1HB7adfk2TBYzB10GyaAL@dpg-d9sfnlu7bikc739fl5gg-a.oregon-postgres.render.com/bot_db1?sslmode=require"
 
@@ -48,7 +47,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("📋 Registrar TikTok", callback_data="registro")],
         [InlineKeyboardButton("🎥 Video de ejemplo",
-                              web_app=WebAppInfo(f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/index.html"))],
+                              web_app=WebAppInfo("https://bot-tiktok-8d3y.onrender.com/index.html"))],
         [InlineKeyboardButton("💳 Saldo", callback_data="saldo")],
         [InlineKeyboardButton("📜 Últimos 5 Movimientos",
                               callback_data="movimientos")]
@@ -67,7 +66,7 @@ async def main():
     await init_db()
     await application.initialize()
     await application.start()
-    await application.run_polling()   # <-- solo polling, sin webhook
+    await application.run_polling()   # <-- solo polling
 
 # Arrancar el bot en un hilo separado para no bloquear Flask
 
