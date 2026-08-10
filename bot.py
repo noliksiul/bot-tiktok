@@ -2,7 +2,6 @@ import os
 import logging
 import asyncpg
 import asyncio
-import threading
 from flask import Flask, request, send_from_directory
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, CommandHandler, filters
@@ -15,9 +14,6 @@ logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
 application = Application.builder().token(TOKEN).build()
-
-# 🔄 loop global del bot
-bot_loop = None
 
 # Crear tablas
 
@@ -51,10 +47,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📜 Últimos 5 Movimientos",
                               callback_data="movimientos")]
     ]
-    if update.message:
-        await update.message.reply_text("Menú principal:", reply_markup=InlineKeyboardMarkup(keyboard))
-    elif update.callback_query:
-        await update.callback_query.message.reply_text("Menú principal:", reply_markup=InlineKeyboardMarkup(keyboard))
+    await update.message.reply_text("Menú principal:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 
 async def registrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -133,31 +126,22 @@ def serve_index():
 
 
 @app.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
+async def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-    # Usar el loop global del bot
-    if bot_loop:
-        bot_loop.create_task(application.process_update(update))
+    await application.process_update(update)
     return "OK"
 
-# Inicialización del bot en un hilo separado
+# Inicialización del bot
 
 
-def start_bot():
-    global bot_loop
-    bot_loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(bot_loop)
+async def init_bot():
+    await init_db()
+    await application.initialize()
+    await application.start()
+    await application.bot.set_webhook(
+        f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
+    )
 
-    async def init():
-        await init_db()
-        await application.initialize()
-        await application.start()
-        await application.bot.set_webhook(
-            f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
-        )
-
-    bot_loop.run_until_complete(init())
-    bot_loop.run_forever()
-
-
-threading.Thread(target=start_bot, daemon=True).start()
+if __name__ == "__main__":
+    asyncio.run(init_bot())
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
