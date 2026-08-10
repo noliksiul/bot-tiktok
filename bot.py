@@ -1,9 +1,6 @@
 import os
 import logging
 import asyncpg
-import asyncio
-import threading
-from flask import Flask, request, send_from_directory
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, CommandHandler, filters
 
@@ -12,11 +9,25 @@ DATABASE_URL = "postgresql://bot_db1_user:B2y3STMCDTW1HB7adfk2TBYzB10GyaAL@dpg-d
 
 logging.basicConfig(level=logging.INFO)
 
-app = Flask(__name__)
-application = Application.builder().token(TOKEN).build()
+# Crear tablas
 
-# loop global del bot
-bot_loop = None
+
+async def init_db():
+    conn = await asyncpg.connect(DATABASE_URL)
+    await conn.execute("""CREATE TABLE IF NOT EXISTS users (
+        id BIGSERIAL PRIMARY KEY,
+        telegram_id BIGINT UNIQUE NOT NULL,
+        tiktok_user TEXT,
+        puntos NUMERIC DEFAULT 0
+    );""")
+    await conn.execute("""CREATE TABLE IF NOT EXISTS movimientos (
+        id BIGSERIAL PRIMARY KEY,
+        user_id BIGINT REFERENCES users(id),
+        descripcion TEXT,
+        puntos NUMERIC,
+        fecha TIMESTAMP DEFAULT NOW()
+    );""")
+    await conn.close()
 
 # Handlers
 
@@ -30,47 +41,28 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📜 Últimos 5 Movimientos",
                               callback_data="movimientos")]
     ]
-    if update.message:
-        await update.message.reply_text("Menú principal:", reply_markup=InlineKeyboardMarkup(keyboard))
-    elif update.callback_query:
-        await update.callback_query.message.reply_text("Menú principal:", reply_markup=InlineKeyboardMarkup(keyboard))
+    await update.message.reply_text("Menú principal:", reply_markup=InlineKeyboardMarkup(keyboard))
 
+application = Application.builder().token(TOKEN).build()
 application.add_handler(CommandHandler("start", menu))
 
-# Flask endpoints
+# Inicialización del bot
 
 
-@app.route("/index.html")
-def serve_index():
-    return send_from_directory("webapp", "index.html")
+async def main():
+    await init_db()
+    await application.initialize()
+    await application.start()
+    await application.bot.set_webhook(
+        f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
+    )
+    await application.updater.start_webhook(
+        listen="0.0.0.0",
+        port=int(os.getenv("PORT", "10000")),
+        url_path=TOKEN,
+        webhook_url=f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
+    )
 
-
-@app.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
-    if bot_loop and application:
-        # Pasar el update al loop del bot
-        bot_loop.call_soon_threadsafe(
-            lambda: asyncio.create_task(application.process_update(update)))
-    return "OK"
-
-# Inicialización del bot en un hilo separado
-
-
-def start_bot():
-    global bot_loop
-    bot_loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(bot_loop)
-
-    async def init():
-        await application.initialize()
-        await application.start()
-        await application.bot.set_webhook(
-            f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
-        )
-
-    bot_loop.run_until_complete(init())
-    bot_loop.run_forever()
-
-
-threading.Thread(target=start_bot, daemon=True).start()
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
