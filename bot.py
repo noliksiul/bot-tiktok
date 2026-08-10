@@ -16,6 +16,9 @@ logging.basicConfig(level=logging.INFO)
 app = Flask(__name__)
 application = Application.builder().token(TOKEN).build()
 
+# 🔄 loop global del bot
+bot_loop = None
+
 # Crear tablas
 
 
@@ -132,16 +135,18 @@ def serve_index():
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-    loop = asyncio.get_event_loop()
-    loop.create_task(application.process_update(update))
+    # Usar el loop global del bot
+    if bot_loop:
+        bot_loop.create_task(application.process_update(update))
     return "OK"
 
 # Inicialización del bot en un hilo separado
 
 
 def start_bot():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    global bot_loop
+    bot_loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(bot_loop)
 
     async def init():
         await init_db()
@@ -151,8 +156,8 @@ def start_bot():
             f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
         )
 
-    loop.run_until_complete(init())
-    loop.run_forever()
+    bot_loop.run_until_complete(init())
+    bot_loop.run_forever()
 
 
 threading.Thread(target=start_bot, daemon=True).start()
