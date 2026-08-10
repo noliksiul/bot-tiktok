@@ -1,13 +1,23 @@
 import os
 import logging
 import asyncpg
+import asyncio
+from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
-from telegram.ext import Application, ContextTypes, CallbackQueryHandler, MessageHandler, CommandHandler, filters
+from telegram.ext import Application, ContextTypes, CommandHandler
 
 TOKEN = "6564290496:AAFfyjhNUHMQaryJgMxK-gBNGkJX41Cay0A"
 DATABASE_URL = "postgresql://bot_db1_user:B2y3STMCDTW1HB7adfk2TBYzB10GyaAL@dpg-d9sfnlu7bikc739fl5gg-a.oregon-postgres.render.com/bot_db1?sslmode=require"
 
 logging.basicConfig(level=logging.INFO)
+
+# Flask app para que Gunicorn tenga un WSGI
+app = Flask(__name__)
+
+
+@app.route("/")
+def index():
+    return "Bot Telegram activo ✅"
 
 # Crear tablas
 
@@ -43,6 +53,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     await update.message.reply_text("Menú principal:", reply_markup=InlineKeyboardMarkup(keyboard))
 
+# Bot
 application = Application.builder().token(TOKEN).build()
 application.add_handler(CommandHandler("start", menu))
 
@@ -63,6 +74,6 @@ async def main():
         webhook_url=f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
     )
 
+# Arranque
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(main())
