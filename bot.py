@@ -2,6 +2,7 @@ import os
 import logging
 import asyncpg
 import asyncio
+import threading
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, ContextTypes, CommandHandler
@@ -11,7 +12,7 @@ DATABASE_URL = "postgresql://bot_db1_user:B2y3STMCDTW1HB7adfk2TBYzB10GyaAL@dpg-d
 
 logging.basicConfig(level=logging.INFO)
 
-# Flask app para que Gunicorn tenga un WSGI
+# Flask app para Gunicorn
 app = Flask(__name__)
 
 
@@ -39,7 +40,7 @@ async def init_db():
     );""")
     await conn.close()
 
-# Handlers
+# Handler /start
 
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -74,6 +75,12 @@ async def main():
         webhook_url=f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
     )
 
-# Arranque
-if __name__ == "__main__":
+# Arrancar el bot en un hilo separado para no bloquear Flask
+
+
+def run_bot():
     asyncio.run(main())
+
+
+# Lanzar el bot cuando Gunicorn arranque Flask
+threading.Thread(target=run_bot, daemon=True).start()
