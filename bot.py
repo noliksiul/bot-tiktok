@@ -2,6 +2,7 @@ import os
 import logging
 import asyncpg
 import asyncio
+import threading
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, ContextTypes, CommandHandler
@@ -61,16 +62,18 @@ application.add_handler(CommandHandler("start", menu))
 # Inicialización del bot con polling
 
 
-async def run_bot():
+async def main():
     await init_db()
     await application.initialize()
     await application.start()
     await application.run_polling()
 
-# Lanzar el bot cuando Flask arranca
+# Arrancar el bot en un hilo separado para no bloquear Flask
 
 
-@app.before_first_request
-def activate_bot():
-    loop = asyncio.get_event_loop()
-    loop.create_task(run_bot())
+def run_bot():
+    asyncio.run(main())
+
+
+# Lanzamos el hilo al importar el módulo
+threading.Thread(target=run_bot, daemon=True).start()
