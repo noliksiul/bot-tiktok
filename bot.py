@@ -132,8 +132,8 @@ def serve_index():
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-    # Usar el loop ya existente en lugar de asyncio.run
-    asyncio.get_event_loop().create_task(application.process_update(update))
+    loop = asyncio.get_event_loop()
+    loop.create_task(application.process_update(update))
     return "OK"
 
 # Inicialización del bot en un hilo separado
