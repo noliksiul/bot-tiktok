@@ -1,21 +1,13 @@
 import logging
 import asyncpg
 import asyncio
-from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, ContextTypes, CommandHandler
 
 TOKEN = "6564290496:AAFfyjhNUHMQaryJgMxK-gBNGkJX41Cay0A"
-DATABASE_URL = "postgresql://bot_db1_user:...@.../bot_db1?sslmode=require"
+DATABASE_URL = "postgresql://bot_db1_user:B2y3STMCDTW1HB7adfk2TBYzB10GyaAL@dpg-d9sfnlu7bikc739fl5gg-a.oregon-postgres.render.com/bot_db1?sslmode=require"
 
 logging.basicConfig(level=logging.INFO)
-
-app = Flask(__name__)
-
-
-@app.route("/")
-def index():
-    return "Bot Telegram activo ✅"
 
 
 async def init_db():
