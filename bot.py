@@ -59,23 +59,14 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 application = Application.builder().token(TOKEN).build()
 application.add_handler(CommandHandler("start", menu))
 
-# Inicialización del bot
+# Inicialización del bot con polling
 
 
 async def main():
     await init_db()
     await application.initialize()
     await application.start()
-    await application.bot.set_webhook(
-        f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
-    )
-    # Este servidor webhook es el que realmente recibe los updates
-    await application.updater.start_webhook(
-        listen="0.0.0.0",
-        port=int(os.getenv("PORT", "10000")),
-        url_path=TOKEN,
-        webhook_url=f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
-    )
+    await application.run_polling()
 
 # Arrancar el bot en un hilo separado para no bloquear Flask
 
