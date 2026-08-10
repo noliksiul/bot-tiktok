@@ -49,7 +49,7 @@ def serve_index():
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-    # Enviar el update al loop del bot
+    # Pasar el update al loop del bot
     if bot_loop:
         bot_loop.call_soon_threadsafe(
             asyncio.create_task, application.process_update(update))
