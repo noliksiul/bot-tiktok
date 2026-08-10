@@ -36,7 +36,6 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.callback_query.message.reply_text("Menú principal:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 application.add_handler(CommandHandler("start", menu))
-# … añade aquí tus otros handlers …
 
 # Flask endpoints
 
@@ -49,10 +48,10 @@ def serve_index():
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-    # Pasar el update al loop del bot
-    if bot_loop:
+    if bot_loop and application:
+        # Pasar el update al loop del bot
         bot_loop.call_soon_threadsafe(
-            asyncio.create_task, application.process_update(update))
+            lambda: asyncio.create_task(application.process_update(update)))
     return "OK"
 
 # Inicialización del bot en un hilo separado
