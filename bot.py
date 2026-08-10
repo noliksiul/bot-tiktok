@@ -52,7 +52,8 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📜 Últimos 5 Movimientos",
                               callback_data="movimientos")]
     ]
-    await update.message.reply_text("Menú principal:", reply_markup=InlineKeyboardMarkup(keyboard))
+    if update.message:
+        await update.message.reply_text("Menú principal:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 # Bot
 application = Application.builder().token(TOKEN).build()
@@ -68,6 +69,7 @@ async def main():
     await application.bot.set_webhook(
         f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
     )
+    # Este servidor webhook es el que realmente recibe los updates
     await application.updater.start_webhook(
         listen="0.0.0.0",
         port=int(os.getenv("PORT", "10000")),
@@ -82,5 +84,4 @@ def run_bot():
     asyncio.run(main())
 
 
-# Lanzar el bot cuando Gunicorn arranque Flask
 threading.Thread(target=run_bot, daemon=True).start()
