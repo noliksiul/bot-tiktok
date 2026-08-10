@@ -66,7 +66,7 @@ async def main():
     await init_db()
     await application.initialize()
     await application.start()
-    await application.run_polling()
+    await application.run_polling()   # <-- solo polling, sin webhook
 
 # Arrancar el bot en un hilo separado para no bloquear Flask
 
