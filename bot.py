@@ -15,7 +15,8 @@ logging.basicConfig(level=logging.INFO)
 app = Flask(__name__)
 application = Application.builder().token(TOKEN).build()
 
-bot_loop = None  # loop global
+# loop global del bot
+bot_loop = None
 
 # Handlers
 
@@ -35,7 +36,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.callback_query.message.reply_text("Menú principal:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 application.add_handler(CommandHandler("start", menu))
-# … tus otros handlers …
+# … añade aquí tus otros handlers …
 
 # Flask endpoints
 
@@ -48,6 +49,7 @@ def serve_index():
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
+    # Enviar el update al loop del bot
     if bot_loop:
         bot_loop.call_soon_threadsafe(
             asyncio.create_task, application.process_update(update))
